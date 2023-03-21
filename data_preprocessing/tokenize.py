@@ -67,9 +67,10 @@ def map_entities_to_sentence(
     ent_type_sequence = [-1 for _ in range(len(sentence))]
     target_subtoken_map = copy.deepcopy(subtoken_map)
 
-    end_to_index_in_target = {}
+    # end_to_index_in_target = {}
 
     for (subtoken_idx, mention_type, label_id, entity_idx) in sorted_pos:
+        
         target_sentence.insert(subtoken_idx, mention_type)  # insert end or start
         # insert pairing bracket index for entity
         ent_indices.insert(subtoken_idx, entity_idx)
@@ -79,10 +80,10 @@ def map_entities_to_sentence(
         else:
             ent_type_sequence.insert(subtoken_idx, -1)
 
-        for k in end_to_index_in_target:  # map index in src to index in target
-            # plus 1 for every special token inserted
-            end_to_index_in_target[k] += 1
-        end_to_index_in_target[subtoken_idx] = subtoken_idx
+        # for k in end_to_index_in_target:  # map index in src to index in target
+        #     # plus 1 for every special token inserted
+        #     end_to_index_in_target[k] += 1
+        # end_to_index_in_target[subtoken_idx] = subtoken_idx
 
         if mention_type == MENTION_END:
             target_subtoken_map.insert(subtoken_idx, subtoken_map[subtoken_idx-1])
