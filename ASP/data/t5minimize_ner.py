@@ -252,6 +252,7 @@ if __name__ == "__main__":
         labels = json.load(input_file)
     entity_labels = {}
 
+    # assign entity label numbers
     for k in labels['entities'].keys():
         entity_labels[k] = len(entity_labels)
 
