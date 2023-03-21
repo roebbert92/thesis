@@ -1,2 +1,4 @@
 datasets/wikigaz.tsv
 .DS_store
+datasets/mlowner/wikigaz.tsv
+*.pyc
