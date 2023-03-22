@@ -1,13 +1,9 @@
-
 from typing import Any, Dict
-from transformers.models.t5.modeling_t5 import (
-    T5PreTrainedModel, T5Model,
-    T5_INPUTS_DOCSTRING, _CONFIG_FOR_DOC
-)
-from transformers.file_utils import (
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings
-)
+from transformers.models.t5.modeling_t5 import (T5PreTrainedModel, T5Model,
+                                                T5_INPUTS_DOCSTRING,
+                                                _CONFIG_FOR_DOC)
+from transformers.file_utils import (add_start_docstrings_to_model_forward,
+                                     replace_return_docstrings)
 from transformers import PretrainedConfig
 import torch.nn as nn
 import utils
@@ -16,20 +12,24 @@ from outputs import ASPSeq2SeqLMOutput
 
 NEGINF = -20000.
 
+
 class ASP_T5(T5PreTrainedModel):
-    def __init__(self, config: PretrainedConfig,
-                 asp_hidden_dim: int = 150,
-                 asp_dropout_rate: float = 0.3,
-                 asp_init_std: float = 0.02,
-                 # asp_feature_emb_size: int = 20,
-                 # asp_linking_distance_num_buckets: int = 16,
-                 asp_activation: str='relu',
-                 num_labels: int = 4,
-                 mention_start_id: int = 0,
-                 mention_end_id: int = 0,
-                 max_nest_depth: int = 1,
-                 *inputs,
-                 **kwargs):
+
+    def __init__(
+            self,
+            config: PretrainedConfig,
+            asp_hidden_dim: int = 150,
+            asp_dropout_rate: float = 0.3,
+            asp_init_std: float = 0.02,
+            # asp_feature_emb_size: int = 20,
+            # asp_linking_distance_num_buckets: int = 16,
+            asp_activation: str = 'relu',
+            num_labels: int = 4,
+            mention_start_id: int = 0,
+            mention_end_id: int = 0,
+            max_nest_depth: int = 1,
+            *inputs,
+            **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.t5 = T5Model.from_pretrained(self.config._name_or_path)
 
@@ -39,24 +39,20 @@ class ASP_T5(T5PreTrainedModel):
 
         # action head
         dropout = nn.Dropout(p=asp_dropout_rate)
-        self.action_head = utils.make_ffnn(
-            feat_size=self.config.d_model,
-            hidden_size=[asp_hidden_dim],
-            output_size=1,
-            dropout=dropout,
-            std=asp_init_std,
-            activation=asp_activation
-        )
+        self.action_head = utils.make_ffnn(feat_size=self.config.d_model,
+                                           hidden_size=[asp_hidden_dim],
+                                           output_size=1,
+                                           dropout=dropout,
+                                           std=asp_init_std,
+                                           activation=asp_activation)
 
         # left-right bracket
-        self.lr_scorer = utils.make_ffnn(
-            feat_size=2*self.config.d_model,
-            hidden_size=[asp_hidden_dim],
-            output_size=self.num_labels,
-            dropout=dropout,
-            std=asp_init_std,
-            activation=asp_activation
-        )
+        self.lr_scorer = utils.make_ffnn(feat_size=2 * self.config.d_model,
+                                         hidden_size=[asp_hidden_dim],
+                                         output_size=self.num_labels,
+                                         dropout=dropout,
+                                         std=asp_init_std,
+                                         activation=asp_activation)
 
         self.last_device = torch.cuda.device_count() - 1
 
@@ -65,7 +61,8 @@ class ASP_T5(T5PreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(T5_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ASPSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=ASPSeq2SeqLMOutput,
+                               config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -122,11 +119,9 @@ class ASP_T5(T5PreTrainedModel):
         target_ids = decoder_input_ids
         if labels is not None:  # training
             # decoder_input_ids starts with <pad> and has the same length as target_ids
-            decoder_input_ids = self._shift_right(
-                target_ids
-            )
+            decoder_input_ids = self._shift_right(target_ids)
 
-        outputs = self.t5(
+        outputs = self.t5.forward(
             input_ids,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
@@ -146,7 +141,8 @@ class ASP_T5(T5PreTrainedModel):
 
         loss, lm_logits = None, None
         if labels is not None:  # Training: We compute loss
-            outputs.last_hidden_state = outputs.last_hidden_state.to(self.device)
+            outputs.last_hidden_state = outputs.last_hidden_state.to(
+                self.device)
 
             # shape: (batchsize, seq_len, 1)
             action_logits = self.action_head(outputs.last_hidden_state)
@@ -154,28 +150,23 @@ class ASP_T5(T5PreTrainedModel):
             # a new loss that is compatible with inference
             (numer, denom) = self.get_logits_training(
                 outputs.last_hidden_state,  # current_hidden_state
-                target_ids=target_ids, 
+                target_ids=target_ids,
                 lr_pair_flag=lr_pair_flag,
-                labels=labels
-            )
+                labels=labels)
             # keeping <copy> score 0.
             action_logits = torch.cat(
-                [torch.zeros_like(action_logits),
-                 action_logits], dim=-1
-            )
+                [torch.zeros_like(action_logits), action_logits], dim=-1)
             # Note: We want to compute a joint log-likelihood for action, boundary, and antecedent,
             # And we will use this joint LL for inference with beam search
-            denom = utils.logsumexp(torch.cat([
-                action_logits,
-                denom
-            ], dim=-1), dim=-1)
+            denom = utils.logsumexp(torch.cat([action_logits, denom], dim=-1),
+                                    dim=-1)
             numer = utils.logsumexp(torch.cat([
                 action_logits + torch.where(
-                    utils.one_hot_ignore_negative(
-                        labels, num_classes=3), 0., float("-inf")
-                )[..., :2],
-                numer
-            ], dim=-1), dim=-1)
+                    utils.one_hot_ignore_negative(labels, num_classes=3), 0.,
+                    float("-inf"))[..., :2], numer
+            ],
+                                              dim=-1),
+                                    dim=-1)
 
             loss = (denom - numer)[decoder_attention_mask.bool()].sum()
             loss = loss / target_ids.size(0)
@@ -184,28 +175,22 @@ class ASP_T5(T5PreTrainedModel):
 
         else:  # inference, step-by-step classifications
             # (batch_size, 1, dim)
-            outputs.last_hidden_state = outputs.last_hidden_state.to(self.device)
+            outputs.last_hidden_state = outputs.last_hidden_state.to(
+                self.device)
             # denom: (batch_size, 1, 1)
             # l_choice / typing_choice: (batch_size, 1)
             (denom, l_choice, typing_choice) = self.get_logits_inference(
                 outputs.last_hidden_state,  # current_hidden_state
-                full_decoder_input_ids,     # previous decoded ids
-                full_hidden_states=full_hidden_states
-            )
+                full_decoder_input_ids,  # previous decoded ids
+                full_hidden_states=full_hidden_states)
             action_logits = self.action_head(outputs.last_hidden_state)
             # (batch_size, 1, 1)
             action_logits = torch.cat(
-                [torch.zeros_like(action_logits),
-                 action_logits,
-                 denom],
-                dim=-1
-            )
+                [torch.zeros_like(action_logits), action_logits, denom],
+                dim=-1)
             # Restore lm_logits from action_logits
             lm_logits = self.decoder_input_ids_to_vocab_mask(
-                action_logits,
-                full_decoder_input_ids,
-                encoder_input_ids
-            )
+                action_logits, full_decoder_input_ids, encoder_input_ids)
 
         return ASPSeq2SeqLMOutput(
             loss=loss,
@@ -218,31 +203,32 @@ class ASP_T5(T5PreTrainedModel):
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
             pairing=l_choice,
-            typing=typing_choice
-        )
+            typing=typing_choice)
 
     def get_logits_inference(
-        self,
-        current_hidden_state,  # inference: (batch_size, 1, dim)
-        decoder_input_ids,  # (batch_size, seq_len, )
-        full_hidden_states=None,  # tuple((batch_size, 1, dim))
+            self,
+            current_hidden_state,  # inference: (batch_size, 1, dim)
+            decoder_input_ids,  # (batch_size, seq_len, )
+            full_hidden_states=None,  # tuple((batch_size, 1, dim))
     ):
         # Shape: (batch_size, seq_len, )
         batch_size = decoder_input_ids.size(0)
         output_ids = decoder_input_ids[:, 1:]  # excluding decoder BOS
 
-        range_vec = torch.arange(
-            output_ids.size(1)-1, -1, -1,
-            dtype=torch.long, device=self.device
-        ).unsqueeze(0).expand(batch_size, -1)
+        range_vec = torch.arange(output_ids.size(1) - 1,
+                                 -1,
+                                 -1,
+                                 dtype=torch.long,
+                                 device=self.device).unsqueeze(0).expand(
+                                     batch_size, -1)
 
         if len(full_hidden_states) == 0:
             # the first valid token in the output
-            return (
-                current_hidden_state.new_full((batch_size, 1, self.num_typing_classes), float("-inf")), 
-                decoder_input_ids.new_full((batch_size, 1), -1),
-                decoder_input_ids.new_full((batch_size, 1), -1)
-            )
+            return (current_hidden_state.new_full(
+                (batch_size, 1, self.num_typing_classes),
+                float("-inf")), decoder_input_ids.new_full(
+                    (batch_size, 1),
+                    -1), decoder_input_ids.new_full((batch_size, 1), -1))
 
         # concatenating into sequence: (batch_size, seq_len, dim)
         decoder_output = torch.cat(full_hidden_states, dim=1)
@@ -253,16 +239,18 @@ class ASP_T5(T5PreTrainedModel):
 
         if is_l.sum() == 0:
             # no full mention and no previous mentions
-            lr_denom = current_hidden_state.new_full((batch_size, 1, self.num_typing_classes), float("-inf"))
+            lr_denom = current_hidden_state.new_full(
+                (batch_size, 1, self.num_typing_classes), float("-inf"))
             l_choice = decoder_input_ids.new_full((batch_size, 1), -1)
             typing_choice = decoder_input_ids.new_full((batch_size, 1), -1)
             denom = lr_denom
         else:
             # (batch_size, num_l, dim), (batch_size, num_l, )
             l_emb, _ = utils.batched_masked_select(decoder_output, is_l)
-            
+
             # (batch_size, 1, num_l, )
-            distance_to_previous_l, _ = utils.batched_masked_select(range_vec, is_l)
+            distance_to_previous_l, _ = utils.batched_masked_select(
+                range_vec, is_l)
             distance_to_previous_l = distance_to_previous_l.unsqueeze(1)
 
             # (batch_size, 1, num_l, 2*dim+feature_dim)
@@ -271,17 +259,16 @@ class ASP_T5(T5PreTrainedModel):
 
             # (batch_size, 1, num_l, self.num_typing_classes)
             lr_score = self.lr_scorer(lr_pair_emb)
-            
+
             num_l_each_instance = is_l.sum(dim=-1)
 
             for i in range(batch_size):
-                lr_score[i, :, :num_l_each_instance[i]-self.max_nest_depth, :] = NEGINF
+                lr_score[i, :, :num_l_each_instance[i] -
+                         self.max_nest_depth, :] = NEGINF
                 lr_score[i, :, num_l_each_instance[i]:, :] = NEGINF
-                
+
             # (batch_size, 1)
-            lr_denom = utils.logsumexp(
-                lr_score, dim=(2, 3)
-            ).unsqueeze(-1)
+            lr_denom = utils.logsumexp(lr_score, dim=(2, 3)).unsqueeze(-1)
 
             # (batch_size, 1, self.num_typing_classes)
             lr_score_max_over_entities, max_l = lr_score.max(dim=2)
@@ -293,14 +280,12 @@ class ASP_T5(T5PreTrainedModel):
 
         return (denom, l_choice, typing_choice)
 
-
     def get_logits_training(
-        self,
-        decoder_output,  # (batch_size, seq_len, hidden_dim)
-        target_ids,      # (batch_size, seq_len, )
-        lr_pair_flag=None,
-        labels=None
-    ):
+            self,
+            decoder_output,  # (batch_size, seq_len, hidden_dim)
+            target_ids,  # (batch_size, seq_len, )
+            lr_pair_flag=None,
+            labels=None):
         # batch_size, seq_len = decoder_output.size(0), decoder_output.size(1)
         target_mask = (target_ids != self.config.pad_token_id)
         # (batch_size, seq_len)
@@ -311,75 +296,70 @@ class ASP_T5(T5PreTrainedModel):
         is_r = (target_ids == self.mention_end_id)
 
         if is_r.sum() == 0:
-            numer, denom = (torch.full_like(decoder_output[...,:1], NEGINF),
-                            torch.full_like(decoder_output[...,:1], NEGINF))
+            numer, denom = (torch.full_like(decoder_output[..., :1], NEGINF),
+                            torch.full_like(decoder_output[..., :1], NEGINF))
             return numer, denom
 
         # (batch_size, num_r / num_l)
-        (l_pos, l_pos_mask) = utils.batched_masked_select(linearized_indices, is_l)
+        (l_pos,
+         l_pos_mask) = utils.batched_masked_select(linearized_indices, is_l)
 
         # (batch_size, num_r / num_l, hidden_dim)
         l_emb, _ = utils.batched_masked_select(decoder_output, is_l)
-        
+
         # (batch_size, seq_len, num_r / num_l)
-        distance_to_previous_l = linearized_indices.unsqueeze(2) - l_pos.unsqueeze(1)
-        
+        distance_to_previous_l = linearized_indices.unsqueeze(
+            2) - l_pos.unsqueeze(1)
+
         # (batch_size, seq_len, num_r / num_l)
         is_after_l = (distance_to_previous_l > 0)
-        is_after_l = is_after_l & target_mask.unsqueeze(2) & l_pos_mask.unsqueeze(1)
+        is_after_l = is_after_l & target_mask.unsqueeze(
+            2) & l_pos_mask.unsqueeze(1)
 
         # TODO: exchange for nucleus sampling?
         # check correctness for batch
         kept_l = min(self.max_nest_depth, l_emb.size(1))
         # (batch_size, seq_len, kept_l)
-        _, prev_l_indices = (
-            -distance_to_previous_l + (is_after_l * 10000)
-        ).topk(kept_l, dim=2)
+        _, prev_l_indices = (-distance_to_previous_l +
+                             (is_after_l * 10000)).topk(kept_l, dim=2)
 
         # (batch_size, seq_len, kept_l, hidden_dim)
         kept_l_emb = utils.batch_select(l_emb, prev_l_indices)
         # (batch_size, seq_len, kept_l)
         distance_to_previous_l = utils.dim_batched_index_select(
-            distance_to_previous_l, prev_l_indices, dim=2
-        )
+            distance_to_previous_l, prev_l_indices, dim=2)
 
         expanded_decoder_output = decoder_output.unsqueeze(2).expand(
-            -1, -1, kept_l, -1
-        )
+            -1, -1, kept_l, -1)
         # shape(batch_size, seq_len, kept_l, 2*hidden_dim)
         lr_pair_emb = torch.cat([kept_l_emb, expanded_decoder_output], dim=-1)
 
         # shape(batch_size, seq_len, kept_l, num_typing_classes)
         kept_is_after_l = is_after_l.gather(dim=2, index=prev_l_indices)
-        lr_score = self.lr_scorer(lr_pair_emb) + (~kept_is_after_l).unsqueeze(-1) * NEGINF
+        lr_score = self.lr_scorer(
+            lr_pair_emb) + (~kept_is_after_l).unsqueeze(-1) * NEGINF
 
         # (batch_size, seq_len, 1)
         lr_denom = utils.logsumexp(
-            lr_score,
-            dim=(2, 3), keepdim=False
-        ).unsqueeze(-1) * is_after_l.any(dim=2, keepdim=True)
+            lr_score, dim=(2, 3),
+            keepdim=False).unsqueeze(-1) * is_after_l.any(dim=2, keepdim=True)
         # (batch_size, seq_len, num_l, num_typing_classes) ->
         #     (batch_size, seq_len, kept_l, num_typing_classes)
-        kept_lr_pair_flag = utils.dim_batched_index_select(
-            lr_pair_flag, prev_l_indices, dim=2
-        )
+        kept_lr_pair_flag = utils.dim_batched_index_select(lr_pair_flag,
+                                                           prev_l_indices,
+                                                           dim=2)
         # (batch_size, seq_len, 1)
         lr_numer = utils.logsumexp(
             lr_score + (~kept_lr_pair_flag) * NEGINF,
-            dim=(2, 3), keepdim=False
-        ).unsqueeze(-1) * is_after_l.any(dim=2, keepdim=True)
+            dim=(2, 3),
+            keepdim=False).unsqueeze(-1) * is_after_l.any(dim=2, keepdim=True)
 
         numer, denom = lr_numer, lr_denom
 
         return numer, denom
 
-
-    def decoder_input_ids_to_vocab_mask(
-        self,
-        action_logits,
-        decoder_input_ids,
-        input_ids
-    ):
+    def decoder_input_ids_to_vocab_mask(self, action_logits, decoder_input_ids,
+                                        input_ids):
         # counting how many words have been copied
         is_copied = ((decoder_input_ids != self.mention_start_id) &\
                      (decoder_input_ids != self.mention_end_id))
@@ -389,31 +369,30 @@ class ASP_T5(T5PreTrainedModel):
 
         # compute pointer to input tokens
         lm_logits = action_logits.new_full(
-            (action_logits.size(0), action_logits.size(1), self.config.vocab_size),
-            float("-inf")
-        )
-        word_to_copy = input_ids.expand(num_copied.size(0), -1)  # repeating over beams
+            (action_logits.size(0), action_logits.size(1),
+             self.config.vocab_size), float("-inf"))
+        word_to_copy = input_ids.expand(num_copied.size(0),
+                                        -1)  # repeating over beams
         word_to_copy = word_to_copy.gather(1, num_copied)
 
-        lm_logits.scatter_(2, word_to_copy.unsqueeze(-1), action_logits[:, :, :1])
+        lm_logits.scatter_(2, word_to_copy.unsqueeze(-1),
+                           action_logits[:, :, :1])
         lm_logits[:, :, self.mention_start_id] = action_logits[:, :, 1]
         lm_logits[:, :, self.mention_end_id] = action_logits[:, :, 2]
 
         return lm_logits
 
-    def prepare_inputs_for_generation(
-        self,
-        decoder_input_ids,
-        past=None,
-        attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        use_cache=None,
-        encoder_outputs=None,
-        decoder_encoder_input_ids=None,
-        **kwargs
-    ):
+    def prepare_inputs_for_generation(self,
+                                      decoder_input_ids,
+                                      past=None,
+                                      attention_mask=None,
+                                      head_mask=None,
+                                      decoder_head_mask=None,
+                                      cross_attn_head_mask=None,
+                                      use_cache=None,
+                                      encoder_outputs=None,
+                                      decoder_encoder_input_ids=None,
+                                      **kwargs):
         # cut decoder_input_ids if past is used
         if past is not None:
             cut_decoder_input_ids = decoder_input_ids[:, -1:]
@@ -424,12 +403,15 @@ class ASP_T5(T5PreTrainedModel):
             kwargs["full_hidden_states"] = []  # initializing the list
 
         return {
-            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
+            "input_ids":
+            None,  # encoder_outputs is defined. input_ids not needed
             "encoder_input_ids": decoder_encoder_input_ids,
             "encoder_outputs": encoder_outputs,
             "past_key_values": past,
-            "decoder_input_ids": cut_decoder_input_ids,   # last decoder_input_ids
-            "full_decoder_input_ids": decoder_input_ids,  # full_decoder_input_ids
+            "decoder_input_ids":
+            cut_decoder_input_ids,  # last decoder_input_ids
+            "full_decoder_input_ids":
+            decoder_input_ids,  # full_decoder_input_ids
             "full_hidden_states": kwargs["full_hidden_states"],
             "decoder_pairing": kwargs["decoder_pairing"],
             "decoder_typing": kwargs["decoder_typing"],
@@ -446,8 +428,9 @@ class ASP_T5(T5PreTrainedModel):
     # override
     @staticmethod
     def _update_model_kwargs_for_generation(
-        outputs: ASPSeq2SeqLMOutput, model_kwargs: Dict[str, Any], is_encoder_decoder: bool = False
-    ) -> Dict[str, Any]:
+            outputs: ASPSeq2SeqLMOutput,
+            model_kwargs: Dict[str, Any],
+            is_encoder_decoder: bool = False) -> Dict[str, Any]:
         # update past
         if "past_key_values" in outputs:
             model_kwargs["past"] = outputs.past_key_values
@@ -462,8 +445,7 @@ class ASP_T5(T5PreTrainedModel):
             model_kwargs["full_hidden_states"] = []
 
         model_kwargs["full_hidden_states"].append(
-            outputs.decoder_hidden_states[-1].to(outputs.pairing.get_device())
-        )
+            outputs.decoder_hidden_states[-1].to(outputs.pairing.get_device()))
         model_kwargs["decoder_pairing"].append(outputs.pairing)
         model_kwargs["decoder_typing"].append(outputs.typing)
 
@@ -477,9 +459,11 @@ class ASP_T5(T5PreTrainedModel):
         if not is_encoder_decoder:
             if "attention_mask" in model_kwargs:
                 attention_mask = model_kwargs["attention_mask"]
-                model_kwargs["attention_mask"] = torch.cat(
-                    [attention_mask, attention_mask.new_ones((attention_mask.size(0), 1))], dim=-1
-                )
+                model_kwargs["attention_mask"] = torch.cat([
+                    attention_mask,
+                    attention_mask.new_ones((attention_mask.size(0), 1))
+                ],
+                                                           dim=-1)
         return model_kwargs
 
     def get_encoder(self):
@@ -497,8 +481,8 @@ class ASP_T5(T5PreTrainedModel):
         if new_num_tokens <= old_num_tokens:
             new_bias = self.action_logits_bias[:, :new_num_tokens]
         else:
-            extra_bias = torch.zeros(
-                (1, new_num_tokens - old_num_tokens), device=self.device)
+            extra_bias = torch.zeros((1, new_num_tokens - old_num_tokens),
+                                     device=self.device)
             new_bias = torch.cat([self.action_logits_bias, extra_bias], dim=1)
         self.register_buffer("action_logits_bias", new_bias)
 
@@ -516,8 +500,18 @@ class ASP_T5(T5PreTrainedModel):
         reordered_past = ()
         for layer_past in past:
             # cached cross_attention states don't have to be reordered -> they are always the same
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx)
-                      for past_state in layer_past[:2]) + layer_past[2:],
-            )
+            reordered_past += (tuple(
+                past_state.index_select(0, beam_idx)
+                for past_state in layer_past[:2]) + layer_past[2:], )
         return reordered_past
+
+    def get_params(self, named=False):
+        plm_based_param, task_param = [], []
+        for name, param in self.named_parameters():
+            if 't5' in name:
+                to_add = (name, param) if named else param
+                plm_based_param.append(to_add)
+            else:
+                to_add = (name, param) if named else param
+                task_param.append(to_add)
+        return plm_based_param, task_param
