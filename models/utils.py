@@ -25,6 +25,25 @@ def logsumexp(
     return max_score.sum(dim=dim, keepdim=keepdim) +\
         stable_vec.logsumexp(dim=dim, keepdim=keepdim)
 
+def batch_select(tensor, idx, device=None):
+    """ Do selection per row (first axis). """
+    assert tensor.shape[0] == idx.shape[0]  # Same size of first dim
+    dim0_size, dim1_size = tensor.shape[0], tensor.shape[1]
+    
+    if device is None:
+        device = tensor.device
+
+    tensor = tensor.reshape(dim0_size * dim1_size, -1)
+    idx_offset = (torch.arange(0, dim0_size, device=device) * dim1_size)
+    for _ in range(len(idx.size()) - 1):
+        idx_offset = idx_offset.unsqueeze(-1)
+    new_idx = idx + idx_offset
+    selected = tensor[new_idx]
+
+    if tensor.shape[-1] == 1:  # If selected element is scalar, restore original dim
+        selected = selected.squeeze(-1)
+
+    return selected
 
 def batched_masked_select(tensor: torch.FloatTensor, mask: torch.Tensor):
     max_len = mask.sum(dim=-1).max()  # maximum number of selected elements

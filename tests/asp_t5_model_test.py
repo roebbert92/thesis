@@ -48,6 +48,7 @@ class ASPT5ModelTest(unittest.TestCase):
         total_loss = seq2seq_output.loss
         self.assertIsNotNone(total_loss)
         self.assertGreater(total_loss.item(), 0.0)
+        print(total_loss.item())
 
 
 if __name__ == '__main__':

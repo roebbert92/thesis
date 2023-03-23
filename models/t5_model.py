@@ -225,7 +225,7 @@ class ASP_T5(T5PreTrainedModel):
         if len(full_hidden_states) == 0:
             # the first valid token in the output
             return (current_hidden_state.new_full(
-                (batch_size, 1, self.num_typing_classes),
+                (batch_size, 1, self.num_labels),
                 float("-inf")), decoder_input_ids.new_full(
                     (batch_size, 1),
                     -1), decoder_input_ids.new_full((batch_size, 1), -1))
@@ -240,7 +240,7 @@ class ASP_T5(T5PreTrainedModel):
         if is_l.sum() == 0:
             # no full mention and no previous mentions
             lr_denom = current_hidden_state.new_full(
-                (batch_size, 1, self.num_typing_classes), float("-inf"))
+                (batch_size, 1, self.num_labels), float("-inf"))
             l_choice = decoder_input_ids.new_full((batch_size, 1), -1)
             typing_choice = decoder_input_ids.new_full((batch_size, 1), -1)
             denom = lr_denom
@@ -257,7 +257,7 @@ class ASP_T5(T5PreTrainedModel):
             lr_pair_emb = utils.prepare_pair_embeddings(
                 l_emb, current_hidden_state)
 
-            # (batch_size, 1, num_l, self.num_typing_classes)
+            # (batch_size, 1, num_l, self.num_labels)
             lr_score = self.lr_scorer(lr_pair_emb)
 
             num_l_each_instance = is_l.sum(dim=-1)
@@ -270,7 +270,7 @@ class ASP_T5(T5PreTrainedModel):
             # (batch_size, 1)
             lr_denom = utils.logsumexp(lr_score, dim=(2, 3)).unsqueeze(-1)
 
-            # (batch_size, 1, self.num_typing_classes)
+            # (batch_size, 1, self.num_labels)
             lr_score_max_over_entities, max_l = lr_score.max(dim=2)
             # (batch_size, 1)
             typing_choice = lr_score_max_over_entities.argmax(dim=2)
