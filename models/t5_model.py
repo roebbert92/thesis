@@ -6,9 +6,9 @@ from transformers.file_utils import (add_start_docstrings_to_model_forward,
                                      replace_return_docstrings)
 from transformers import PretrainedConfig
 import torch.nn as nn
-import utils
+import models.utils as utils
 import torch
-from outputs import ASPSeq2SeqLMOutput
+from models.outputs import ASPSeq2SeqLMOutput
 
 NEGINF = -20000.
 
@@ -31,7 +31,7 @@ class ASP_T5(T5PreTrainedModel):
             *inputs,
             **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.t5 = T5Model.from_pretrained(self.config._name_or_path)
+        self.t5 = T5Model.from_pretrained(self.config.name_or_path)
 
         self.num_labels = num_labels
         # nested mentions?

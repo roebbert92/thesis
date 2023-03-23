@@ -113,9 +113,10 @@ def dim_batched_index_select(
 
 def make_linear(in_features, out_features, bias=True, std=0.02):
     # putting Linear on the last device so it's the same with t5 last_hidden_state
+    device = torch.cuda.device_count() - 1 if torch.cuda.is_available() else "cpu"
     linear = nn.Linear(
         in_features, out_features, bias,
-        device=torch.cuda.device_count() - 1
+        device=device
     )
     linear.weight.data.normal_(mean=0.0, std=std)
     if bias:
