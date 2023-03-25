@@ -273,7 +273,6 @@ class ASPT5Model(pl.LightningModule):
 
         loss = (denom - numer)[decoder_attention_mask.bool()].sum()
         loss = loss / decoder_input_ids.size(0)
-        assert isinstance(loss, torch.Tensor)
 
         if flag_grad_ckpt:
             self.t5.gradient_checkpointing_disable()
