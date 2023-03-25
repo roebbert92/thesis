@@ -4,7 +4,7 @@ from transformers import T5Tokenizer, T5Model
 import torch
 import torch.nn as nn
 
-import utils
+import models.utils as utils
 
 NEGINF = -20000
 
@@ -29,20 +29,25 @@ def get_scheduler_lambda(scheduler_type, warmup_steps, total_steps):
         raise ValueError(f'Unknown scheduler type {scheduler_type}')
 
 
+def get_tokenizer(config):
+    tokenizer = T5Tokenizer.from_pretrained(config["plm_tokenizer_name"],
+                                            model_max_length=4096)
+    tokenizer.add_tokens(config["mention_start_token"])
+    tokenizer.add_tokens(config["mention_end_token"])
+
+    return tokenizer
+
+
 class ASPT5Model(pl.LightningModule):
-    def __init__(self, config) -> None:
+    def __init__(self, config, tokenizer) -> None:
         super().__init__()
         self.config = config
 
         # Tokenizer setup
-        self.tokenizer = T5Tokenizer.from_pretrained(
-            self.config["plm_tokenizer_name"])
-        self.tokenizer.add_tokens(self.config["mention_start_token"])
-        self.tokenizer.add_tokens(self.config["mention_end_token"])
-
-        self.mention_start_id = self.tokenizer.convert_tokens_to_ids(
+        self.tokenizer = tokenizer
+        self.mention_start_id = tokenizer.convert_tokens_to_ids(
             self.config["mention_start_token"])
-        self.mention_end_id = self.tokenizer.convert_tokens_to_ids(
+        self.mention_end_id = tokenizer.convert_tokens_to_ids(
             self.config["mention_end_token"])
 
         # T5 Model setup
@@ -57,7 +62,7 @@ class ASPT5Model(pl.LightningModule):
 
         # ASP modeling head
         dropout = nn.Dropout(self.config["asp_dropout_rate"])
-        asp_hidden_dim = self.config["asp_hidden_size"]
+        asp_hidden_dim = self.config["asp_hidden_dim"]
         asp_init_std = self.config["asp_init_std"]
         asp_activation = self.config["asp_activation"]
 
@@ -75,6 +80,8 @@ class ASPT5Model(pl.LightningModule):
                                          dropout=dropout,
                                          std=asp_init_std,
                                          activation=asp_activation)
+
+        self.save_hyperparameters(config)
 
     def __get_params(self, named=False):
         plm_based_param, task_param = [], []
@@ -112,12 +119,13 @@ class ASPT5Model(pl.LightningModule):
         }]
         optimizer = torch.optim.AdamW(grouped_param,
                                       lr=self.config["plm_learning_rate"],
-                                      eps=self.config["adam_eps"])
+                                      eps=self.config["adam_eps"],
+                                      fused=self.config["fused"])
 
         # Only warm up plm lr
         total_training_steps = self.config["train_len"] * self.config[
-            "num_epochs"] // (  #self.config["gradient_accumulation_steps"] *
-                self.config["batch_size"])
+            "num_epochs"] // (self.config["gradient_accumulation_steps"] *
+                              self.config["batch_size"])
         warmup_steps = int(total_training_steps * self.config['warmup_ratio'])
 
         lr_lambda_plm = get_scheduler_lambda(self.config['plm_scheduler'],
@@ -136,26 +144,28 @@ class ASPT5Model(pl.LightningModule):
 
         return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
-    def training_step(self, batch, batch_idx):
+    def training_step(self, samples, batch_idx):
         """
         Training method
         """
+        # process batch
+        (doc_keys, batch) = samples
         input_ids = batch["input_ids"]
         attention_mask = batch["input_mask"]
         decoder_input_ids = batch["target_ids"]
         decoder_attention_mask = batch["target_mask"]
-        labels = batch["action_labels"]
-        lr_pair_flag = batch["lr_pair_flag"]
+        action_labels = batch["action_labels"]
+        lr_pair_flag = batch[
+            "lr_pair_flag"]  # one-hot encoded labels for each lr pair
 
         flag_grad_ckpt = False
-        if target_ids.size(1) > 2048:
+        if decoder_input_ids.size(1) > 2048:
             self.t5.gradient_checkpointing_enable()
             flag_grad_ckpt = True
 
         return_dict = self.t5.config.use_return_dict
-        target_ids = decoder_input_ids
         # decoder_input_ids starts with <pad> and has the same length as target_ids
-        decoder_input_ids = self.t5._shift_right(target_ids)
+        decoder_input_ids = self.t5._shift_right(decoder_input_ids)
 
         outputs = self.t5.forward(
             input_ids,
@@ -173,75 +183,78 @@ class ASPT5Model(pl.LightningModule):
 
         # a new loss that is compatible with inference
         # batch_size, seq_len = decoder_output.size(0), decoder_output.size(1)
-        target_mask = (target_ids != self.t5.config.pad_token_id)
+        target_mask = (decoder_input_ids != self.t5.config.pad_token_id)
         # (batch_size, seq_len)
-        linearized_indices = (labels >= 0).cumsum(dim=-1) - 1
+        linearized_indices = (action_labels >= 0).cumsum(dim=-1) - 1
         # (batch_size, seq_len)
-        is_l = (target_ids == self.mention_start_id)
-        is_r = (target_ids == self.mention_end_id)
+        is_l = (decoder_input_ids == self.mention_start_id)
+        is_r = (decoder_input_ids == self.mention_end_id)
 
         if is_r.sum() == 0:
             numer, denom = (torch.full_like(outputs.last_hidden_state[..., :1],
                                             NEGINF),
                             torch.full_like(outputs.last_hidden_state[..., :1],
                                             NEGINF))
-            return numer, denom
+        else:
+            # (batch_size, num_r / num_l)
+            (l_pos,
+             l_pos_mask) = utils.batched_masked_select(linearized_indices,
+                                                       is_l)
 
-        # (batch_size, num_r / num_l)
-        (l_pos,
-         l_pos_mask) = utils.batched_masked_select(linearized_indices, is_l)
+            # (batch_size, num_r / num_l, hidden_dim)
+            l_emb, _ = utils.batched_masked_select(outputs.last_hidden_state,
+                                                   is_l)
 
-        # (batch_size, num_r / num_l, hidden_dim)
-        l_emb, _ = utils.batched_masked_select(outputs.last_hidden_state, is_l)
+            # (batch_size, seq_len, num_r / num_l)
+            distance_to_previous_l = linearized_indices.unsqueeze(
+                2) - l_pos.unsqueeze(1)
 
-        # (batch_size, seq_len, num_r / num_l)
-        distance_to_previous_l = linearized_indices.unsqueeze(
-            2) - l_pos.unsqueeze(1)
+            # (batch_size, seq_len, num_r / num_l)
+            is_after_l = (distance_to_previous_l > 0)
+            is_after_l = is_after_l & target_mask.unsqueeze(
+                2) & l_pos_mask.unsqueeze(1)
 
-        # (batch_size, seq_len, num_r / num_l)
-        is_after_l = (distance_to_previous_l > 0)
-        is_after_l = is_after_l & target_mask.unsqueeze(
-            2) & l_pos_mask.unsqueeze(1)
+            # TODO: exchange for nucleus sampling?
+            # check correctness for batch
+            kept_l = min(self.max_nested_depth, l_emb.size(1))
+            # (batch_size, seq_len, kept_l)
+            _, prev_l_indices = (-distance_to_previous_l +
+                                 (is_after_l * 10000)).topk(kept_l, dim=2)
 
-        # TODO: exchange for nucleus sampling?
-        # check correctness for batch
-        kept_l = min(self.max_nested_depth, l_emb.size(1))
-        # (batch_size, seq_len, kept_l)
-        _, prev_l_indices = (-distance_to_previous_l +
-                             (is_after_l * 10000)).topk(kept_l, dim=2)
+            # (batch_size, seq_len, kept_l, hidden_dim)
+            kept_l_emb = utils.batch_select(l_emb, prev_l_indices)
+            # (batch_size, seq_len, kept_l)
+            distance_to_previous_l = utils.dim_batched_index_select(
+                distance_to_previous_l, prev_l_indices, dim=2)
 
-        # (batch_size, seq_len, kept_l, hidden_dim)
-        kept_l_emb = utils.batch_select(l_emb, prev_l_indices)
-        # (batch_size, seq_len, kept_l)
-        distance_to_previous_l = utils.dim_batched_index_select(
-            distance_to_previous_l, prev_l_indices, dim=2)
+            expanded_decoder_output = outputs.last_hidden_state.unsqueeze(
+                2).expand(-1, -1, kept_l, -1)
+            # shape(batch_size, seq_len, kept_l, 2*hidden_dim)
+            lr_pair_emb = torch.cat([kept_l_emb, expanded_decoder_output],
+                                    dim=-1)
 
-        expanded_decoder_output = outputs.last_hidden_state.unsqueeze(
-            2).expand(-1, -1, kept_l, -1)
-        # shape(batch_size, seq_len, kept_l, 2*hidden_dim)
-        lr_pair_emb = torch.cat([kept_l_emb, expanded_decoder_output], dim=-1)
+            # shape(batch_size, seq_len, kept_l, num_typing_classes)
+            kept_is_after_l = is_after_l.gather(dim=2, index=prev_l_indices)
+            lr_score = self.lr_scorer(
+                lr_pair_emb) + (~kept_is_after_l).unsqueeze(-1) * NEGINF
 
-        # shape(batch_size, seq_len, kept_l, num_typing_classes)
-        kept_is_after_l = is_after_l.gather(dim=2, index=prev_l_indices)
-        lr_score = self.lr_scorer(
-            lr_pair_emb) + (~kept_is_after_l).unsqueeze(-1) * NEGINF
+            # (batch_size, seq_len, 1)
+            lr_denom = utils.logsumexp(lr_score, dim=(
+                2, 3), keepdim=False).unsqueeze(-1) * is_after_l.any(
+                    dim=2, keepdim=True)
+            # (batch_size, seq_len, num_l, num_typing_classes) ->
+            #     (batch_size, seq_len, kept_l, num_typing_classes)
+            kept_lr_pair_flag = utils.dim_batched_index_select(lr_pair_flag,
+                                                               prev_l_indices,
+                                                               dim=2)
+            # (batch_size, seq_len, 1)
+            lr_numer = utils.logsumexp(
+                lr_score + (~kept_lr_pair_flag) * NEGINF,
+                dim=(2, 3),
+                keepdim=False).unsqueeze(-1) * is_after_l.any(dim=2,
+                                                              keepdim=True)
 
-        # (batch_size, seq_len, 1)
-        lr_denom = utils.logsumexp(
-            lr_score, dim=(2, 3),
-            keepdim=False).unsqueeze(-1) * is_after_l.any(dim=2, keepdim=True)
-        # (batch_size, seq_len, num_l, num_typing_classes) ->
-        #     (batch_size, seq_len, kept_l, num_typing_classes)
-        kept_lr_pair_flag = utils.dim_batched_index_select(lr_pair_flag,
-                                                           prev_l_indices,
-                                                           dim=2)
-        # (batch_size, seq_len, 1)
-        lr_numer = utils.logsumexp(
-            lr_score + (~kept_lr_pair_flag) * NEGINF,
-            dim=(2, 3),
-            keepdim=False).unsqueeze(-1) * is_after_l.any(dim=2, keepdim=True)
-
-        numer, denom = lr_numer, lr_denom
+            numer, denom = lr_numer, lr_denom
 
         # keeping <copy> score 0.
         action_logits = torch.cat(
@@ -250,20 +263,27 @@ class ASPT5Model(pl.LightningModule):
         # And we will use this joint LL for inference with beam search
         denom = utils.logsumexp(torch.cat([action_logits, denom], dim=-1),
                                 dim=-1)
-        # TODO: Check what impact the labels have here, if num_classes = 3; original had 3 classes plus neg class = 4 classes
         numer = utils.logsumexp(torch.cat([
-            action_logits +
-            torch.where(utils.one_hot_ignore_negative(labels, num_classes=3),
-                        0., float("-inf"))[..., :2], numer
+            action_logits + torch.where(
+                utils.one_hot_ignore_negative(action_labels, num_classes=3),
+                0., float("-inf"))[..., :2], numer
         ],
                                           dim=-1),
                                 dim=-1)
 
         loss = (denom - numer)[decoder_attention_mask.bool()].sum()
-        loss = loss / target_ids.size(0)
+        loss = loss / decoder_input_ids.size(0)
+        assert isinstance(loss, torch.Tensor)
 
         if flag_grad_ckpt:
             self.t5.gradient_checkpointing_disable()
             flag_grad_ckpt = False
 
-        return loss
+        self.log("train_loss",
+                 loss,
+                 on_step=True,
+                 on_epoch=True,
+                 prog_bar=True,
+                 logger=True)
+
+        return {"loss": loss}

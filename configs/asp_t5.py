@@ -1,4 +1,5 @@
 from dataclasses import dataclass, asdict
+from typing import Optional
 
 
 @dataclass
@@ -22,9 +23,10 @@ class ASPT5Config:
     adam_weight_decay: float
     warmup_ratio: float
     num_epochs: int
-    # gradient_accumulation_steps: int
+    gradient_accumulation_steps: int
     batch_size: int
-    train_len: int
+    train_len: Optional[int] = 0
+    fused: Optional[bool] = None
 
 
 T5_BASE = asdict(
@@ -48,4 +50,4 @@ T5_BASE = asdict(
                 warmup_ratio=0.05,
                 num_epochs=20,
                 batch_size=16,
-                train_len=1))
+                gradient_accumulation_steps=5))
