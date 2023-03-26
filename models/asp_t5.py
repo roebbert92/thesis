@@ -1,6 +1,7 @@
 from typing import Any
 import lightning.pytorch as pl
 from transformers import T5Tokenizer, T5Model
+from transformers.generation.utils import GenerationMixin
 import torch
 import torch.nn as nn
 
@@ -38,7 +39,7 @@ def get_tokenizer(config):
     return tokenizer
 
 
-class ASPT5Model(pl.LightningModule):
+class ASPT5Model(pl.LightningModule, GenerationMixin):
     def __init__(self, config, tokenizer) -> None:
         super().__init__()
         self.config = config
@@ -165,12 +166,10 @@ class ASPT5Model(pl.LightningModule):
 
         return_dict = self.t5.config.use_return_dict
         # decoder_input_ids starts with <pad> and has the same length as target_ids
-        decoder_input_ids = self.t5._shift_right(decoder_input_ids)
-
         outputs = self.t5.forward(
             input_ids,
             attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
+            decoder_input_ids=self.t5._shift_right(decoder_input_ids),
             decoder_attention_mask=decoder_attention_mask,
             use_cache=(not flag_grad_ckpt),
             return_dict=return_dict,
@@ -286,3 +285,111 @@ class ASPT5Model(pl.LightningModule):
                  logger=True)
 
         return {"loss": loss}
+
+    def validation_step(self, samples, batch_idx):
+        """
+        Validation step
+        """
+        # process batch
+        (doc_keys, batch) = samples
+        input_ids = batch["input_ids"]
+        attention_mask = batch["input_mask"]
+        decoder_input_ids = batch["target_ids"]
+        decoder_attention_mask = batch["target_mask"]
+        action_labels = batch["action_labels"]
+        lr_pair_flag = batch[
+            "lr_pair_flag"]  # one-hot encoded labels for each lr pair
+
+        return_dict = self.t5.config.use_return_dict
+
+        outputs = self.t5.forward(
+            input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            output_hidden_states=True,
+            return_dict=return_dict,
+        )
+
+        outputs.last_hidden_state = outputs.last_hidden_state.to(self.device)
+
+        (denom, l_choice, typing_choice) = self.get_logits_inference(
+            outputs.last_hidden_state,  # outputs.last_hidden_state
+            full_decoder_input_ids,  # previous decoded ids
+            full_hidden_states=full_hidden_states)
+        full_hidden_states = None
+
+        batch_size = decoder_input_ids.size(0)
+        output_ids = decoder_input_ids[:, 1:]  # excluding decoder BOS
+
+        range_vec = torch.arange(output_ids.size(1) - 1,
+                                 -1,
+                                 -1,
+                                 dtype=torch.long,
+                                 device=self.device).unsqueeze(0).expand(
+                                     batch_size, -1)
+
+        if len(full_hidden_states) == 0:
+            # the first valid token in the output
+            denom = outputs.last_hidden_state.new_full(
+                (batch_size, 1, self.num_typing_classes), float("-inf"))
+            l_choice = decoder_input_ids.new_full((batch_size, 1), -1)
+            typing_choice = decoder_input_ids.new_full((batch_size, 1), -1)
+        else:
+            # concatenating into sequence: (batch_size, seq_len, dim)
+            decoder_output = torch.cat(full_hidden_states, dim=1)
+
+            # check special tokens
+            # Shape: (batch_size, seq_len, )
+            is_l = (output_ids == self.mention_start_id)
+
+            if is_l.sum() == 0:
+                # no full mention and no previous mentions
+                lr_denom = outputs.last_hidden_state.new_full(
+                    (batch_size, 1, self.num_typing_classes), float("-inf"))
+                l_choice = decoder_input_ids.new_full((batch_size, 1), -1)
+                typing_choice = decoder_input_ids.new_full((batch_size, 1), -1)
+                denom = lr_denom
+            else:
+                # (batch_size, num_l, dim), (batch_size, num_l, )
+                l_emb, l_emb_mask = batched_masked_select(decoder_output, is_l)
+
+                # (batch_size, 1, num_l, )
+                distance_to_previous_l, _ = batched_masked_select(
+                    range_vec, is_l)
+                distance_to_previous_l = distance_to_previous_l.unsqueeze(1)
+
+                # (batch_size, 1, num_l, 2*dim+feature_dim)
+                lr_pair_emb = util.prepare_pair_embeddings(
+                    l_emb, outputs.last_hidden_state)
+
+                # (batch_size, 1, num_l, self.num_typing_classes)
+                lr_score = self.lr_scorer(lr_pair_emb)
+
+                num_l_each_instance = is_l.sum(dim=-1)
+
+                for i in range(batch_size):
+                    lr_score[i, :, :num_l_each_instance[i] -
+                             self.max_nest_depth, :] = NEGINF
+                    lr_score[i, :, num_l_each_instance[i]:, :] = NEGINF
+
+                # (batch_size, 1)
+                lr_denom = util.logsumexp(lr_score, dim=(2, 3)).unsqueeze(-1)
+
+                # (batch_size, 1, self.num_typing_classes)
+                lr_score_max_over_entities, max_l = lr_score.max(dim=2)
+                # (batch_size, 1)
+                typing_choice = lr_score_max_over_entities.argmax(dim=2)
+                # (batch_size, 1)
+                l_choice = max_l.squeeze(1).gather(1, typing_choice)
+                denom = lr_denom
+
+        action_logits = self.action_head(outputs.last_hidden_state)
+        # (batch_size, 1, 1)
+        action_logits = torch.cat(
+            [torch.zeros_like(action_logits), action_logits, denom], dim=-1)
+        # Restore lm_logits from action_logits
+        lm_logits = self.decoder_input_ids_to_vocab_mask(
+            action_logits, full_decoder_input_ids, encoder_input_ids)
+        
+        def 

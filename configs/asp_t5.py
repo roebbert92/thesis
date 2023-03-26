@@ -49,5 +49,5 @@ T5_BASE = asdict(
                 adam_weight_decay=0.1,
                 warmup_ratio=0.05,
                 num_epochs=20,
-                batch_size=16,
+                batch_size=32,
                 gradient_accumulation_steps=5))
