@@ -123,17 +123,17 @@ class Tensorizer:
             "ent_indices": ent_indices,
             "ent_types": ent_types,
             "lr_pair_flag": lr_pair_flag,
-            "is_training": is_training,
+            "is_training": is_training
         }
 
-        return doc_key, tensor
+        return doc_key, self.stored_info['subtoken_maps'][doc_key], tensor
 
 
 def ner_collate_fn(batch):
     """
         Collate function for the NER dataloader.
     """
-    doc_keys, batch = zip(*batch)
+    doc_keys, subtoken_maps, batch = zip(*batch)
     batch = {k: [sample[k] for sample in batch] for k in batch[0]}
     batch_size = len(batch["input_ids"])
 
@@ -184,7 +184,7 @@ def ner_collate_fn(batch):
                                    dtype=torch.long)
 
     batch["is_training"] = torch.tensor(batch["is_training"], dtype=torch.bool)
-    return doc_keys, batch
+    return doc_keys, subtoken_maps, batch
 
 
 class NERDataProcessor(object):
@@ -207,7 +207,6 @@ class NERDataProcessor(object):
             # Generate tensorized samples
             with open(type_file, encoding="utf-8") as file:
                 labels = json.load(file)['entities']
-            self.stored_info["labels"] = labels
             self.tensor_samples = {}
             tensorizer = Tensorizer(self.config, self.tokenizer, len(labels))
             suffix = f'{self.tokenizer_name}.jsonlines'
@@ -227,10 +226,12 @@ class NERDataProcessor(object):
                 ]
 
                 self.tensor_samples[split] = NERDataset(
-                    sorted([(doc_key, tensor)
-                            for doc_key, tensor in tensor_samples],
-                           key=lambda x: -x[1]['input_ids'].size(0)))
+                    sorted(
+                        [(doc_key, subtoken_map, tensor)
+                         for doc_key, subtoken_map, tensor in tensor_samples],
+                        key=lambda x: -x[2]['input_ids'].size(0)))
             self.stored_info = tensorizer.stored_info
+            self.stored_info["labels"] = labels
             # Cache tensorized samples
             pickle.dump((self.tensor_samples, self.stored_info),
                         open(cache_path, 'wb'))
