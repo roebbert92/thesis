@@ -36,7 +36,7 @@ def get_scheduler_lambda(scheduler_type, warmup_steps, total_steps):
 
 def get_tokenizer(config):
     tokenizer = T5Tokenizer.from_pretrained(config["plm_tokenizer_name"],
-                                            model_max_length=4096)
+                                            model_max_length=512)
     tokenizer.add_tokens(config["mention_start_token"])
     tokenizer.add_tokens(config["mention_end_token"])
 

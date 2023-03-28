@@ -37,12 +37,6 @@ class Tensorizer:
         self.mention_end_id = self.tokenizer.convert_tokens_to_ids(
             self.config["mention_end_token"])
 
-        # Will be used in evaluation
-        self.stored_info = {
-            'example': {},  # {doc_key: ...}
-            'subtoken_maps': {}  # {doc_key: ...}
-        }
-
     def get_action_labels(self, label_ids):
         # replacing natural language tokens with <copy>: action 0
         # <m> with action 1
@@ -63,9 +57,6 @@ class Tensorizer:
     def tensorize(self, example, is_training):
         # Keep info to store
         doc_key = example['doc_id']
-        self.stored_info['subtoken_maps'][doc_key] = example.get(
-            'subtoken_map', None)
-        self.stored_info['example'][doc_key] = example
 
         is_training = torch.tensor(is_training, dtype=torch.bool)
 
@@ -126,7 +117,7 @@ class Tensorizer:
             "is_training": is_training
         }
 
-        return doc_key, self.stored_info['subtoken_maps'][doc_key], tensor
+        return doc_key, example.get('subtoken_map', None), tensor
 
 
 def ner_collate_fn(batch):
@@ -202,13 +193,14 @@ class NERDataProcessor(object):
         if os.path.exists(cache_path):
             # Load cached tensors if exists
             with open(cache_path, 'rb') as f:
-                self.tensor_samples, self.stored_info = pickle.load(f)
+                self.tensor_samples, self.labels = pickle.load(f)
         else:
             # Generate tensorized samples
             with open(type_file, encoding="utf-8") as file:
-                labels = json.load(file)['entities']
+                self.labels = json.load(file)['entities']
             self.tensor_samples = {}
-            tensorizer = Tensorizer(self.config, self.tokenizer, len(labels))
+            tensorizer = Tensorizer(self.config, self.tokenizer,
+                                    len(self.labels))
             suffix = f'{self.tokenizer_name}.jsonlines'
             assert suffix in train_file
             assert suffix in dev_file
@@ -230,19 +222,14 @@ class NERDataProcessor(object):
                         [(doc_key, subtoken_map, tensor)
                          for doc_key, subtoken_map, tensor in tensor_samples],
                         key=lambda x: -x[2]['input_ids'].size(0)))
-            self.stored_info = tensorizer.stored_info
-            self.stored_info["labels"] = labels
             # Cache tensorized samples
-            pickle.dump((self.tensor_samples, self.stored_info),
+            pickle.dump((self.tensor_samples, self.labels),
                         open(cache_path, 'wb'))
 
     def get_tensor_samples(self):
         # For each split, return list of tensorized samples to allow variable length input (batch size = 1)
         return self.tensor_samples['train'], self.tensor_samples[
             'dev'], self.tensor_samples['test']
-
-    def get_stored_info(self):
-        return self.stored_info
 
     def get_cache_path(self):
         cache_path = os.path.join(self.dir_name,

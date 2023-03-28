@@ -14,15 +14,26 @@ from torch.utils.data import DataLoader
 import torch
 
 config = T5_BASE
-config["num_epochs"] = 80
+config["num_epochs"] = 20
+config["precision"] = "bf16-mixed"  #"bf16-mixed"
+config["name"] = "asp_t5_conll03"
+config["batch_size"] = 32
 
 tokenizer = get_tokenizer(config)
 
-processor = NERDataProcessor(config, tokenizer,
-                             "datasets/wnut/wnut17train.t5-small.jsonlines",
-                             "datasets/wnut/emerging.dev.t5-small.jsonlines",
-                             "datasets/wnut/emerging.test.t5-small.jsonlines",
-                             "datasets/wnut/wnut_types.json")
+# processor = NERDataProcessor(config, tokenizer,
+#                              "datasets/wnut/wnut17train.t5-small.jsonlines",
+#                              "datasets/wnut/emerging.dev.t5-small.jsonlines",
+#                              "datasets/wnut/emerging.test.t5-small.jsonlines",
+#                              "datasets/wnut/wnut_types.json")
+
+processor = NERDataProcessor(
+    config, tokenizer, "datasets/conll03/conll03_train.t5-small.jsonlines",
+    "datasets/conll03/conll03_dev.t5-small.jsonlines",
+    "datasets/conll03/conll03_test.t5-small.jsonlines",
+    "datasets/conll03/conll03_types.json")
+config["num_labels"] = len(processor.labels)
+
 train, val, test = processor.get_tensor_samples()
 config["train_len"] = len(train)
 
@@ -63,10 +74,11 @@ if torch.cuda.is_available():
         accelerator="gpu",
         logger=True,
         devices=1,
+        log_every_n_steps=config["batch_size"],
         accumulate_grad_batches=config["gradient_accumulation_steps"],
-        precision="bf16-mixed",
+        precision=config["precision"],
         max_epochs=config["num_epochs"],
-        default_root_dir=thesis_path + "/experiments",
+        default_root_dir=thesis_path + "/experiments/" + config["name"],
         check_val_every_n_epoch=4,
         num_sanity_val_steps=0)
 
@@ -78,7 +90,7 @@ else:
         gradient_clip_val=1,
         accumulate_grad_batches=config["gradient_accumulation_steps"],
         max_epochs=config["num_epochs"],
-        default_root_dir=thesis_path + "/experiments")
+        default_root_dir=thesis_path + "/experiments/" + config["name"])
 
 model = ASPT5Model(config, tokenizer)
 #model = ASPT5Model.load_from_checkpoint(
