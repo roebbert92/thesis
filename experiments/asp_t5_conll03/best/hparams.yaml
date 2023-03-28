@@ -13,7 +13,7 @@ max_nest_depth: 1
 mention_end_token: </m>
 mention_start_token: <m>
 name: asp_t5_conll03
-num_epochs: 80
+num_epochs: 20
 num_labels: 4
 plm_learning_rate: 5.0e-05
 plm_pretrained_name_or_path: t5-base
