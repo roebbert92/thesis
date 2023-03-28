@@ -1,6 +1,12 @@
 import sys
+import os
 
-sys.path.append("/Users/robinloebbert/Masterarbeit/thesis")
+thesis_path = "/" + os.path.join(*os.getcwd().split(os.path.sep)[:-1])
+sys.path.append(thesis_path)
+# if platform.system() == "Linux":
+#     sys.path.append("/home/loebbert/projects/thesis")
+# else:
+#     sys.path.append("/Users/robinloebbert/Masterarbeit/thesis")
 # import os
 # os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 

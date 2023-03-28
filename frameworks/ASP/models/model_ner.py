@@ -25,17 +25,19 @@ class NERModel(torch.nn.Module):
 
         if 'device_map' in config:
             self.config['device_map'] = {
-                int(k):v for k, v in config['device_map'].items()
+                int(k): v
+                for k, v in config['device_map'].items()
             }
 
         self.tz = T5Tokenizer.from_pretrained("t5-small")
         self.MENTION_START = '<m>'
-        self.MENTION_END   = '</m>'
+        self.MENTION_END = '</m>'
         self.tz.add_tokens(self.MENTION_START)
         self.tz.add_tokens(self.MENTION_END)
 
-        self.mention_start_id = self.tz.convert_tokens_to_ids(self.MENTION_START)
-        self.mention_end_id   = self.tz.convert_tokens_to_ids(self.MENTION_END)
+        self.mention_start_id = self.tz.convert_tokens_to_ids(
+            self.MENTION_START)
+        self.mention_end_id = self.tz.convert_tokens_to_ids(self.MENTION_END)
 
         self.model = T5NER.from_pretrained(
             config['plm_pretrained_name_or_path'],
@@ -46,32 +48,26 @@ class NERModel(torch.nn.Module):
             asp_activation=config["activation"],
             num_typing_classes=config["num_typing_classes"],
             mention_start_id=self.mention_start_id,
-            mention_end_id=self.mention_end_id
-        )
+            mention_end_id=self.mention_end_id)
 
         self.beam_size = config["beam_size"]
-        self.model.resize_token_embeddings(
-            self.tz.vocab_size + 2
-        )
-
+        self.model.resize_token_embeddings(self.tz.vocab_size + 2)
 
     def parallel_preparation_training(self, ):
         if torch.cuda.device_count() == 1:
             self.model = self.model.cuda()
             return
         # prepare the model for parallel training
-        if (not self.model.t5.model_parallel or
-                self.model.action_head.weight.get_device() != self.device):
+        if (not self.model.t5.model_parallel
+                or self.model.action_head.weight.get_device() != self.device):
             logger.info(
-                f"Moving model to {self.device} and parallelize for training"
-            )
+                f"Moving model to {self.device} and parallelize for training")
             if not self.model.t5.model_parallel:
                 self.model.t5.parallelize(
-                    device_map=self.config['device_map'] if 'device_map' in self.config else None)
-            self.model.lr_scorer = self.model.lr_scorer.to(
-                self.device)
-            self.model.action_head = self.model.action_head.to(
-                self.device)
+                    device_map=self.config['device_map'] if 'device_map' in
+                    self.config else None)
+            self.model.lr_scorer = self.model.lr_scorer.to(self.device)
+            self.model.action_head = self.model.action_head.to(self.device)
 
             if hasattr(self.model, 'emb_l_distance'):
                 self.model.emb_l_distance = self.model.emb_l_distance.to(
@@ -89,8 +85,7 @@ class NERModel(torch.nn.Module):
             logger.info(
                 f"Moving model from {self.model.action_head.weight.get_device()} to {self.device} for inference"
             )
-            self.model.lr_scorer = self.model.lr_scorer.to(
-                self.device)
+            self.model.lr_scorer = self.model.lr_scorer.to(self.device)
             self.model.action_head = self.model.action_head.to(self.device)
 
             if hasattr(self.model, 'emb_l_distance'):
@@ -113,20 +108,24 @@ class NERModel(torch.nn.Module):
         return plm_based_param, task_param
 
     def forward(
-            self,
-            input_ids, input_mask, to_copy_ids,
-            target_ids, target_mask, action_labels,
-            lr_pair_flag,
-            is_training, 
-            sentence_idx=None,
-            target_sentence_idx=None,
-            same_sentence_flag=None,
-            **kwargs, 
-        ):
+        self,
+        input_ids,
+        input_mask,
+        to_copy_ids,
+        target_ids,
+        target_mask,
+        action_labels,
+        lr_pair_flag,
+        is_training,
+        sentence_idx=None,
+        target_sentence_idx=None,
+        same_sentence_flag=None,
+        **kwargs,
+    ):
         if len(is_training.size()) == 1:
             is_training = is_training[0]
 
-        if (is_training == 1): # training
+        if (is_training == 1):  # training
             self.parallel_preparation_training()
 
             flag_grad_ckpt = False
@@ -134,16 +133,14 @@ class NERModel(torch.nn.Module):
                 self.model.gradient_checkpointing_enable()
                 flag_grad_ckpt = True
 
-            seq2seq_output = self.model(
-                input_ids=input_ids, 
-                attention_mask=input_mask, 
-                decoder_input_ids=target_ids,
-                decoder_attention_mask=target_mask,
-                labels=action_labels,
-                output_hidden_states=True,
-                lr_pair_flag=lr_pair_flag,
-                use_cache=(not flag_grad_ckpt)
-            )
+            seq2seq_output = self.model(input_ids=input_ids,
+                                        attention_mask=input_mask,
+                                        decoder_input_ids=target_ids,
+                                        decoder_attention_mask=target_mask,
+                                        labels=action_labels,
+                                        output_hidden_states=True,
+                                        lr_pair_flag=lr_pair_flag,
+                                        use_cache=(not flag_grad_ckpt))
             if flag_grad_ckpt:
                 self.model.gradient_checkpointing_disable()
                 flag_grad_ckpt = False
@@ -151,13 +148,13 @@ class NERModel(torch.nn.Module):
 
             return total_loss
 
-        else: # inference
+        else:  # inference
             self.parallel_preparation_inference()
 
             # save the decoded actions
             decoder_pairing, decoder_typing = [], []
             model_output = self.model.generate(
-                input_ids, 
+                input_ids,
                 early_stopping=True,
                 max_length=2048,
                 num_beams=self.beam_size,
@@ -171,8 +168,7 @@ class NERModel(torch.nn.Module):
                     "decoder_encoder_input_ids": to_copy_ids,
                     "decoder_pairing": decoder_pairing,
                     "decoder_typing": decoder_typing
-                }
-            )
+                })
             results = {
                 "output_ids": [],
                 "start_token": [],
@@ -188,7 +184,9 @@ class NERModel(torch.nn.Module):
                 is_start_token = (output_ids == self.mention_start_id)
                 is_end_token = (output_ids == self.mention_end_id)
 
-                range_vec = torch.arange(0, output_ids.size(0), device=self.device)
+                range_vec = torch.arange(0,
+                                         output_ids.size(0),
+                                         device=self.device)
                 start_token_pos = range_vec[is_start_token]
                 end_token_pos = range_vec[is_end_token]
                 results["start_token"].append(start_token_pos)
@@ -200,18 +198,13 @@ class NERModel(torch.nn.Module):
 
             return results
 
-
-    def extract_gold_res_from_gold_annotation(
-        self,
-        tensor_example,
-        stored_info=None
-    ):
+    def extract_gold_res_from_gold_annotation(self, tensor_example,
+                                              stored_info):
         output_ids = tensor_example["target_ids"]
         mapping = self.get_mapping_to_input_sequence(output_ids)
 
-        ent_types, ent_indices = (
-            tensor_example["ent_types"], tensor_example["ent_indices"]
-        )
+        ent_types, ent_indices = (tensor_example["ent_types"],
+                                  tensor_example["ent_indices"])
         subtoken_map = stored_info["subtoken_map"]
         entities, start_ind = [], []
 
@@ -221,25 +214,18 @@ class NERModel(torch.nn.Module):
                 start_ind.append(i)
             if output_ids[i] == self.mention_end_id:
                 entity = (
-                    int(subtoken_map[int(mapping[start_ind[-1]])]), # no nested
+                    int(subtoken_map[int(
+                        mapping[start_ind[-1]])]),  # no nested
                     int(subtoken_map[int(mapping[i])]),
-                    int(ent_types[i])
-                )
+                    int(ent_types[i]))
                 entities.append(entity)
 
-        result_dict = {
-            "gold_entities": entities,
-            "gold_relations": []
-        }
+        result_dict = {"gold_entities": entities, "gold_relations": []}
         return result_dict
-
 
     def decoding(self, output, stored_info):
         output_ids, pairing_decisions, typing_decisions = (
-            output["output_ids"].tolist(),
-            output["pairing"],
-            output["typing"]
-        )
+            output["output_ids"].tolist(), output["pairing"], output["typing"])
         subtoken_map = stored_info["subtoken_map"]
 
         mapping = self.get_mapping_to_input_sequence(output_ids)
@@ -255,9 +241,7 @@ class NERModel(torch.nn.Module):
 
                 entity = (
                     subtoken_map[mapping[start_ind[pairing_decisions[i]]]],
-                    subtoken_map[mapping[i]],
-                    this_type
-                )
+                    subtoken_map[mapping[i]], this_type)
                 entities.append(entity)
 
         result_dict = {
@@ -266,9 +250,7 @@ class NERModel(torch.nn.Module):
         }
         return result_dict
 
-    def get_mapping_to_input_sequence(
-        self, output_ids
-    ):
+    def get_mapping_to_input_sequence(self, output_ids):
         # Get the mapping from the output with special tokens
         # to the input without special tokens.
         mapping, new_id = [], -1

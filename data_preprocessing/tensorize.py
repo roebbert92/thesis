@@ -20,60 +20,43 @@ class NERDataset(Dataset):
 
 
 def one_hot_ignore_negative(labels, num_classes):
-    return F.one_hot(
-        torch.where((labels >= 0), labels, num_classes),
-        num_classes=num_classes+1
-    )[..., :-1].bool()
+    return F.one_hot(torch.where((labels >= 0), labels, num_classes),
+                     num_classes=num_classes + 1)[..., :-1].bool()
 
 
 class Tensorizer:
-    def __init__(self, config, tokenizer: PreTrainedTokenizer, mention_start, mention_end, num_label_types):
+    def __init__(self, config, tokenizer: PreTrainedTokenizer,
+                 num_labels: int):
         self.config = config
         self.tokenizer = tokenizer
 
-        self.num_label_types = num_label_types
+        self.num_labels = num_labels
 
         self.mention_start_id = self.tokenizer.convert_tokens_to_ids(
-            mention_start)
-        self.mention_end_id = self.tokenizer.convert_tokens_to_ids(mention_end)
+            self.config["mention_start_token"])
+        self.mention_end_id = self.tokenizer.convert_tokens_to_ids(
+            self.config["mention_end_token"])
 
-        # Will be used in evaluation
-        self.stored_info = {
-            'example': {},  # {doc_key: ...}
-            'subtoken_maps': {}  # {doc_key: ...}
-        }
-
-    def get_action_labels(
-        self, label_ids
-    ):
+    def get_action_labels(self, label_ids):
         # replacing natural language tokens with <copy>: action 0
         # <m> with action 1
         # </m> with action 2
+        action_labels = torch.where(label_ids != self.tokenizer.pad_token_id,
+                                    label_ids,
+                                    torch.ones_like(label_ids) * (-103))
+        action_labels = torch.where(action_labels == self.mention_start_id, -2,
+                                    action_labels)
+        action_labels = torch.where(action_labels == self.mention_end_id, -1,
+                                    action_labels)
         action_labels = torch.where(
-            label_ids != self.tokenizer.pad_token_id, label_ids, torch.ones_like(
-                label_ids)*(-103)
-        )
-        action_labels = torch.where(
-            action_labels == self.mention_start_id, -2, action_labels
-        )
-        action_labels = torch.where(
-            action_labels == self.mention_end_id, -1, action_labels
-        )
-        action_labels = torch.where(
-            (action_labels != -1) & (action_labels != -2) & (action_labels >= 0),
-            -3, action_labels
-        )
+            (action_labels != -1) & (action_labels != -2) &
+            (action_labels >= 0), -3, action_labels)
         action_labels += 3
         return action_labels
 
-    def tensorize(
-        self, example, is_training
-    ):
+    def tensorize(self, example, is_training):
         # Keep info to store
         doc_key = example['doc_id']
-        self.stored_info['subtoken_maps'][doc_key] = example.get(
-            'subtoken_map', None)
-        self.stored_info['example'][doc_key] = example
 
         is_training = torch.tensor(is_training, dtype=torch.bool)
 
@@ -117,8 +100,8 @@ class Tensorizer:
         # (target_len, num_l)
         # (target_len, 1, num_class) == (target_len, num_l, 1) -> (target_len, num_l, num_class)
         lr_pair_flag = one_hot_ignore_negative(
-            ent_types, num_classes=self.num_label_types
-        ).unsqueeze(1) & lr_pair_flag.unsqueeze(-1)
+            ent_types, num_classes=self.num_labels).unsqueeze(
+                1) & lr_pair_flag.unsqueeze(-1)
 
         # Construct example
         tensor = {
@@ -131,17 +114,17 @@ class Tensorizer:
             "ent_indices": ent_indices,
             "ent_types": ent_types,
             "lr_pair_flag": lr_pair_flag,
-            "is_training": is_training,
+            "is_training": is_training
         }
 
-        return doc_key, tensor
+        return doc_key, example.get('subtoken_map', None), tensor
 
 
 def ner_collate_fn(batch):
     """
         Collate function for the NER dataloader.
     """
-    doc_keys, batch = zip(*batch)
+    doc_keys, subtoken_maps, batch = zip(*batch)
     batch = {k: [sample[k] for sample in batch] for k in batch[0]}
     batch_size = len(batch["input_ids"])
 
@@ -151,24 +134,30 @@ def ner_collate_fn(batch):
 
     for k in ["to_copy_ids"]:
         batch[k] = torch.stack([
-            F.pad(x, (0, max_sent_id_len - x.size(0)), value=0) for x in batch[k]
-        ], dim=0)
+            F.pad(x, (0, max_sent_id_len - x.size(0)), value=0)
+            for x in batch[k]
+        ],
+                               dim=0)
     for k in ["input_ids", "input_mask", "sentence_idx"]:
         if k not in batch:
             continue
         # (batch_size, max_target_len)
         batch[k] = torch.stack([
             F.pad(x, (0, max_input_len - x.size(0)), value=0) for x in batch[k]
-        ], dim=0)
-    for k in ["target_ids", "target_mask",
-              "ent_indices", "ent_types",
-              "action_labels", "target_sentence_idx"]:
+        ],
+                               dim=0)
+    for k in [
+            "target_ids", "target_mask", "ent_indices", "ent_types",
+            "action_labels", "target_sentence_idx"
+    ]:
         # (batch_size, max_target_len)
         if k not in batch:
             continue
         batch[k] = torch.stack([
-            F.pad(x, (0, max_target_len - x.size(0)), value=0) for x in batch[k]
-        ], dim=0)
+            F.pad(x, (0, max_target_len - x.size(0)), value=0)
+            for x in batch[k]
+        ],
+                               dim=0)
 
     max_num_l = max([sample.size(1) for sample in batch["lr_pair_flag"]])
 
@@ -176,29 +165,27 @@ def ner_collate_fn(batch):
         # (batch_size, max_target_len, max_num_l, num_class)
         if max_num_l > 0:
             batch[k] = torch.stack([
-                F.pad(x, (0, 0, 0, max_num_l - x.size(1), 0, max_target_len - x.size(0)), value=0) for x in batch[k]
-            ], dim=0)
+                F.pad(x, (0, 0, 0, max_num_l - x.size(1), 0,
+                          max_target_len - x.size(0)),
+                      value=0) for x in batch[k]
+            ],
+                                   dim=0)
         else:
-            batch[k] = torch.zeros(
-                (batch_size, max_target_len, 0), dtype=torch.long)
+            batch[k] = torch.zeros((batch_size, max_target_len, 0),
+                                   dtype=torch.long)
 
     batch["is_training"] = torch.tensor(batch["is_training"], dtype=torch.bool)
-    return doc_keys, batch
+    return doc_keys, subtoken_maps, batch
 
 
 class NERDataProcessor(object):
-    def __init__(self, config,
-                 tokenizer: PreTrainedTokenizer,
-                 mention_start,
-                 mention_end,
-                 train_file,
-                 dev_file,
-                 test_file,
-                 type_file):
+    def __init__(self, config, tokenizer: PreTrainedTokenizer, train_file,
+                 dev_file, test_file, type_file):
         self.config = config
-        
+
         self.tokenizer = tokenizer
-        self.tokenizer_name = os.path.basename(os.path.splitext(self.tokenizer.name_or_path)[0])
+        self.tokenizer_name = os.path.basename(
+            os.path.splitext(self.tokenizer.name_or_path)[0])
         self.dir_name = os.path.dirname(type_file)
 
         # Get tensorized samples
@@ -206,52 +193,45 @@ class NERDataProcessor(object):
         if os.path.exists(cache_path):
             # Load cached tensors if exists
             with open(cache_path, 'rb') as f:
-                self.tensor_samples, self.stored_info = pickle.load(f)
+                self.tensor_samples, self.labels = pickle.load(f)
         else:
             # Generate tensorized samples
             with open(type_file, encoding="utf-8") as file:
-                labels = json.load(file)['entities']
+                self.labels = json.load(file)['entities']
             self.tensor_samples = {}
-            tensorizer = Tensorizer(self.config, self.tokenizer, mention_start, mention_end, len(labels))
+            tensorizer = Tensorizer(self.config, self.tokenizer,
+                                    len(self.labels))
             suffix = f'{self.tokenizer_name}.jsonlines'
             assert suffix in train_file
             assert suffix in dev_file
             assert suffix in test_file
 
-            paths = {
-                'train': train_file,
-                'dev': dev_file,
-                'test': test_file
-            }
+            paths = {'train': train_file, 'dev': dev_file, 'test': test_file}
 
             for split, path in paths.items():
                 is_training = (split == 'train')
                 with open(path, encoding="utf-8") as file:
                     samples = json.load(file)
-                tensor_samples = [tensorizer.tensorize(
-                    sample, is_training) for sample in samples]
+                tensor_samples = [
+                    tensorizer.tensorize(sample, is_training)
+                    for sample in samples
+                ]
 
                 self.tensor_samples[split] = NERDataset(
                     sorted(
-                        [(doc_key, tensor)
-                         for doc_key, tensor in tensor_samples],
-                        key=lambda x: -x[1]['input_ids'].size(0)
-                    )
-                )
-            self.stored_info = tensorizer.stored_info
+                        [(doc_key, subtoken_map, tensor)
+                         for doc_key, subtoken_map, tensor in tensor_samples],
+                        key=lambda x: -x[2]['input_ids'].size(0)))
             # Cache tensorized samples
-            pickle.dump((self.tensor_samples, self.stored_info),
+            pickle.dump((self.tensor_samples, self.labels),
                         open(cache_path, 'wb'))
 
     def get_tensor_samples(self):
         # For each split, return list of tensorized samples to allow variable length input (batch size = 1)
-        return self.tensor_samples['train'], self.tensor_samples['dev'], self.tensor_samples['test']
-
-    def get_stored_info(self):
-        return self.stored_info
+        return self.tensor_samples['train'], self.tensor_samples[
+            'dev'], self.tensor_samples['test']
 
     def get_cache_path(self):
-        cache_path = os.path.join(
-            self.dir_name, f'cached.tensors.{self.tokenizer_name}.bin'
-        )
+        cache_path = os.path.join(self.dir_name,
+                                  f'cached.tensors.{self.tokenizer_name}.bin')
         return cache_path

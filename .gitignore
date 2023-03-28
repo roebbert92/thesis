@@ -3,3 +3,4 @@ datasets/wikigaz.tsv
 datasets/mlowner/wikigaz.tsv
 *.pyc
 *.bin
+lightning_logs
