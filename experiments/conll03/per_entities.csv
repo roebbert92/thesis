@@ -1,0 +1,4 @@
+,original_paper,huggingface_ours,eth_ours,huggingface_asp,eth_asp
+train,6600,6600.0,6600.0,6595.0,6595.0
+dev,1842,1842.0,1842.0,1841.0,1841.0
+test,1617,1617.0,1617.0,1616.0,1616.0

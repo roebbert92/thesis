@@ -165,7 +165,6 @@ def tokenize_json(tokenizer: PreTrainedTokenizer,
             instances = json.load(file)
 
         name = os.path.basename(os.path.splitext(file_name)[0])
-        dropped = []
 
         for inst_id, instance in enumerate(instances):
             tokens = instance['tokens']
@@ -178,9 +177,6 @@ def tokenize_json(tokenizer: PreTrainedTokenizer,
             # insert prefix (instruction for model) here
             input_sentence = get_input_sentence(tokenizer, extended,
                                                 prepend_task_description)
-            if len(tokenized_sentence) > 256 or len(input_sentence) > 256:
-                dropped.append(str(inst_id))
-                continue
             tokenized_dataset.append({
                 "doc_id": name + "_" + str(inst_id),
                 "sentence": tokenized_sentence,
@@ -193,7 +189,6 @@ def tokenize_json(tokenizer: PreTrainedTokenizer,
                 "ent_indices": entity_indices
             })
 
-        print(f"{name}: dropped {len(dropped)} inst_ids: " + " ".join(dropped))
         with open(
                 f"{os.path.splitext(file_name)[0]}.{os.path.basename(os.path.splitext(tokenizer.name_or_path)[0])}.jsonlines",
                 "w",
