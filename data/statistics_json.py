@@ -77,3 +77,51 @@ def create_dataset_stats(train_json, dev_json, test_json):
         summary_inputs,
         index=files.keys()), pd.DataFrame.from_records(summary_entities,
                                                        index=files.keys())
+
+
+def create_tokenized_stats(train_jsonlines, dev_jsonlines, test_jsonlines):
+
+    files = {
+        "train": train_jsonlines,
+        "dev": dev_jsonlines,
+        "test": test_jsonlines
+    }
+
+    tokenized_inputs = []
+    tokenized_targets = []
+
+    for part, filename in files.items():
+        with open(filename, encoding="utf-8") as file:
+            items = json.load(file)
+        for item in items:
+            tokenized_inputs.append({
+                "part":
+                part,
+                "Tokenized Input":
+                len(item["input_sentence"])
+            })
+            tokenized_targets.append({
+                "part":
+                part,
+                "Tokenized Target":
+                len(item["target_sentence"])
+            })
+
+    df_inputs = pd.DataFrame.from_records(tokenized_inputs)
+    df_targets = pd.DataFrame.from_records(tokenized_targets)
+
+    inputs_summary = []
+    targets_summary = []
+
+    for part in files:
+        inputs_summary.extend(df_inputs[df_inputs.part == part][[
+            column for column in df_inputs.columns if column != "part"
+        ]].describe().T.to_dict(orient="records"))
+        targets_summary.extend(df_targets[df_targets.part == part][[
+            column for column in df_targets.columns if column != "part"
+        ]].describe().T.to_dict(orient="records"))
+
+    return pd.DataFrame.from_records(
+        inputs_summary,
+        index=files.keys()), pd.DataFrame.from_records(targets_summary,
+                                                       index=files.keys())

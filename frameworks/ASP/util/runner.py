@@ -10,7 +10,6 @@ import numpy as np
 import torch
 
 from torch.optim import AdamW
-from util.multigpu_fused_adam import FusedAdam
 
 from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
@@ -33,9 +32,9 @@ from models.model_ere import EREModel
 logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
     datefmt='%m/%d/%Y %H:%M:%S',
-    level=logging.INFO
-)
+    level=logging.INFO)
 logger = logging.getLogger(__file__)
+
 
 class Runner:
     def __init__(self, config_file, config_name, gpu_id=0, seed=None):
@@ -47,10 +46,12 @@ class Runner:
         if seed:
             util.set_seed(seed)
         # Set up config
-        self.config = util.initialize_config(config_name, config_file=config_file)
+        self.config = util.initialize_config(config_name,
+                                             config_file=config_file)
 
         # Set up logger
-        log_path = join(self.config['log_dir'], 'log_' + self.name_suffix + '.txt')
+        log_path = join(self.config['log_dir'],
+                        'log_' + self.name_suffix + '.txt')
         logger.addHandler(logging.FileHandler(log_path, 'a'))
         logger.info('Log file path: %s' % log_path)
 
@@ -73,16 +74,15 @@ class Runner:
             self.collate_fn = ere_collate_fn
             self.model_class_fn = EREModel
 
-
     def initialize_model(self, saved_suffix=None, continue_training=False):
         model = self.model_class_fn(self.config, self.device)
-        
+
         if saved_suffix:
-            model, start_epoch = self.load_model_checkpoint(model, saved_suffix, continue_training=continue_training)
+            model, start_epoch = self.load_model_checkpoint(
+                model, saved_suffix, continue_training=continue_training)
             return model, start_epoch
 
         return model, 0
-
 
     def train(self, model, continued=False, start_epoch=0):
         logger.info('Config:')
@@ -92,18 +92,22 @@ class Runner:
         for name, param in model.named_parameters():
             logger.info('%s: %s' % (name, tuple(param.shape)))
 
-        epochs, grad_accum = self.config['num_epochs'], self.config['gradient_accumulation_steps']
+        epochs, grad_accum = self.config['num_epochs'], self.config[
+            'gradient_accumulation_steps']
         batch_size = self.config['batch_size']
 
         # Set up data
-        examples_train, examples_dev, examples_test = self.data.get_tensor_examples()
+        examples_train, examples_dev, examples_test = self.data.get_tensor_examples(
+        )
         stored_info = self.data.get_stored_info()
 
         # Set up optimizer and scheduler
-        total_update_steps = len(examples_train) * epochs // (grad_accum * batch_size)
+        total_update_steps = len(examples_train) * epochs // (grad_accum *
+                                                              batch_size)
         if not continued:
             self.optimizer = self.get_optimizer(model)
-            self.scheduler = self.get_scheduler(self.optimizer, total_update_steps)
+            self.scheduler = self.get_scheduler(self.optimizer,
+                                                total_update_steps)
 
         # Get model parameters for grad clipping
         plm_param, task_param = model.get_params()
@@ -118,20 +122,18 @@ class Runner:
 
         loss_during_accum = []  # To compute effective loss at each update
         loss_during_report = 0.0  # Effective loss during logging step
-        loss_history = []  # Full history of effective loss; length equals total update steps
+        loss_history = [
+        ]  # Full history of effective loss; length equals total update steps
         max_f1, max_f1_test = 0, 0
         start_time = time.time()
-        if type(self.optimizer) == FusedAdam:
-            self.optimizer.zero_grad()
-        else:
-            self.optimizer.zero_grad(set_to_none=True)
+        self.optimizer.zero_grad(set_to_none=True)
 
-        trainloader = DataLoader(
-            examples_train, batch_size=batch_size, shuffle=True, 
-            num_workers=0,
-            collate_fn=self.collate_fn,
-            pin_memory=True
-        )
+        trainloader = DataLoader(examples_train,
+                                 batch_size=batch_size,
+                                 shuffle=True,
+                                 num_workers=0,
+                                 collate_fn=self.collate_fn,
+                                 pin_memory=True)
 
         for epo in range(start_epoch, epochs):
             logger.info("*******************EPOCH %d*******************" % epo)
@@ -143,9 +145,8 @@ class Runner:
                     if v is not None:
                         example_gpu[k] = v.to(self.device)
 
-                with torch.cuda.amp.autocast(
-                    enabled=self.use_amp, dtype=torch.bfloat16
-                ):
+                with torch.cuda.amp.autocast(enabled=self.use_amp,
+                                             dtype=torch.bfloat16):
                     loss = model(**example_gpu) / grad_accum
                 # Backward; accumulate gradients and clip by grad norm
                 loss.backward()
@@ -157,19 +158,14 @@ class Runner:
                         norm_plm = torch.nn.utils.clip_grad_norm_(
                             plm_param,
                             self.config['max_grad_norm'],
-                            error_if_nonfinite=False
-                        )
+                            error_if_nonfinite=False)
                         norm_task = torch.nn.utils.clip_grad_norm_(
                             task_param,
                             self.config['max_grad_norm'],
-                            error_if_nonfinite=False
-                        )
+                            error_if_nonfinite=False)
                     self.optimizer.step()
                     self.scheduler.step()
-                    if type(self.optimizer) == FusedAdam:
-                        self.optimizer.zero_grad()
-                    else:
-                        self.optimizer.zero_grad(set_to_none=True)
+                    self.optimizer.zero_grad(set_to_none=True)
 
                     # Compute effective loss
                     effective_loss = np.sum(loss_during_accum).item()
@@ -178,33 +174,34 @@ class Runner:
                     loss_history.append(effective_loss)
 
                     # Report
-                    if self.scheduler._step_count % self.config['report_frequency'] == 0:
+                    if self.scheduler._step_count % self.config[
+                            'report_frequency'] == 0:
                         # Show avg loss during last report interval
-                        avg_loss = loss_during_report / self.config['report_frequency']
+                        avg_loss = loss_during_report / self.config[
+                            'report_frequency']
                         loss_during_report = 0.0
                         end_time = time.time()
-                        logger.info(
-                            'Step %d: avg loss %.2f; steps/sec %.2f' %
-                            (self.scheduler._step_count, avg_loss,
-                            self.config['report_frequency'] / (end_time - start_time))
-                        )
+                        logger.info('Step %d: avg loss %.2f; steps/sec %.2f' %
+                                    (self.scheduler._step_count, avg_loss,
+                                     self.config['report_frequency'] /
+                                     (end_time - start_time)))
                         start_time = end_time
 
                     # Evaluate
-                    if self.scheduler._step_count % self.config['eval_frequency'] == 0:
+                    if self.scheduler._step_count % self.config[
+                            'eval_frequency'] == 0:
                         logger.info('Dev')
 
-                        f1, _ = self.evaluate(
-                            model, examples_dev, stored_info, self.scheduler._step_count
-                        )
+                        f1, _ = self.evaluate(model, examples_dev, stored_info,
+                                              self.scheduler._step_count)
                         logger.info('Test')
                         f1_test = 0.
                         if f1 > max_f1:
                             max_f1 = max(max_f1, f1)
-                            max_f1_test = 0. 
+                            max_f1_test = 0.
                             self.save_model_checkpoint(
-                                model, self.optimizer, self.scheduler, self.scheduler._step_count, epo
-                            )
+                                model, self.optimizer, self.scheduler,
+                                self.scheduler._step_count, epo)
 
                         logger.info('Eval max f1: %.2f' % max_f1)
                         logger.info('Test max f1: %.2f' % max_f1_test)
@@ -215,71 +212,81 @@ class Runner:
 
         return
 
-    def evaluate(
-        self, model, tensor_examples, stored_info, step, predict=False
-    ):
+    def evaluate(self,
+                 model,
+                 tensor_examples,
+                 stored_info,
+                 step,
+                 predict=False):
         # use different evaluator for different task
         # should return two values: f1, metrics
         # f1 is used for model selection, the higher the better
         raise NotImplementedError()
 
-
     def get_optimizer(self, model):
         no_decay = ['bias', 'LayerNorm.weight', 'layer_norm.weight']
         plm_param, task_param = model.get_params(named=True)
 
-        grouped_param = [
-            {
-                'params': [p for n, p in plm_param if not any(nd in n for nd in no_decay)],
-                'lr': self.config['plm_learning_rate'],
-                'weight_decay': self.config['adam_weight_decay']
-            }, {
-                'params': [p for n, p in plm_param if any(nd in n for nd in no_decay)],
-                'lr': self.config['plm_learning_rate'],
-                'weight_decay': 0.0
-            }, {
-                'params': [p for n, p in task_param],
-                'lr': self.config['task_learning_rate'],
-                'weight_decay': 0.0
-            }
-        ]
-        if self.config["optimizer"].lower() == 'adamw':
-            # FusedAdam is faster. Requires apex.
-            # Otherwise use AdamW
-            opt_class = FusedAdam
+        grouped_param = [{
+            'params':
+            [p for n, p in plm_param if not any(nd in n for nd in no_decay)],
+            'lr':
+            self.config['plm_learning_rate'],
+            'weight_decay':
+            self.config['adam_weight_decay']
+        }, {
+            'params':
+            [p for n, p in plm_param if any(nd in n for nd in no_decay)],
+            'lr':
+            self.config['plm_learning_rate'],
+            'weight_decay':
+            0.0
+        }, {
+            'params': [p for n, p in task_param],
+            'lr': self.config['task_learning_rate'],
+            'weight_decay': 0.0
+        }]
+        # if self.config["optimizer"].lower() == 'adamw':
+        #     # FusedAdam is faster. Requires apex.
+        #     # Otherwise use AdamW
+        #     opt_class = AdamW
 
-        logger.info(opt_class)
-        optimizer = opt_class(
-            grouped_param,
-            lr=self.config['plm_learning_rate'],
-            eps=self.config['adam_eps']
-        )
+        # logger.info(opt_class)
+        optimizer = AdamW(grouped_param,
+                          lr=self.config['plm_learning_rate'],
+                          eps=self.config['adam_eps'])
         return optimizer
 
     def get_scheduler(self, optimizer, total_update_steps):
         # Only warm up plm lr
         warmup_steps = int(total_update_steps * self.config['warmup_ratio'])
 
-        lr_lambda_plm = util.get_scheduler_lambda(
-            self.config['plm_scheduler'], warmup_steps, total_update_steps)
+        lr_lambda_plm = util.get_scheduler_lambda(self.config['plm_scheduler'],
+                                                  warmup_steps,
+                                                  total_update_steps)
         lr_lambda_task = util.get_scheduler_lambda(
             self.config['task_scheduler'], 0, total_update_steps)
 
-        scheduler = LambdaLR(optimizer, [
-            lr_lambda_plm, # parameters with decay
-            lr_lambda_plm, # parameters without decay
-            lr_lambda_task
-        ])
+        scheduler = LambdaLR(
+            optimizer,
+            [
+                lr_lambda_plm,  # parameters with decay
+                lr_lambda_plm,  # parameters without decay
+                lr_lambda_task
+            ])
         return scheduler
 
-    def save_model_checkpoint(self, model, optimizer, scheduler, step, current_epoch):
-        path_ckpt = join(self.config['log_dir'], f'model_{self.name_suffix}_{step}.bin')
-        torch.save({
-            'current_epoch': current_epoch,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'scheduler_state_dict': scheduler.state_dict()
-        }, path_ckpt)
+    def save_model_checkpoint(self, model, optimizer, scheduler, step,
+                              current_epoch):
+        path_ckpt = join(self.config['log_dir'],
+                         f'model_{self.name_suffix}_{step}.bin')
+        torch.save(
+            {
+                'current_epoch': current_epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'scheduler_state_dict': scheduler.state_dict()
+            }, path_ckpt)
         logger.info('Saved model, optmizer, scheduler to %s' % path_ckpt)
         return
 
@@ -292,16 +299,21 @@ class Runner:
             if continue_training:
                 self.optimizer = self.get_optimizer(model)
 
-                epochs, grad_accum = self.config['num_epochs'], self.config['gradient_accumulation_steps']
+                epochs, grad_accum = self.config['num_epochs'], self.config[
+                    'gradient_accumulation_steps']
                 batch_size = self.config['batch_size']
                 total_update_steps = len(self.data.get_tensor_examples()[0]) *\
                                       epochs // (grad_accum * batch_size)
-                self.scheduler = self.get_scheduler(self.optimizer, total_update_steps)
-                self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-                self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+                self.scheduler = self.get_scheduler(self.optimizer,
+                                                    total_update_steps)
+                self.optimizer.load_state_dict(
+                    checkpoint['optimizer_state_dict'])
+                self.scheduler.load_state_dict(
+                    checkpoint['scheduler_state_dict'])
                 current_epoch = checkpoint['current_epoch']
 
-                logger.info('Loaded model, optmizer, scheduler from %s' % path_ckpt)
+                logger.info('Loaded model, optmizer, scheduler from %s' %
+                            path_ckpt)
                 return model, current_epoch
             else:
                 return model, -1

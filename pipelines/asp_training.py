@@ -20,6 +20,7 @@ def run_experiment(name: str,
                    tokenized_dev_data_file: str,
                    tokenized_test_data_file: str,
                    type_data_file: str,
+                   logger_dir_path: str,
                    config: Optional[dict] = None):
     if config is None:
         config = T5_BASE
@@ -39,29 +40,33 @@ def run_experiment(name: str,
     train_loader = DataLoader(train,
                               batch_size=config["batch_size"],
                               collate_fn=ner_collate_fn,
-                              num_workers=5,
-                              persistent_workers=True,
-                              pin_memory=True,
+                              num_workers=3,
+                              persistent_workers=False,
+                              pin_memory=False,
                               shuffle=True,
                               prefetch_factor=20)
 
-    val_loader = DataLoader(val,
-                            batch_size=int(config["batch_size"] * 3),
-                            collate_fn=ner_collate_fn,
-                            num_workers=5,
-                            persistent_workers=True,
-                            pin_memory=True,
-                            shuffle=False,
-                            prefetch_factor=20)
+    val_loader = DataLoader(
+        val,
+        batch_size=int(config["batch_size"] * 3)
+        if config["batch_size"] > 1 else config["batch_size"] * 8,
+        collate_fn=ner_collate_fn,
+        num_workers=3,
+        persistent_workers=False,
+        pin_memory=False,
+        shuffle=False,
+        prefetch_factor=20)
 
-    test_loader = DataLoader(test,
-                             batch_size=int(config["batch_size"] * 3),
-                             collate_fn=ner_collate_fn,
-                             num_workers=5,
-                             persistent_workers=True,
-                             pin_memory=True,
-                             shuffle=False,
-                             prefetch_factor=20)
+    test_loader = DataLoader(
+        test,
+        batch_size=int(config["batch_size"] * 3)
+        if config["batch_size"] > 1 else config["batch_size"] * 8,
+        collate_fn=ner_collate_fn,
+        num_workers=3,
+        persistent_workers=False,
+        pin_memory=False,
+        shuffle=False,
+        prefetch_factor=20)
 
     if torch.cuda.is_available():
         config["fused"] = True
@@ -78,7 +83,7 @@ def run_experiment(name: str,
             accumulate_grad_batches=config["gradient_accumulation_steps"],
             precision=config["precision"],
             max_epochs=config["num_epochs"],
-            default_root_dir=thesis_path + "/experiments/" + config["name"],
+            default_root_dir=logger_dir_path,
             check_val_every_n_epoch=4,
             num_sanity_val_steps=0)
 
@@ -90,7 +95,7 @@ def run_experiment(name: str,
             gradient_clip_val=1,
             accumulate_grad_batches=config["gradient_accumulation_steps"],
             max_epochs=config["num_epochs"],
-            default_root_dir=thesis_path + "/experiments/" + config["name"])
+            default_root_dir=logger_dir_path)
 
     model = ASPT5Model(config, tokenizer)
     #model = ASPT5Model.load_from_checkpoint(

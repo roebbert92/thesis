@@ -35,8 +35,9 @@ def get_scheduler_lambda(scheduler_type, warmup_steps, total_steps):
 
 
 def get_tokenizer(config):
-    tokenizer = T5Tokenizer.from_pretrained(config["plm_tokenizer_name"],
-                                            model_max_length=config["model_max_length"])
+    tokenizer = T5Tokenizer.from_pretrained(
+        config["plm_tokenizer_name"],
+        model_max_length=config["model_max_length"])
     tokenizer.add_tokens(config["mention_start_token"])
     tokenizer.add_tokens(config["mention_end_token"])
 
@@ -186,7 +187,14 @@ class ASPT5Model(pl.LightningModule, gen.ASPGenerationMixin):
                 lr_lambda_task
             ])
 
-        return {"optimizer": optimizer, "lr_scheduler": scheduler}
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "step",
+                "frequency": 1
+            }
+        }
 
     def forward(self,
                 input_ids=None,

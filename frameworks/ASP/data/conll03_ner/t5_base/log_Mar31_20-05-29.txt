@@ -1,0 +1,874 @@
+Log file path: /home/loebbert/projects/thesis/frameworks/ASP/data/conll03_ner/t5_base/log_Mar31_20-05-29.txt
+Config:
+task: ner
+dataset: conll03_ner
+data_dir: /home/loebbert/projects/thesis/frameworks/ASP/data/conll03_ner/
+model_dir: /home/loebbert/projects/thesis/frameworks/ASP/data/conll03_ner/
+log_root: /home/loebbert/projects/thesis/frameworks/ASP/data/conll03_ner/
+max_segment_len: 256
+optimizer: adamw
+use_amp: True
+plm_learning_rate: 5e-05
+task_learning_rate: 0.0003
+plm_scheduler: linear_with_warmup
+task_scheduler: linear_with_warmup
+warmup_ratio: 0.05
+adam_eps: 1e-08
+adam_weight_decay: 0.1
+max_grad_norm: 1
+gradient_accumulation_steps: 1
+batch_size: 1
+num_epochs: 20
+activation: relu
+init_std: 0.02
+feature_emb_size: 20
+hidden_size: 150
+dropout_rate: 0.3
+num_typing_classes: 4
+beam_size: 1
+eval_frequency: 1000
+report_frequency: 50
+plm_tokenizer_name: t5-small
+plm_pretrained_name_or_path: t5-base
+log_dir: /home/loebbert/projects/thesis/frameworks/ASP/data/conll03_ner/t5_base
+tb_dir: /home/loebbert/projects/thesis/frameworks/ASP/data/conll03_ner/tensorboard
+Model parameters:
+model.t5.shared.weight: (32102, 768)
+model.t5.encoder.block.0.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.encoder.block.0.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.encoder.block.0.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.encoder.block.0.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight: (32, 12)
+model.t5.encoder.block.0.layer.0.layer_norm.weight: (768,)
+model.t5.encoder.block.0.layer.1.DenseReluDense.wi.weight: (3072, 768)
+model.t5.encoder.block.0.layer.1.DenseReluDense.wo.weight: (768, 3072)
+model.t5.encoder.block.0.layer.1.layer_norm.weight: (768,)
+model.t5.encoder.block.1.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.encoder.block.1.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.encoder.block.1.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.encoder.block.1.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.encoder.block.1.layer.0.layer_norm.weight: (768,)
+model.t5.encoder.block.1.layer.1.DenseReluDense.wi.weight: (3072, 768)
+model.t5.encoder.block.1.layer.1.DenseReluDense.wo.weight: (768, 3072)
+model.t5.encoder.block.1.layer.1.layer_norm.weight: (768,)
+model.t5.encoder.block.2.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.encoder.block.2.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.encoder.block.2.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.encoder.block.2.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.encoder.block.2.layer.0.layer_norm.weight: (768,)
+model.t5.encoder.block.2.layer.1.DenseReluDense.wi.weight: (3072, 768)
+model.t5.encoder.block.2.layer.1.DenseReluDense.wo.weight: (768, 3072)
+model.t5.encoder.block.2.layer.1.layer_norm.weight: (768,)
+model.t5.encoder.block.3.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.encoder.block.3.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.encoder.block.3.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.encoder.block.3.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.encoder.block.3.layer.0.layer_norm.weight: (768,)
+model.t5.encoder.block.3.layer.1.DenseReluDense.wi.weight: (3072, 768)
+model.t5.encoder.block.3.layer.1.DenseReluDense.wo.weight: (768, 3072)
+model.t5.encoder.block.3.layer.1.layer_norm.weight: (768,)
+model.t5.encoder.block.4.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.encoder.block.4.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.encoder.block.4.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.encoder.block.4.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.encoder.block.4.layer.0.layer_norm.weight: (768,)
+model.t5.encoder.block.4.layer.1.DenseReluDense.wi.weight: (3072, 768)
+model.t5.encoder.block.4.layer.1.DenseReluDense.wo.weight: (768, 3072)
+model.t5.encoder.block.4.layer.1.layer_norm.weight: (768,)
+model.t5.encoder.block.5.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.encoder.block.5.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.encoder.block.5.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.encoder.block.5.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.encoder.block.5.layer.0.layer_norm.weight: (768,)
+model.t5.encoder.block.5.layer.1.DenseReluDense.wi.weight: (3072, 768)
+model.t5.encoder.block.5.layer.1.DenseReluDense.wo.weight: (768, 3072)
+model.t5.encoder.block.5.layer.1.layer_norm.weight: (768,)
+model.t5.encoder.block.6.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.encoder.block.6.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.encoder.block.6.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.encoder.block.6.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.encoder.block.6.layer.0.layer_norm.weight: (768,)
+model.t5.encoder.block.6.layer.1.DenseReluDense.wi.weight: (3072, 768)
+model.t5.encoder.block.6.layer.1.DenseReluDense.wo.weight: (768, 3072)
+model.t5.encoder.block.6.layer.1.layer_norm.weight: (768,)
+model.t5.encoder.block.7.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.encoder.block.7.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.encoder.block.7.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.encoder.block.7.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.encoder.block.7.layer.0.layer_norm.weight: (768,)
+model.t5.encoder.block.7.layer.1.DenseReluDense.wi.weight: (3072, 768)
+model.t5.encoder.block.7.layer.1.DenseReluDense.wo.weight: (768, 3072)
+model.t5.encoder.block.7.layer.1.layer_norm.weight: (768,)
+model.t5.encoder.block.8.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.encoder.block.8.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.encoder.block.8.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.encoder.block.8.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.encoder.block.8.layer.0.layer_norm.weight: (768,)
+model.t5.encoder.block.8.layer.1.DenseReluDense.wi.weight: (3072, 768)
+model.t5.encoder.block.8.layer.1.DenseReluDense.wo.weight: (768, 3072)
+model.t5.encoder.block.8.layer.1.layer_norm.weight: (768,)
+model.t5.encoder.block.9.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.encoder.block.9.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.encoder.block.9.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.encoder.block.9.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.encoder.block.9.layer.0.layer_norm.weight: (768,)
+model.t5.encoder.block.9.layer.1.DenseReluDense.wi.weight: (3072, 768)
+model.t5.encoder.block.9.layer.1.DenseReluDense.wo.weight: (768, 3072)
+model.t5.encoder.block.9.layer.1.layer_norm.weight: (768,)
+model.t5.encoder.block.10.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.encoder.block.10.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.encoder.block.10.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.encoder.block.10.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.encoder.block.10.layer.0.layer_norm.weight: (768,)
+model.t5.encoder.block.10.layer.1.DenseReluDense.wi.weight: (3072, 768)
+model.t5.encoder.block.10.layer.1.DenseReluDense.wo.weight: (768, 3072)
+model.t5.encoder.block.10.layer.1.layer_norm.weight: (768,)
+model.t5.encoder.block.11.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.encoder.block.11.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.encoder.block.11.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.encoder.block.11.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.encoder.block.11.layer.0.layer_norm.weight: (768,)
+model.t5.encoder.block.11.layer.1.DenseReluDense.wi.weight: (3072, 768)
+model.t5.encoder.block.11.layer.1.DenseReluDense.wo.weight: (768, 3072)
+model.t5.encoder.block.11.layer.1.layer_norm.weight: (768,)
+model.t5.encoder.final_layer_norm.weight: (768,)
+model.t5.decoder.block.0.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.decoder.block.0.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.decoder.block.0.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.decoder.block.0.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.decoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight: (32, 12)
+model.t5.decoder.block.0.layer.0.layer_norm.weight: (768,)
+model.t5.decoder.block.0.layer.1.EncDecAttention.q.weight: (768, 768)
+model.t5.decoder.block.0.layer.1.EncDecAttention.k.weight: (768, 768)
+model.t5.decoder.block.0.layer.1.EncDecAttention.v.weight: (768, 768)
+model.t5.decoder.block.0.layer.1.EncDecAttention.o.weight: (768, 768)
+model.t5.decoder.block.0.layer.1.layer_norm.weight: (768,)
+model.t5.decoder.block.0.layer.2.DenseReluDense.wi.weight: (3072, 768)
+model.t5.decoder.block.0.layer.2.DenseReluDense.wo.weight: (768, 3072)
+model.t5.decoder.block.0.layer.2.layer_norm.weight: (768,)
+model.t5.decoder.block.1.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.decoder.block.1.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.decoder.block.1.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.decoder.block.1.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.decoder.block.1.layer.0.layer_norm.weight: (768,)
+model.t5.decoder.block.1.layer.1.EncDecAttention.q.weight: (768, 768)
+model.t5.decoder.block.1.layer.1.EncDecAttention.k.weight: (768, 768)
+model.t5.decoder.block.1.layer.1.EncDecAttention.v.weight: (768, 768)
+model.t5.decoder.block.1.layer.1.EncDecAttention.o.weight: (768, 768)
+model.t5.decoder.block.1.layer.1.layer_norm.weight: (768,)
+model.t5.decoder.block.1.layer.2.DenseReluDense.wi.weight: (3072, 768)
+model.t5.decoder.block.1.layer.2.DenseReluDense.wo.weight: (768, 3072)
+model.t5.decoder.block.1.layer.2.layer_norm.weight: (768,)
+model.t5.decoder.block.2.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.decoder.block.2.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.decoder.block.2.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.decoder.block.2.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.decoder.block.2.layer.0.layer_norm.weight: (768,)
+model.t5.decoder.block.2.layer.1.EncDecAttention.q.weight: (768, 768)
+model.t5.decoder.block.2.layer.1.EncDecAttention.k.weight: (768, 768)
+model.t5.decoder.block.2.layer.1.EncDecAttention.v.weight: (768, 768)
+model.t5.decoder.block.2.layer.1.EncDecAttention.o.weight: (768, 768)
+model.t5.decoder.block.2.layer.1.layer_norm.weight: (768,)
+model.t5.decoder.block.2.layer.2.DenseReluDense.wi.weight: (3072, 768)
+model.t5.decoder.block.2.layer.2.DenseReluDense.wo.weight: (768, 3072)
+model.t5.decoder.block.2.layer.2.layer_norm.weight: (768,)
+model.t5.decoder.block.3.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.decoder.block.3.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.decoder.block.3.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.decoder.block.3.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.decoder.block.3.layer.0.layer_norm.weight: (768,)
+model.t5.decoder.block.3.layer.1.EncDecAttention.q.weight: (768, 768)
+model.t5.decoder.block.3.layer.1.EncDecAttention.k.weight: (768, 768)
+model.t5.decoder.block.3.layer.1.EncDecAttention.v.weight: (768, 768)
+model.t5.decoder.block.3.layer.1.EncDecAttention.o.weight: (768, 768)
+model.t5.decoder.block.3.layer.1.layer_norm.weight: (768,)
+model.t5.decoder.block.3.layer.2.DenseReluDense.wi.weight: (3072, 768)
+model.t5.decoder.block.3.layer.2.DenseReluDense.wo.weight: (768, 3072)
+model.t5.decoder.block.3.layer.2.layer_norm.weight: (768,)
+model.t5.decoder.block.4.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.decoder.block.4.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.decoder.block.4.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.decoder.block.4.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.decoder.block.4.layer.0.layer_norm.weight: (768,)
+model.t5.decoder.block.4.layer.1.EncDecAttention.q.weight: (768, 768)
+model.t5.decoder.block.4.layer.1.EncDecAttention.k.weight: (768, 768)
+model.t5.decoder.block.4.layer.1.EncDecAttention.v.weight: (768, 768)
+model.t5.decoder.block.4.layer.1.EncDecAttention.o.weight: (768, 768)
+model.t5.decoder.block.4.layer.1.layer_norm.weight: (768,)
+model.t5.decoder.block.4.layer.2.DenseReluDense.wi.weight: (3072, 768)
+model.t5.decoder.block.4.layer.2.DenseReluDense.wo.weight: (768, 3072)
+model.t5.decoder.block.4.layer.2.layer_norm.weight: (768,)
+model.t5.decoder.block.5.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.decoder.block.5.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.decoder.block.5.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.decoder.block.5.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.decoder.block.5.layer.0.layer_norm.weight: (768,)
+model.t5.decoder.block.5.layer.1.EncDecAttention.q.weight: (768, 768)
+model.t5.decoder.block.5.layer.1.EncDecAttention.k.weight: (768, 768)
+model.t5.decoder.block.5.layer.1.EncDecAttention.v.weight: (768, 768)
+model.t5.decoder.block.5.layer.1.EncDecAttention.o.weight: (768, 768)
+model.t5.decoder.block.5.layer.1.layer_norm.weight: (768,)
+model.t5.decoder.block.5.layer.2.DenseReluDense.wi.weight: (3072, 768)
+model.t5.decoder.block.5.layer.2.DenseReluDense.wo.weight: (768, 3072)
+model.t5.decoder.block.5.layer.2.layer_norm.weight: (768,)
+model.t5.decoder.block.6.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.decoder.block.6.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.decoder.block.6.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.decoder.block.6.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.decoder.block.6.layer.0.layer_norm.weight: (768,)
+model.t5.decoder.block.6.layer.1.EncDecAttention.q.weight: (768, 768)
+model.t5.decoder.block.6.layer.1.EncDecAttention.k.weight: (768, 768)
+model.t5.decoder.block.6.layer.1.EncDecAttention.v.weight: (768, 768)
+model.t5.decoder.block.6.layer.1.EncDecAttention.o.weight: (768, 768)
+model.t5.decoder.block.6.layer.1.layer_norm.weight: (768,)
+model.t5.decoder.block.6.layer.2.DenseReluDense.wi.weight: (3072, 768)
+model.t5.decoder.block.6.layer.2.DenseReluDense.wo.weight: (768, 3072)
+model.t5.decoder.block.6.layer.2.layer_norm.weight: (768,)
+model.t5.decoder.block.7.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.decoder.block.7.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.decoder.block.7.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.decoder.block.7.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.decoder.block.7.layer.0.layer_norm.weight: (768,)
+model.t5.decoder.block.7.layer.1.EncDecAttention.q.weight: (768, 768)
+model.t5.decoder.block.7.layer.1.EncDecAttention.k.weight: (768, 768)
+model.t5.decoder.block.7.layer.1.EncDecAttention.v.weight: (768, 768)
+model.t5.decoder.block.7.layer.1.EncDecAttention.o.weight: (768, 768)
+model.t5.decoder.block.7.layer.1.layer_norm.weight: (768,)
+model.t5.decoder.block.7.layer.2.DenseReluDense.wi.weight: (3072, 768)
+model.t5.decoder.block.7.layer.2.DenseReluDense.wo.weight: (768, 3072)
+model.t5.decoder.block.7.layer.2.layer_norm.weight: (768,)
+model.t5.decoder.block.8.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.decoder.block.8.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.decoder.block.8.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.decoder.block.8.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.decoder.block.8.layer.0.layer_norm.weight: (768,)
+model.t5.decoder.block.8.layer.1.EncDecAttention.q.weight: (768, 768)
+model.t5.decoder.block.8.layer.1.EncDecAttention.k.weight: (768, 768)
+model.t5.decoder.block.8.layer.1.EncDecAttention.v.weight: (768, 768)
+model.t5.decoder.block.8.layer.1.EncDecAttention.o.weight: (768, 768)
+model.t5.decoder.block.8.layer.1.layer_norm.weight: (768,)
+model.t5.decoder.block.8.layer.2.DenseReluDense.wi.weight: (3072, 768)
+model.t5.decoder.block.8.layer.2.DenseReluDense.wo.weight: (768, 3072)
+model.t5.decoder.block.8.layer.2.layer_norm.weight: (768,)
+model.t5.decoder.block.9.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.decoder.block.9.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.decoder.block.9.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.decoder.block.9.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.decoder.block.9.layer.0.layer_norm.weight: (768,)
+model.t5.decoder.block.9.layer.1.EncDecAttention.q.weight: (768, 768)
+model.t5.decoder.block.9.layer.1.EncDecAttention.k.weight: (768, 768)
+model.t5.decoder.block.9.layer.1.EncDecAttention.v.weight: (768, 768)
+model.t5.decoder.block.9.layer.1.EncDecAttention.o.weight: (768, 768)
+model.t5.decoder.block.9.layer.1.layer_norm.weight: (768,)
+model.t5.decoder.block.9.layer.2.DenseReluDense.wi.weight: (3072, 768)
+model.t5.decoder.block.9.layer.2.DenseReluDense.wo.weight: (768, 3072)
+model.t5.decoder.block.9.layer.2.layer_norm.weight: (768,)
+model.t5.decoder.block.10.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.decoder.block.10.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.decoder.block.10.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.decoder.block.10.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.decoder.block.10.layer.0.layer_norm.weight: (768,)
+model.t5.decoder.block.10.layer.1.EncDecAttention.q.weight: (768, 768)
+model.t5.decoder.block.10.layer.1.EncDecAttention.k.weight: (768, 768)
+model.t5.decoder.block.10.layer.1.EncDecAttention.v.weight: (768, 768)
+model.t5.decoder.block.10.layer.1.EncDecAttention.o.weight: (768, 768)
+model.t5.decoder.block.10.layer.1.layer_norm.weight: (768,)
+model.t5.decoder.block.10.layer.2.DenseReluDense.wi.weight: (3072, 768)
+model.t5.decoder.block.10.layer.2.DenseReluDense.wo.weight: (768, 3072)
+model.t5.decoder.block.10.layer.2.layer_norm.weight: (768,)
+model.t5.decoder.block.11.layer.0.SelfAttention.q.weight: (768, 768)
+model.t5.decoder.block.11.layer.0.SelfAttention.k.weight: (768, 768)
+model.t5.decoder.block.11.layer.0.SelfAttention.v.weight: (768, 768)
+model.t5.decoder.block.11.layer.0.SelfAttention.o.weight: (768, 768)
+model.t5.decoder.block.11.layer.0.layer_norm.weight: (768,)
+model.t5.decoder.block.11.layer.1.EncDecAttention.q.weight: (768, 768)
+model.t5.decoder.block.11.layer.1.EncDecAttention.k.weight: (768, 768)
+model.t5.decoder.block.11.layer.1.EncDecAttention.v.weight: (768, 768)
+model.t5.decoder.block.11.layer.1.EncDecAttention.o.weight: (768, 768)
+model.t5.decoder.block.11.layer.1.layer_norm.weight: (768,)
+model.t5.decoder.block.11.layer.2.DenseReluDense.wi.weight: (3072, 768)
+model.t5.decoder.block.11.layer.2.DenseReluDense.wo.weight: (768, 3072)
+model.t5.decoder.block.11.layer.2.layer_norm.weight: (768,)
+model.t5.decoder.final_layer_norm.weight: (768,)
+model.action_head.0.weight: (150, 768)
+model.action_head.0.bias: (150,)
+model.action_head.3.weight: (1, 150)
+model.action_head.3.bias: (1,)
+model.lr_scorer.0.weight: (150, 1536)
+model.lr_scorer.0.bias: (150,)
+model.lr_scorer.3.weight: (4, 150)
+model.lr_scorer.3.bias: (4,)
+*******************Training*******************
+Num samples: 955
+Num epochs: 20
+Gradient accumulation steps: 1
+Total update steps: 19100
+Starting step: 1
+*******************EPOCH 0*******************
+Step 50: avg loss 366.64; steps/sec 10.20
+Step 100: avg loss 218.89; steps/sec 11.54
+Step 150: avg loss 204.00; steps/sec 12.09
+Step 200: avg loss 219.91; steps/sec 12.16
+Step 250: avg loss 216.73; steps/sec 11.81
+Step 300: avg loss 143.71; steps/sec 11.77
+Step 350: avg loss 102.77; steps/sec 11.69
+Step 400: avg loss 102.46; steps/sec 11.04
+Step 450: avg loss 72.92; steps/sec 11.01
+Step 500: avg loss 69.21; steps/sec 10.88
+Step 550: avg loss 52.99; steps/sec 11.35
+Step 600: avg loss 50.49; steps/sec 11.25
+Step 650: avg loss 41.61; steps/sec 11.54
+Step 700: avg loss 48.16; steps/sec 11.80
+Step 750: avg loss 40.98; steps/sec 11.09
+Step 800: avg loss 36.09; steps/sec 11.69
+Step 850: avg loss 26.35; steps/sec 11.51
+Step 900: avg loss 38.76; steps/sec 10.34
+Step 950: avg loss 25.23; steps/sec 11.26
+*******************EPOCH 1*******************
+Step 1000: avg loss 26.99; steps/sec 11.07
+Dev
+Step 1000: evaluating on 216 samples with batch_size 8
+Eval_Ent_Precision: 87.5882
+Eval_Ent_Recall: 85.6854
+Eval_Ent_F1: 86.6264
+Test
+Saved model, optmizer, scheduler to /home/loebbert/projects/thesis/frameworks/ASP/data/conll03_ner/t5_base/model_Mar31_20-05-29_1000.bin
+Eval max f1: 86.63
+Test max f1: 0.00
+Step 1050: avg loss 23.28; steps/sec 11.69
+Step 1100: avg loss 25.45; steps/sec 11.46
+Step 1150: avg loss 24.85; steps/sec 11.49
+Step 1200: avg loss 15.61; steps/sec 11.39
+Step 1250: avg loss 13.96; steps/sec 11.36
+Step 1300: avg loss 16.99; steps/sec 11.53
+Step 1350: avg loss 26.01; steps/sec 11.42
+Step 1400: avg loss 18.30; steps/sec 10.96
+Step 1450: avg loss 22.74; steps/sec 11.42
+Step 1500: avg loss 22.82; steps/sec 11.89
+Step 1550: avg loss 12.36; steps/sec 12.14
+Step 1600: avg loss 15.39; steps/sec 11.92
+Step 1650: avg loss 16.85; steps/sec 11.43
+Step 1700: avg loss 20.87; steps/sec 11.27
+Step 1750: avg loss 16.32; steps/sec 11.79
+Step 1800: avg loss 11.51; steps/sec 11.80
+Step 1850: avg loss 15.37; steps/sec 11.62
+Step 1900: avg loss 15.49; steps/sec 11.38
+*******************EPOCH 2*******************
+Step 1950: avg loss 17.67; steps/sec 11.24
+Step 2000: avg loss 10.70; steps/sec 11.91
+Dev
+Step 2000: evaluating on 216 samples with batch_size 8
+Eval_Ent_Precision: 93.8188
+Eval_Ent_Recall: 93.2974
+Eval_Ent_F1: 93.5574
+Test
+Saved model, optmizer, scheduler to /home/loebbert/projects/thesis/frameworks/ASP/data/conll03_ner/t5_base/model_Mar31_20-05-29_2000.bin
+Eval max f1: 93.56
+Test max f1: 0.00
+Step 2050: avg loss 11.13; steps/sec 11.68
+Step 2100: avg loss 12.13; steps/sec 11.87
+Step 2150: avg loss 11.89; steps/sec 11.69
+Step 2200: avg loss 8.32; steps/sec 11.41
+Step 2250: avg loss 13.81; steps/sec 10.98
+Step 2300: avg loss 13.55; steps/sec 11.73
+Step 2350: avg loss 13.71; steps/sec 11.79
+Step 2400: avg loss 11.98; steps/sec 11.86
+Step 2450: avg loss 10.36; steps/sec 11.84
+Step 2500: avg loss 14.78; steps/sec 10.74
+Step 2550: avg loss 11.09; steps/sec 10.77
+Step 2600: avg loss 11.07; steps/sec 11.19
+Step 2650: avg loss 13.22; steps/sec 10.67
+Step 2700: avg loss 11.48; steps/sec 10.90
+Step 2750: avg loss 12.48; steps/sec 11.18
+Step 2800: avg loss 13.04; steps/sec 11.82
+Step 2850: avg loss 10.23; steps/sec 11.82
+*******************EPOCH 3*******************
+Step 2900: avg loss 6.66; steps/sec 11.74
+Step 2950: avg loss 7.12; steps/sec 11.67
+Step 3000: avg loss 8.28; steps/sec 10.57
+Dev
+Step 3000: evaluating on 216 samples with batch_size 8
+Eval_Ent_Precision: 93.3537
+Eval_Ent_Recall: 92.7248
+Eval_Ent_F1: 93.0382
+Test
+Eval max f1: 93.56
+Test max f1: 0.00
+Step 3050: avg loss 8.20; steps/sec 10.60
+Step 3100: avg loss 7.50; steps/sec 10.77
+Step 3150: avg loss 8.49; steps/sec 11.66
+Step 3200: avg loss 9.83; steps/sec 11.78
+Step 3250: avg loss 10.07; steps/sec 11.84
+Step 3300: avg loss 8.13; steps/sec 11.16
+Step 3350: avg loss 8.42; steps/sec 11.24
+Step 3400: avg loss 19.80; steps/sec 10.27
+Step 3450: avg loss 7.39; steps/sec 10.97
+Step 3500: avg loss 8.73; steps/sec 11.13
+Step 3550: avg loss 11.27; steps/sec 11.05
+Step 3600: avg loss 9.71; steps/sec 10.72
+Step 3650: avg loss 9.41; steps/sec 11.32
+Step 3700: avg loss 5.58; steps/sec 11.39
+Step 3750: avg loss 7.80; steps/sec 11.87
+Step 3800: avg loss 7.17; steps/sec 11.90
+*******************EPOCH 4*******************
+Step 3850: avg loss 8.22; steps/sec 11.23
+Step 3900: avg loss 5.68; steps/sec 11.43
+Step 3950: avg loss 5.37; steps/sec 11.91
+Step 4000: avg loss 6.92; steps/sec 11.13
+Dev
+Step 4000: evaluating on 216 samples with batch_size 8
+Eval_Ent_Precision: 93.7647
+Eval_Ent_Recall: 93.7016
+Eval_Ent_F1: 93.7332
+Test
+Saved model, optmizer, scheduler to /home/loebbert/projects/thesis/frameworks/ASP/data/conll03_ner/t5_base/model_Mar31_20-05-29_4000.bin
+Eval max f1: 93.73
+Test max f1: 0.00
+Step 4050: avg loss 8.48; steps/sec 11.42
+Step 4100: avg loss 7.03; steps/sec 11.10
+Step 4150: avg loss 9.10; steps/sec 10.90
+Step 4200: avg loss 7.63; steps/sec 11.63
+Step 4250: avg loss 5.30; steps/sec 11.45
+Step 4300: avg loss 4.45; steps/sec 12.12
+Step 4350: avg loss 12.16; steps/sec 11.15
+Step 4400: avg loss 6.60; steps/sec 11.64
+Step 4450: avg loss 8.15; steps/sec 11.87
+Step 4500: avg loss 5.54; steps/sec 11.42
+Step 4550: avg loss 6.59; steps/sec 11.85
+Step 4600: avg loss 5.00; steps/sec 11.81
+Step 4650: avg loss 4.57; steps/sec 11.74
+Step 4700: avg loss 6.78; steps/sec 11.88
+Step 4750: avg loss 10.23; steps/sec 10.98
+*******************EPOCH 5*******************
+Step 4800: avg loss 9.65; steps/sec 11.23
+Step 4850: avg loss 5.92; steps/sec 11.93
+Step 4900: avg loss 4.76; steps/sec 11.77
+Step 4950: avg loss 4.09; steps/sec 11.87
+Step 5000: avg loss 7.98; steps/sec 11.44
+Dev
+Step 5000: evaluating on 216 samples with batch_size 8
+Eval_Ent_Precision: 95.0102
+Eval_Ent_Recall: 94.2742
+Eval_Ent_F1: 94.6407
+Test
+Saved model, optmizer, scheduler to /home/loebbert/projects/thesis/frameworks/ASP/data/conll03_ner/t5_base/model_Mar31_20-05-29_5000.bin
+Eval max f1: 94.64
+Test max f1: 0.00
+Step 5050: avg loss 4.53; steps/sec 11.28
+Step 5100: avg loss 8.95; steps/sec 11.43
+Step 5150: avg loss 3.37; steps/sec 11.48
+Step 5200: avg loss 4.77; steps/sec 10.95
+Step 5250: avg loss 5.30; steps/sec 11.03
+Step 5300: avg loss 3.05; steps/sec 11.73
+Step 5350: avg loss 6.07; steps/sec 11.46
+Step 5400: avg loss 5.99; steps/sec 11.93
+Step 5450: avg loss 8.22; steps/sec 10.56
+Step 5500: avg loss 3.01; steps/sec 11.22
+Step 5550: avg loss 9.70; steps/sec 10.88
+Step 5600: avg loss 2.98; steps/sec 11.47
+Step 5650: avg loss 9.51; steps/sec 11.79
+Step 5700: avg loss 5.64; steps/sec 11.21
+*******************EPOCH 6*******************
+Step 5750: avg loss 4.39; steps/sec 11.25
+Step 5800: avg loss 6.94; steps/sec 10.69
+Step 5850: avg loss 3.31; steps/sec 11.34
+Step 5900: avg loss 3.73; steps/sec 11.18
+Step 5950: avg loss 2.88; steps/sec 11.91
+Step 6000: avg loss 6.30; steps/sec 11.93
+Dev
+Step 6000: evaluating on 216 samples with batch_size 8
+Eval_Ent_Precision: 94.7555
+Eval_Ent_Recall: 94.3247
+Eval_Ent_F1: 94.5396
+Test
+Eval max f1: 94.64
+Test max f1: 0.00
+Step 6050: avg loss 4.54; steps/sec 11.67
+Step 6100: avg loss 4.15; steps/sec 11.58
+Step 6150: avg loss 5.63; steps/sec 11.19
+Step 6200: avg loss 7.38; steps/sec 11.40
+Step 6250: avg loss 4.49; steps/sec 11.77
+Step 6300: avg loss 3.01; steps/sec 11.88
+Step 6350: avg loss 6.79; steps/sec 11.25
+Step 6400: avg loss 3.96; steps/sec 11.01
+Step 6450: avg loss 4.46; steps/sec 11.27
+Step 6500: avg loss 2.83; steps/sec 11.23
+Step 6550: avg loss 5.96; steps/sec 10.91
+Step 6600: avg loss 3.29; steps/sec 11.24
+Step 6650: avg loss 6.83; steps/sec 10.78
+*******************EPOCH 7*******************
+Step 6700: avg loss 3.99; steps/sec 10.87
+Step 6750: avg loss 6.17; steps/sec 11.13
+Step 6800: avg loss 4.09; steps/sec 11.18
+Step 6850: avg loss 2.79; steps/sec 11.46
+Step 6900: avg loss 5.16; steps/sec 11.23
+Step 6950: avg loss 4.25; steps/sec 11.28
+Step 7000: avg loss 5.56; steps/sec 11.33
+Dev
+Step 7000: evaluating on 216 samples with batch_size 8
+Eval_Ent_Precision: 95.0017
+Eval_Ent_Recall: 94.4257
+Eval_Ent_F1: 94.7128
+Test
+Saved model, optmizer, scheduler to /home/loebbert/projects/thesis/frameworks/ASP/data/conll03_ner/t5_base/model_Mar31_20-05-29_7000.bin
+Eval max f1: 94.71
+Test max f1: 0.00
+Step 7050: avg loss 3.51; steps/sec 11.50
+Step 7100: avg loss 2.95; steps/sec 11.63
+Step 7150: avg loss 3.10; steps/sec 11.83
+Step 7200: avg loss 2.85; steps/sec 11.88
+Step 7250: avg loss 4.97; steps/sec 11.99
+Step 7300: avg loss 3.19; steps/sec 11.60
+Step 7350: avg loss 4.11; steps/sec 11.55
+Step 7400: avg loss 2.20; steps/sec 11.78
+Step 7450: avg loss 2.95; steps/sec 11.98
+Step 7500: avg loss 4.49; steps/sec 11.03
+Step 7550: avg loss 4.68; steps/sec 11.97
+Step 7600: avg loss 5.25; steps/sec 11.79
+*******************EPOCH 8*******************
+Step 7650: avg loss 2.71; steps/sec 11.83
+Step 7700: avg loss 4.88; steps/sec 11.81
+Step 7750: avg loss 4.87; steps/sec 11.11
+Step 7800: avg loss 2.66; steps/sec 11.42
+Step 7850: avg loss 6.58; steps/sec 11.26
+Step 7900: avg loss 4.33; steps/sec 11.49
+Step 7950: avg loss 3.04; steps/sec 10.92
+Step 8000: avg loss 3.89; steps/sec 11.05
+Dev
+Step 8000: evaluating on 216 samples with batch_size 8
+Eval_Ent_Precision: 95.2397
+Eval_Ent_Recall: 94.6783
+Eval_Ent_F1: 94.9582
+Test
+Saved model, optmizer, scheduler to /home/loebbert/projects/thesis/frameworks/ASP/data/conll03_ner/t5_base/model_Mar31_20-05-29_8000.bin
+Eval max f1: 94.96
+Test max f1: 0.00
+Step 8050: avg loss 1.60; steps/sec 11.20
+Step 8100: avg loss 2.79; steps/sec 11.68
+Step 8150: avg loss 3.27; steps/sec 11.82
+Step 8200: avg loss 4.89; steps/sec 11.92
+Step 8250: avg loss 2.84; steps/sec 11.87
+Step 8300: avg loss 3.55; steps/sec 11.31
+Step 8350: avg loss 2.40; steps/sec 11.26
+Step 8400: avg loss 3.87; steps/sec 10.88
+Step 8450: avg loss 3.04; steps/sec 11.62
+Step 8500: avg loss 2.13; steps/sec 11.91
+Step 8550: avg loss 3.03; steps/sec 11.94
+*******************EPOCH 9*******************
+Step 8600: avg loss 1.71; steps/sec 12.03
+Step 8650: avg loss 2.90; steps/sec 11.52
+Step 8700: avg loss 2.69; steps/sec 12.00
+Step 8750: avg loss 2.03; steps/sec 11.16
+Step 8800: avg loss 0.85; steps/sec 12.22
+Step 8850: avg loss 2.95; steps/sec 12.21
+Step 8900: avg loss 1.97; steps/sec 11.62
+Step 8950: avg loss 3.46; steps/sec 11.20
+Step 9000: avg loss 3.86; steps/sec 11.35
+Dev
+Step 9000: evaluating on 216 samples with batch_size 8
+Eval_Ent_Precision: 95.3114
+Eval_Ent_Recall: 94.8299
+Eval_Ent_F1: 95.0701
+Test
+Saved model, optmizer, scheduler to /home/loebbert/projects/thesis/frameworks/ASP/data/conll03_ner/t5_base/model_Mar31_20-05-29_9000.bin
+Eval max f1: 95.07
+Test max f1: 0.00
+Step 9050: avg loss 2.79; steps/sec 10.91
+Step 9100: avg loss 1.95; steps/sec 10.84
+Step 9150: avg loss 3.64; steps/sec 11.36
+Step 9200: avg loss 2.14; steps/sec 11.53
+Step 9250: avg loss 2.44; steps/sec 11.68
+Step 9300: avg loss 1.99; steps/sec 11.79
+Step 9350: avg loss 6.09; steps/sec 10.62
+Step 9400: avg loss 4.01; steps/sec 10.37
+Step 9450: avg loss 5.80; steps/sec 10.72
+Step 9500: avg loss 2.61; steps/sec 11.29
+Step 9550: avg loss 2.95; steps/sec 11.14
+*******************EPOCH 10*******************
+Step 9600: avg loss 1.34; steps/sec 11.68
+Step 9650: avg loss 2.46; steps/sec 11.94
+Step 9700: avg loss 3.48; steps/sec 11.78
+Step 9750: avg loss 2.40; steps/sec 11.82
+Step 9800: avg loss 4.49; steps/sec 10.54
+Step 9850: avg loss 1.58; steps/sec 10.66
+Step 9900: avg loss 2.35; steps/sec 10.74
+Step 9950: avg loss 2.24; steps/sec 10.02
+Step 10000: avg loss 6.43; steps/sec 10.05
+Dev
+Step 10000: evaluating on 216 samples with batch_size 8
+Eval_Ent_Precision: 95.6404
+Eval_Ent_Recall: 94.9478
+Eval_Ent_F1: 95.2928
+Test
+Saved model, optmizer, scheduler to /home/loebbert/projects/thesis/frameworks/ASP/data/conll03_ner/t5_base/model_Mar31_20-05-29_10000.bin
+Eval max f1: 95.29
+Test max f1: 0.00
+Step 10050: avg loss 2.87; steps/sec 10.76
+Step 10100: avg loss 3.30; steps/sec 10.73
+Step 10150: avg loss 2.11; steps/sec 10.83
+Step 10200: avg loss 3.25; steps/sec 11.07
+Step 10250: avg loss 2.51; steps/sec 10.96
+Step 10300: avg loss 2.16; steps/sec 11.40
+Step 10350: avg loss 3.19; steps/sec 11.52
+Step 10400: avg loss 1.93; steps/sec 11.75
+Step 10450: avg loss 2.19; steps/sec 11.31
+Step 10500: avg loss 2.18; steps/sec 11.41
+*******************EPOCH 11*******************
+Step 10550: avg loss 1.82; steps/sec 11.64
+Step 10600: avg loss 2.17; steps/sec 11.99
+Step 10650: avg loss 3.98; steps/sec 11.18
+Step 10700: avg loss 0.94; steps/sec 11.74
+Step 10750: avg loss 1.03; steps/sec 11.99
+Step 10800: avg loss 2.59; steps/sec 11.74
+Step 10850: avg loss 2.13; steps/sec 11.32
+Step 10900: avg loss 3.28; steps/sec 10.79
+Step 10950: avg loss 1.95; steps/sec 10.87
+Step 11000: avg loss 1.77; steps/sec 10.84
+Dev
+Step 11000: evaluating on 216 samples with batch_size 8
+Eval_Ent_Precision: 95.7223
+Eval_Ent_Recall: 94.9646
+Eval_Ent_F1: 95.3420
+Test
+Saved model, optmizer, scheduler to /home/loebbert/projects/thesis/frameworks/ASP/data/conll03_ner/t5_base/model_Mar31_20-05-29_11000.bin
+Eval max f1: 95.34
+Test max f1: 0.00
+Step 11050: avg loss 1.54; steps/sec 10.49
+Step 11100: avg loss 1.80; steps/sec 10.72
+Step 11150: avg loss 2.02; steps/sec 11.68
+Step 11200: avg loss 1.30; steps/sec 11.57
+Step 11250: avg loss 3.25; steps/sec 11.33
+Step 11300: avg loss 1.99; steps/sec 11.27
+Step 11350: avg loss 4.99; steps/sec 10.63
+Step 11400: avg loss 2.19; steps/sec 10.93
+Step 11450: avg loss 1.07; steps/sec 11.98
+*******************EPOCH 12*******************
+Step 11500: avg loss 1.51; steps/sec 12.10
+Step 11550: avg loss 0.68; steps/sec 11.59
+Step 11600: avg loss 2.75; steps/sec 10.28
+Step 11650: avg loss 4.14; steps/sec 11.40
+Step 11700: avg loss 1.89; steps/sec 11.46
+Step 11750: avg loss 1.06; steps/sec 11.02
+Step 11800: avg loss 1.64; steps/sec 11.05
+Step 11850: avg loss 1.31; steps/sec 11.10
+Step 11900: avg loss 1.52; steps/sec 11.53
+Step 11950: avg loss 1.63; steps/sec 11.68
+Step 12000: avg loss 1.61; steps/sec 11.49
+Dev
+Step 12000: evaluating on 216 samples with batch_size 8
+Eval_Ent_Precision: 95.5348
+Eval_Ent_Recall: 94.7625
+Eval_Ent_F1: 95.1471
+Test
+Eval max f1: 95.34
+Test max f1: 0.00
+Step 12050: avg loss 1.63; steps/sec 11.58
+Step 12100: avg loss 2.50; steps/sec 11.18
+Step 12150: avg loss 3.74; steps/sec 10.70
+Step 12200: avg loss 4.45; steps/sec 10.96
+Step 12250: avg loss 2.50; steps/sec 10.85
+Step 12300: avg loss 1.52; steps/sec 10.82
+Step 12350: avg loss 1.38; steps/sec 11.13
+Step 12400: avg loss 1.92; steps/sec 10.67
+*******************EPOCH 13*******************
+Step 12450: avg loss 1.58; steps/sec 11.07
+Step 12500: avg loss 1.64; steps/sec 12.00
+Step 12550: avg loss 2.58; steps/sec 11.61
+Step 12600: avg loss 0.74; steps/sec 11.85
+Step 12650: avg loss 2.95; steps/sec 11.18
+Step 12700: avg loss 2.08; steps/sec 10.92
+Step 12750: avg loss 2.87; steps/sec 11.34
+Step 12800: avg loss 1.50; steps/sec 11.69
+Step 12850: avg loss 1.58; steps/sec 11.61
+Step 12900: avg loss 2.26; steps/sec 11.66
+Step 12950: avg loss 1.06; steps/sec 11.49
+Step 13000: avg loss 0.61; steps/sec 11.60
+Dev
+Step 13000: evaluating on 216 samples with batch_size 8
+Eval_Ent_Precision: 95.4215
+Eval_Ent_Recall: 95.1162
+Eval_Ent_F1: 95.2686
+Test
+Eval max f1: 95.34
+Test max f1: 0.00
+Step 13050: avg loss 2.70; steps/sec 10.91
+Step 13100: avg loss 0.88; steps/sec 11.72
+Step 13150: avg loss 0.90; steps/sec 11.54
+Step 13200: avg loss 1.15; steps/sec 11.27
+Step 13250: avg loss 1.80; steps/sec 11.85
+Step 13300: avg loss 3.29; steps/sec 10.88
+Step 13350: avg loss 1.73; steps/sec 11.35
+*******************EPOCH 14*******************
+Step 13400: avg loss 0.97; steps/sec 11.51
+Step 13450: avg loss 2.83; steps/sec 11.62
+Step 13500: avg loss 1.21; steps/sec 12.00
+Step 13550: avg loss 1.03; steps/sec 12.01
+Step 13600: avg loss 1.10; steps/sec 12.09
+Step 13650: avg loss 3.71; steps/sec 11.56
+Step 13700: avg loss 3.13; steps/sec 11.55
+Step 13750: avg loss 1.05; steps/sec 11.57
+Step 13800: avg loss 1.62; steps/sec 11.45
+Step 13850: avg loss 1.61; steps/sec 11.93
+Step 13900: avg loss 2.39; steps/sec 11.30
+Step 13950: avg loss 1.56; steps/sec 12.04
+Step 14000: avg loss 0.56; steps/sec 12.08
+Dev
+Step 14000: evaluating on 216 samples with batch_size 8
+Eval_Ent_Precision: 95.4376
+Eval_Ent_Recall: 95.1162
+Eval_Ent_F1: 95.2767
+Test
+Eval max f1: 95.34
+Test max f1: 0.00
+Step 14050: avg loss 0.85; steps/sec 11.71
+Step 14100: avg loss 1.20; steps/sec 11.61
+Step 14150: avg loss 0.50; steps/sec 11.17
+Step 14200: avg loss 0.83; steps/sec 11.68
+Step 14250: avg loss 1.18; steps/sec 11.33
+Step 14300: avg loss 0.65; steps/sec 11.86
+*******************EPOCH 15*******************
+Step 14350: avg loss 1.47; steps/sec 11.75
+Step 14400: avg loss 1.88; steps/sec 11.89
+Step 14450: avg loss 0.87; steps/sec 11.70
+Step 14500: avg loss 1.35; steps/sec 11.90
+Step 14550: avg loss 0.57; steps/sec 11.95
+Step 14600: avg loss 1.41; steps/sec 11.54
+Step 14650: avg loss 1.30; steps/sec 11.45
+Step 14700: avg loss 0.94; steps/sec 11.41
+Step 14750: avg loss 0.55; steps/sec 12.25
+Step 14800: avg loss 1.65; steps/sec 12.10
+Step 14850: avg loss 0.98; steps/sec 11.91
+Step 14900: avg loss 2.62; steps/sec 11.68
+Step 14950: avg loss 0.39; steps/sec 12.16
+Step 15000: avg loss 2.23; steps/sec 11.90
+Dev
+Step 15000: evaluating on 216 samples with batch_size 8
+Eval_Ent_Precision: 95.5282
+Eval_Ent_Recall: 95.3351
+Eval_Ent_F1: 95.4316
+Test
+Saved model, optmizer, scheduler to /home/loebbert/projects/thesis/frameworks/ASP/data/conll03_ner/t5_base/model_Mar31_20-05-29_15000.bin
+Eval max f1: 95.43
+Test max f1: 0.00
+Step 15050: avg loss 0.54; steps/sec 11.82
+Step 15100: avg loss 1.53; steps/sec 11.75
+Step 15150: avg loss 3.21; steps/sec 11.85
+Step 15200: avg loss 1.18; steps/sec 11.46
+Step 15250: avg loss 1.56; steps/sec 11.68
+*******************EPOCH 16*******************
+Step 15300: avg loss 1.55; steps/sec 12.03
+Step 15350: avg loss 1.66; steps/sec 11.56
+Step 15400: avg loss 2.11; steps/sec 11.76
+Step 15450: avg loss 1.36; steps/sec 11.94
+Step 15500: avg loss 0.85; steps/sec 12.18
+Step 15550: avg loss 1.42; steps/sec 11.90
+Step 15600: avg loss 2.37; steps/sec 11.67
+Step 15650: avg loss 0.26; steps/sec 11.93
+Step 15700: avg loss 0.72; steps/sec 12.02
+Step 15750: avg loss 0.47; steps/sec 11.25
+Step 15800: avg loss 1.02; steps/sec 11.32
+Step 15850: avg loss 0.35; steps/sec 11.79
+Step 15900: avg loss 1.26; steps/sec 11.88
+Step 15950: avg loss 2.04; steps/sec 11.37
+Step 16000: avg loss 0.43; steps/sec 11.70
+Dev
+Step 16000: evaluating on 216 samples with batch_size 8
+Eval_Ent_Precision: 95.7037
+Eval_Ent_Recall: 95.2846
+Eval_Ent_F1: 95.4937
+Test
+Saved model, optmizer, scheduler to /home/loebbert/projects/thesis/frameworks/ASP/data/conll03_ner/t5_base/model_Mar31_20-05-29_16000.bin
+Eval max f1: 95.49
+Test max f1: 0.00
+Step 16050: avg loss 2.34; steps/sec 11.22
+Step 16100: avg loss 0.65; steps/sec 11.72
+Step 16150: avg loss 1.28; steps/sec 11.50
+Step 16200: avg loss 0.56; steps/sec 11.65
+*******************EPOCH 17*******************
+Step 16250: avg loss 0.91; steps/sec 12.00
+Step 16300: avg loss 2.74; steps/sec 11.66
+Step 16350: avg loss 1.00; steps/sec 11.67
+Step 16400: avg loss 2.32; steps/sec 10.80
+Step 16450: avg loss 1.26; steps/sec 10.90
+Step 16500: avg loss 1.44; steps/sec 11.82
+Step 16550: avg loss 1.51; steps/sec 11.49
+Step 16600: avg loss 0.87; steps/sec 11.40
+Step 16650: avg loss 0.46; steps/sec 11.72
+Step 16700: avg loss 0.30; steps/sec 11.19
+Step 16750: avg loss 1.48; steps/sec 11.38
+Step 16800: avg loss 1.37; steps/sec 11.78
+Step 16850: avg loss 0.90; steps/sec 10.98
+Step 16900: avg loss 1.34; steps/sec 11.28
+Step 16950: avg loss 0.87; steps/sec 11.47
+Step 17000: avg loss 1.66; steps/sec 11.49
+Dev
+Step 17000: evaluating on 216 samples with batch_size 8
+Eval_Ent_Precision: 95.7649
+Eval_Ent_Recall: 95.2004
+Eval_Ent_F1: 95.4818
+Test
+Eval max f1: 95.49
+Test max f1: 0.00
+Step 17050: avg loss 0.60; steps/sec 11.41
+Step 17100: avg loss 0.57; steps/sec 11.06
+Step 17150: avg loss 0.50; steps/sec 11.78
+*******************EPOCH 18*******************
+Step 17200: avg loss 2.72; steps/sec 11.57
+Step 17250: avg loss 2.31; steps/sec 11.48
+Step 17300: avg loss 1.12; steps/sec 11.89
+Step 17350: avg loss 1.48; steps/sec 11.53
+Step 17400: avg loss 0.19; steps/sec 11.94
+Step 17450: avg loss 1.19; steps/sec 11.86
+Step 17500: avg loss 1.36; steps/sec 11.60
+Step 17550: avg loss 1.72; steps/sec 10.48
+Step 17600: avg loss 0.62; steps/sec 11.79
+Step 17650: avg loss 1.30; steps/sec 11.61
+Step 17700: avg loss 1.41; steps/sec 11.23
+Step 17750: avg loss 0.33; steps/sec 11.56
+Step 17800: avg loss 1.21; steps/sec 11.36
+Step 17850: avg loss 0.70; steps/sec 11.84
+Step 17900: avg loss 0.99; steps/sec 11.95
+Step 17950: avg loss 1.15; steps/sec 11.69
+Step 18000: avg loss 0.72; steps/sec 11.92
+Dev
+Step 18000: evaluating on 216 samples with batch_size 8
+Eval_Ent_Precision: 95.7699
+Eval_Ent_Recall: 95.3183
+Eval_Ent_F1: 95.5436
+Test
+Saved model, optmizer, scheduler to /home/loebbert/projects/thesis/frameworks/ASP/data/conll03_ner/t5_base/model_Mar31_20-05-29_18000.bin
+Eval max f1: 95.54
+Test max f1: 0.00
+Step 18050: avg loss 0.62; steps/sec 11.79
+Step 18100: avg loss 1.50; steps/sec 11.31
+*******************EPOCH 19*******************
+Step 18150: avg loss 0.50; steps/sec 11.73
+Step 18200: avg loss 0.76; steps/sec 11.89
+Step 18250: avg loss 0.59; steps/sec 12.05
+Step 18300: avg loss 1.68; steps/sec 11.91
+Step 18350: avg loss 1.68; steps/sec 10.81
+Step 18400: avg loss 0.77; steps/sec 11.03
+Step 18450: avg loss 0.62; steps/sec 11.28
+Step 18500: avg loss 0.59; steps/sec 10.46
+Step 18550: avg loss 0.81; steps/sec 11.51
+Step 18600: avg loss 0.45; steps/sec 11.88
+Step 18650: avg loss 1.09; steps/sec 11.48
+Step 18700: avg loss 1.98; steps/sec 11.41
+Step 18750: avg loss 0.39; steps/sec 12.04
+Step 18800: avg loss 0.59; steps/sec 11.83
+Step 18850: avg loss 1.07; steps/sec 11.94
+Step 18900: avg loss 1.16; steps/sec 11.71
+Step 18950: avg loss 1.03; steps/sec 11.79
+Step 19000: avg loss 0.58; steps/sec 11.95
+Dev
+Step 19000: evaluating on 216 samples with batch_size 8
+Eval_Ent_Precision: 95.7692
+Eval_Ent_Recall: 95.3014
+Eval_Ent_F1: 95.5347
+Test
+Eval max f1: 95.54
+Test max f1: 0.00
+Step 19050: avg loss 1.13; steps/sec 10.77
+Step 19100: avg loss 1.16; steps/sec 11.28
+**********Finished training**********
+Actual update steps: 19101
