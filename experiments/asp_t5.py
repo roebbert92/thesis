@@ -15,7 +15,7 @@ import torch
 
 config = T5_BASE
 config["num_epochs"] = 20
-config["precision"] = "bf16-mixed"  #"bf16-mixed"
+config["precision"] = "bf16-mixed"
 config["name"] = "asp_t5_conll03"
 config["batch_size"] = 32
 
