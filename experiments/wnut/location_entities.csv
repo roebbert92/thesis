@@ -1,0 +1,4 @@
+,original_paper,wnut_ours
+train,,548.0
+dev,74.0,74.0
+test,150.0,150.0

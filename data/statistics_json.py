@@ -1,6 +1,18 @@
+import sys
+import os
+
+thesis_path = "/" + os.path.join(
+    *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-1])
+sys.path.append(thesis_path)
+
 import pandas as pd
 import json
 from nltk.tokenize import sent_tokenize
+from transformers import T5Tokenizer
+from collections import defaultdict
+from typing import Optional
+
+from data_preprocessing.tokenize import tokenize_json
 
 
 def create_dataset_stats(train_json, dev_json, test_json):
@@ -125,3 +137,89 @@ def create_tokenized_stats(train_jsonlines, dev_jsonlines, test_jsonlines):
         inputs_summary,
         index=files.keys()), pd.DataFrame.from_records(targets_summary,
                                                        index=files.keys())
+
+
+def data_prep_check(dataset_name: str,
+                    dataset_files: dict,
+                    methods: dict,
+                    output_dir_path: str,
+                    official_inputs: Optional[pd.DataFrame] = None,
+                    official_entities: Optional[pd.DataFrame] = None):
+    summaries = defaultdict(list)
+
+    def append_to_lists(stats_input, stats_entities, stats_tokenized_inputs,
+                        stats_tokenized_targets, data_name, method_name):
+
+        for column in stats_input.columns:
+            name = str(column).lower()
+            series = stats_input[column].copy()
+            series.name = data_name + "_" + method_name
+            summaries[name].append(series)
+
+        for column in stats_entities.columns:
+            name = str(column).lower() + "_entities"
+            series = stats_entities[column].copy()
+            series.name = data_name + "_" + method_name
+            summaries[name].append(series)
+
+        if stats_tokenized_inputs is not None:
+            # tokenized inputs
+            name = "tokenized_inputs"
+            for measure in ["count", "mean", "max"]:
+                tokenized_input = stats_tokenized_inputs[measure].copy()
+                tokenized_input.name = data_name + "_" + method_name + "_" + measure
+                summaries[name].append(tokenized_input)
+
+        if stats_tokenized_targets is not None:
+            # tokenized targets
+            name = "tokenized_targets"
+            for measure in ["count", "mean", "max"]:
+                tokenized_target = stats_tokenized_targets[measure].copy()
+                tokenized_target.name = data_name + "_" + method_name + "_" + measure
+                summaries[name].append(tokenized_target)
+
+    if official_inputs is not None and official_entities is not None:
+        append_to_lists(official_inputs, official_entities, None, None,
+                        "original", "paper")
+
+    # for each method run all files
+    for method_name, method in methods.items():
+        for data_name, files in dataset_files.items():
+            # data preparation
+            dir_path = os.path.join(os.path.dirname(files["train"]),
+                                    method_name)
+            if not os.path.exists(dir_path):
+                os.mkdir(dir_path)
+            method(files["train"],
+                   files["dev"],
+                   files["test"],
+                   dir_path=dir_path)
+            stats_input, stats_entities = create_dataset_stats(
+                os.path.join(dir_path, dataset_name + "_train.json"),
+                os.path.join(dir_path, dataset_name + "_dev.json"),
+                os.path.join(dir_path, dataset_name + "_test.json"),
+            )
+            # tokenizing
+            tokenizer = T5Tokenizer.from_pretrained("t5-small",
+                                                    model_max_length=4096)
+            tokenize_json(tokenizer,
+                          os.path.join(dir_path, dataset_name + "_train.json"),
+                          os.path.join(dir_path, dataset_name + "_dev.json"),
+                          os.path.join(dir_path, dataset_name + "_test.json"),
+                          os.path.join(dir_path, dataset_name + "_types.json"))
+            stats_tokenized_inputs, stats_tokenized_targets = create_tokenized_stats(
+                os.path.join(dir_path,
+                             dataset_name + "_train.t5-small.jsonlines"),
+                os.path.join(dir_path,
+                             dataset_name + "_dev.t5-small.jsonlines"),
+                os.path.join(dir_path,
+                             dataset_name + "_test.t5-small.jsonlines"),
+            )
+
+            append_to_lists(stats_input, stats_entities,
+                            stats_tokenized_inputs, stats_tokenized_targets,
+                            data_name, method_name)
+
+    for name, data_list in summaries.items():
+        df = pd.concat(data_list, axis=1)
+        df.to_csv(os.path.join(output_dir_path, name + ".csv"))
