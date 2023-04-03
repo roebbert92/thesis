@@ -167,6 +167,18 @@ def asp_conll03_to_json(train_file: str,
                     # E.g.
                     # Extract entities such as apple, orange, lemon <extra_id_22> Give me a mango . <extra_id_23>
                     # See ace05_to_json.py for example of extending the input
+
+                    # FIX: missing entities
+                    if start is not None:
+                        doc['entities'].append({
+                            "type":
+                            current_type,
+                            "start":
+                            start,
+                            "end":
+                            idx if idx > start else idx + 1
+                        })
+
                     doc["extended"] = doc["tokens"]
                     dataset.append(doc)
                 doc = {
@@ -197,7 +209,10 @@ def asp_conll03_to_json(train_file: str,
                 doc["tokens"].append(items[0])
 
                 if bio_tag[0] == 'I':
-                    pass
+                    if start is None:
+                        start = idx
+                        current_type = bio_tag[2:]
+                        conll03_types[current_type] = {"short": current_type}
                 elif bio_tag[0] == 'O':
                     if start is not None:
                         doc['entities'].append({
