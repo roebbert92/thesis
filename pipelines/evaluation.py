@@ -82,3 +82,4 @@ def run_evaluation(
 
     # 9. Report database metrics
         # 9.1 Overlap of dataset + databases
+    # 10. Save best run based on overall F1 score
