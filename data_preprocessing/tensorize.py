@@ -179,8 +179,14 @@ def ner_collate_fn(batch):
 
 
 class NERDataProcessor(object):
-    def __init__(self, config, tokenizer: PreTrainedTokenizer, train_file,
-                 dev_file, test_file, type_file):
+    def __init__(self,
+                 config,
+                 tokenizer: PreTrainedTokenizer,
+                 train_file,
+                 dev_file,
+                 test_file,
+                 type_file,
+                 use_cache=True):
         self.config = config
 
         self.tokenizer = tokenizer
@@ -190,7 +196,7 @@ class NERDataProcessor(object):
 
         # Get tensorized samples
         cache_path = self.get_cache_path()
-        if os.path.exists(cache_path):
+        if use_cache and os.path.exists(cache_path):
             # Load cached tensors if exists
             with open(cache_path, 'rb') as f:
                 self.tensor_samples, self.labels = pickle.load(f)

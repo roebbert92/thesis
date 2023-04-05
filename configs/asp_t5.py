@@ -33,7 +33,7 @@ class ASPT5Config:
 T5_BASE = asdict(
     ASPT5Config(plm_pretrained_name_or_path="t5-base",
                 plm_tokenizer_name="t5-small",
-                model_max_length=512,
+                model_max_length=4096,
                 mention_start_token="<m>",
                 mention_end_token="</m>",
                 asp_hidden_dim=150,

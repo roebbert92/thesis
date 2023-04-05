@@ -48,8 +48,8 @@ def run_experiment(name: str,
 
     val_loader = DataLoader(
         val,
-        batch_size=int(config["batch_size"] * 3)
-        if config["batch_size"] > 1 else config["batch_size"] * 8,
+        batch_size=int(config["batch_size"] *
+                       3) if config["batch_size"] > 1 else 8,
         collate_fn=ner_collate_fn,
         num_workers=3,
         persistent_workers=False,
@@ -59,8 +59,8 @@ def run_experiment(name: str,
 
     test_loader = DataLoader(
         test,
-        batch_size=int(config["batch_size"] * 3)
-        if config["batch_size"] > 1 else config["batch_size"] * 8,
+        batch_size=int(config["batch_size"] *
+                       3) if config["batch_size"] > 1 else 8,
         collate_fn=ner_collate_fn,
         num_workers=3,
         persistent_workers=False,

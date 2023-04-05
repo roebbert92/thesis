@@ -2,7 +2,7 @@ from typing import Any, List, Optional
 import lightning.pytorch as pl
 from transformers import T5Tokenizer, T5Model, PretrainedConfig
 from transformers.modeling_outputs import Seq2SeqModelOutput
-from transformers.generation.utils import GenerationConfig
+from transformers.generation.configuration_utils import GenerationConfig
 import torch
 import torch.nn as nn
 from models.outputs import ASPSeq2SeqLMOutput
