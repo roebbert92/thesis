@@ -26,10 +26,14 @@ tokenize_json(tokenizer,
 
 config = T5_BASE
 log_path = thesis_path + "/experiments/wnut/"
-run_experiment(
-    "wnut_asp_t5_base",
-    "/home/loebbert/projects/thesis/data/wnut/wnut_train.t5-small.jsonlines",
-    "/home/loebbert/projects/thesis/data/wnut/wnut_dev.t5-small.jsonlines",
-    "/home/loebbert/projects/thesis/data/wnut/wnut_test.t5-small.jsonlines",
-    "/home/loebbert/projects/thesis/data/wnut/wnut_types.json", log_path,
-    config)
+(train_result, validation_result, test_result, train_false_positives,
+ validation_false_positives, test_false_positives) = run_experiment(
+     "wnut_asp_t5_base",
+     "/home/loebbert/projects/thesis/data/wnut/wnut_train.t5-small.jsonlines",
+     "/home/loebbert/projects/thesis/data/wnut/wnut_dev.t5-small.jsonlines",
+     "/home/loebbert/projects/thesis/data/wnut/wnut_test.t5-small.jsonlines",
+     "/home/loebbert/projects/thesis/data/wnut/wnut_types.json", log_path,
+     config)
+print(train_result, validation_result, test_result)
+print(len(train_false_positives), len(validation_false_positives),
+      len(test_false_positives) if test_false_positives is not None else 0)
