@@ -2,6 +2,8 @@ import copy
 import os
 import json
 from transformers import PreTrainedTokenizer
+from haystack import Pipeline, Document
+from typing import List, Optional
 
 MENTION_START = "<m>"
 MENTION_END = "</m>"
@@ -152,8 +154,10 @@ def tokenize_json(tokenizer: PreTrainedTokenizer,
                   test_file,
                   type_file,
                   prepend_task_description=True):
-    tokenizer.add_tokens(MENTION_START)
-    tokenizer.add_tokens(MENTION_END)
+    if MENTION_START not in tokenizer.get_vocab():
+        tokenizer.add_tokens(MENTION_START)
+    if MENTION_END not in tokenizer.get_vocab():
+        tokenizer.add_tokens(MENTION_END)
 
     with open(type_file, encoding="utf-8") as file:
         labels = json.load(file)['entities']
@@ -170,6 +174,9 @@ def tokenize_json(tokenizer: PreTrainedTokenizer,
             tokens = instance['tokens']
             entities = instance['entities']
             extended = instance['extended']
+            doc_id = instance[
+                'doc_id'] if "doc_id" in instance else name + "_" + str(
+                    inst_id)
 
             tokenized_sentence, target_sentence, entity_type_sequence, entity_indices, subtoken_map = get_target_sentence(
                 tokenizer, label_to_id, tokens, entities)
@@ -178,7 +185,7 @@ def tokenize_json(tokenizer: PreTrainedTokenizer,
             input_sentence = get_input_sentence(tokenizer, extended,
                                                 prepend_task_description)
             tokenized_dataset.append({
-                "doc_id": name + "_" + str(inst_id),
+                "doc_id": doc_id,
                 "sentence": tokenized_sentence,
                 # sentence is for copy mechanism, might be different from
                 # input_sentence which is for encoding only
@@ -194,3 +201,148 @@ def tokenize_json(tokenizer: PreTrainedTokenizer,
                 "w",
                 encoding="utf-8") as output_file:
             json.dump(tokenized_dataset, output_file)
+
+
+def handle_results(tokenizer: PreTrainedTokenizer, processed_doc: list,
+                   results: List[Document], use_labels: bool,
+                   use_mentions: bool):
+    for result in results:
+        meta = result.meta
+        content = str(result.content)
+        if meta["data_type"] == "gazetteers":
+            text = tokenizer.tokenize(content)
+            if use_labels:
+                text.extend(tokenizer.tokenize(":" + meta["type"]))
+            if use_mentions:
+                text = [MENTION_START, *text, MENTION_END]
+            processed_doc.extend(text)
+            processed_doc.append(tokenizer.eos_token)
+        elif meta["data_type"] == "sentences":
+            entity_starts = [entity["start"] for entity in meta["entities"]]
+            entity_ends = {
+                entity["end"]: entity
+                for entity in meta["entities"]
+            }
+            for word_idx, word in enumerate(content):
+                # entity end
+                if word_idx in entity_ends:
+                    if use_labels:
+                        processed_doc.extend(
+                            tokenizer.tokenize(":" +
+                                               entity_ends[word_idx]["type"]))
+                    if use_mentions:
+                        processed_doc.append(MENTION_END)
+                # entity start
+                if word_idx in entity_starts:
+                    if use_mentions:
+                        processed_doc.append(MENTION_START)
+
+                subtokens = get_subtokens(tokenizer, word)
+                for subtoken in subtokens:
+                    processed_doc.append(subtoken)
+            processed_doc.append(tokenizer.eos_token)
+
+
+def get_input_sentence_database(tokenizer: PreTrainedTokenizer,
+                                doc_id,
+                                doc,
+                                database: Pipeline,
+                                use_labels: bool,
+                                use_mentions: bool,
+                                filters: dict = {},
+                                prepend_examples=False,
+                                insert_prefix=True):
+    results = database.run(query=" ".join(doc),
+                           params={
+                               "filters": {
+                                   "$and": {
+                                       "$not": {
+                                           "doc_id": [doc_id]
+                                       },
+                                       **filters
+                                   }
+                               }
+                           })
+    if results is None:
+        results = []
+    else:
+        results = results["documents"]
+
+    processed_doc = []
+    if prepend_examples:
+        handle_results(tokenizer, processed_doc, results, use_labels,
+                       use_mentions)
+        #processed_doc.append(tokenizer.sep_token)
+
+    processed_doc.extend(get_input_sentence(tokenizer, doc, insert_prefix))
+
+    if not prepend_examples:
+        #processed_doc.append(tokenizer.sep_token)
+        handle_results(tokenizer, processed_doc, results, use_labels,
+                       use_mentions)
+
+    return processed_doc
+
+
+def tokenize_database_json(tokenizer: PreTrainedTokenizer,
+                           file_name,
+                           type_file,
+                           database: Pipeline,
+                           use_labels: bool,
+                           use_mentions: bool,
+                           output_name,
+                           filters: dict = {},
+                           prepend_task_description=True,
+                           prepend_search_results=False):
+    if MENTION_START not in tokenizer.get_vocab():
+        tokenizer.add_tokens(MENTION_START)
+    if MENTION_END not in tokenizer.get_vocab():
+        tokenizer.add_tokens(MENTION_END)
+
+    with open(type_file, encoding="utf-8") as file:
+        labels = json.load(file)['entities']
+    label_to_id = {label: id for id, label in enumerate(labels)}
+
+    tokenized_dataset = []
+    with open(file_name, encoding="utf-8") as file:
+        instances = json.load(file)
+
+    name = os.path.basename(os.path.splitext(file_name)[0])
+
+    for inst_id, instance in enumerate(instances):
+        tokens = instance['tokens']
+        entities = instance['entities']
+        extended = instance['extended']
+        doc_id = instance[
+            'doc_id'] if "doc_id" in instance else name + "_" + str(inst_id)
+
+        tokenized_sentence, target_sentence, entity_type_sequence, entity_indices, subtoken_map = get_target_sentence(
+            tokenizer, label_to_id, tokens, entities)
+
+        # insert prefix (instruction for model) here
+        input_sentence = get_input_sentence_database(
+            tokenizer,
+            doc_id,
+            extended,
+            database,
+            use_labels,
+            use_mentions,
+            filters,
+            prepend_examples=prepend_search_results,
+            insert_prefix=prepend_task_description)
+        tokenized_dataset.append({
+            "doc_id": doc_id,
+            "sentence": tokenized_sentence,
+            # sentence is for copy mechanism, might be different from
+            # input_sentence which is for encoding only
+            "input_sentence": input_sentence,
+            "target_sentence": target_sentence,
+            "subtoken_map": subtoken_map,
+            "ent_type_sequence": entity_type_sequence,
+            "ent_indices": entity_indices
+        })
+
+    output_file_name = f"{os.path.join(os.path.dirname(file_name), output_name)}.{os.path.basename(os.path.splitext(tokenizer.name_or_path)[0])}.jsonlines"
+    with open(output_file_name, "w", encoding="utf-8") as output_file:
+        json.dump(tokenized_dataset, output_file)
+    return output_file_name

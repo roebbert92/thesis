@@ -112,6 +112,10 @@ def wnut_to_json(train_file: str,
         if doc is not None and len(doc["tokens"]) > 0:
             doc["extended"] = doc["tokens"]
             dataset.append(doc)
+
+        for doc_id, doc in enumerate(dataset):
+            doc["doc_id"] = "wnut_" + name + "_" + str(doc_id)
+
         with open(f"{dir_path}/wnut_{name}.json", "w",
                   encoding="utf-8") as json_file:
             json.dump(dataset, json_file)

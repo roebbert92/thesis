@@ -31,9 +31,13 @@ def run_experiment(name: str,
 
     tokenizer = get_tokenizer(config)
 
-    processor = NERDataProcessor(config, tokenizer, tokenized_train_data_file,
+    processor = NERDataProcessor(config,
+                                 tokenizer,
+                                 tokenized_train_data_file,
                                  tokenized_dev_data_file,
-                                 tokenized_test_data_file, type_data_file)
+                                 tokenized_test_data_file,
+                                 type_data_file,
+                                 use_cache=False)
     config["num_labels"] = len(processor.labels)
 
     train, val, test = processor.get_tensor_samples()

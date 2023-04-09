@@ -1,4 +1,6 @@
 from argparse import ArgumentError
+from collections import defaultdict
+import json
 import sys
 import os
 
@@ -9,11 +11,11 @@ sys.path.append(thesis_path)
 from tqdm import tqdm
 import lightning.fabric.utilities.seed as pl_seed
 import shutil
-from haystack import Pipeline
+from haystack import Pipeline, Document
 from haystack.document_stores import ElasticsearchDocumentStore
 from haystack.nodes import EmbeddingRetriever, SentenceTransformersRanker, BM25Retriever
 
-from data_preprocessing.tokenize import tokenize_json
+from data_preprocessing.tokenize import tokenize_json, tokenize_database_json
 from models.asp_t5 import get_tokenizer
 from pipelines.asp_training import run_experiment
 
@@ -25,6 +27,8 @@ def run_evaluation(
     dataset_files: dict,
     search_algorithm: str,  # bm25, ann, ann+ranking
     search_topk: int,  # > 0
+    prepend_search_results:
+    bool,  # False query [SEP] results; True results [SEP] query
     gold_database_source: str,  # lowner, dataset
     error_database_size: float,  # 0...1 relative to gold_database_size
     data_type: str,  # sentences, gazetteers
@@ -38,8 +42,8 @@ def run_evaluation(
     bool,  # False for validating on devset, True for validating on testset
     num_runs: int  # > 1; how many runs
 ):
-    model_metrics = {}
-    database_metrics = {}
+    model_metrics = defaultdict(dict)
+    database_metrics = defaultdict(dict)
     # 0. loop over num_runs
     for run_id in tqdm(range(num_runs), desc="Runs"):
         run_dir_path = os.path.join(eval_dir_path, "run_" + str(run_id))
@@ -53,6 +57,9 @@ def run_evaluation(
         for key, file_path in dataset_files.items():
             files[key] = os.path.join(run_dir_path, "dataset",
                                       os.path.basename(file_path))
+            dir_name = os.path.dirname(files[key])
+            if not os.path.exists(dir_name):
+                os.makedirs(dir_name)
             shutil.copyfile(file_path, files[key])
 
         tokenizer = get_tokenizer(model_config)
@@ -60,33 +67,33 @@ def run_evaluation(
         # 1.1 Tokenize json
         tokenize_json(tokenizer, files["train"], files["dev"], files["test"],
                       files["types"])
-        for key, file_path in files.items():
+        for key, file_path in list(files.items()):
             if key != "types":
                 files["tokenized_" + key] = file_path.split(
                     ".")[0] + "." + tokenizer.name_or_path + ".jsonlines"
         # 1.2 Run experiment
         # 1.2.1 collect false positives from train + dev
-        (baseline_train_result, baseline_dev_result, baseline_test_result,
-         baseline_train_false_positives, baseline_dev_false_positives,
-         _) = run_experiment(
-             name=name,
-             tokenized_train_data_file=files["tokenized_train"],
-             tokenized_dev_data_file=files["tokenized_dev"],
-             tokenized_test_data_file=files["tokenized_train"],
-             type_data_file=files["types"],
-             logger_dir_path=run_dir_path,
-             config=model_config,
-             validate_on_test=validate_on_test)
-        false_positives = baseline_train_false_positives | baseline_dev_false_positives
-        # 1.2.2 report metrics
-        model_metrics[run_id]["baseline"]["train_f1"] = baseline_train_result[
-            "val_f1_epoch"]  # type: ignore
-        model_metrics[run_id]["baseline"]["dev_f1"] = baseline_dev_result[
-            "val_f1_epoch"]  # type: ignore
-        if baseline_test_result is not None:
-            model_metrics[run_id]["baseline"][
-                "test_f1"] = baseline_test_result[
-                    "test_f1_epoch"]  # type: ignore
+        # (baseline_train_result, baseline_dev_result, baseline_test_result,
+        #  baseline_train_false_positives, baseline_dev_false_positives,
+        #  _) = run_experiment(
+        #      name=name,
+        #      tokenized_train_data_file=files["tokenized_train"],
+        #      tokenized_dev_data_file=files["tokenized_dev"],
+        #      tokenized_test_data_file=files["tokenized_train"],
+        #      type_data_file=files["types"],
+        #      logger_dir_path=run_dir_path,
+        #      config=model_config,
+        #      validate_on_test=validate_on_test)
+        # false_positives = baseline_train_false_positives | baseline_dev_false_positives
+        # # 1.2.2 report metrics
+        # model_metrics[run_id]["baseline"]["train_f1"] = baseline_train_result[
+        #     "val_f1_epoch"]  # type: ignore
+        # model_metrics[run_id]["baseline"]["dev_f1"] = baseline_dev_result[
+        #     "val_f1_epoch"]  # type: ignore
+        # if baseline_test_result is not None:
+        #     model_metrics[run_id]["baseline"][
+        #         "test_f1"] = baseline_test_result[
+        #             "test_f1_epoch"]  # type: ignore
 
     # 2. Prepare gold database
     # gold_document_store = name + "gold" + gold_database_source + seed
@@ -119,19 +126,133 @@ def run_evaluation(
 
         if len(gold_search.components) == 0:
             raise Exception(
-                "Argument error: search_algortihm - must be bm25 | ann | ann+ranking, but is: "
+                "Argument error: search_algorithm - must be: bm25 | ann | ann+ranking, but is: "
                 + search_algorithm)
 
+        # 2.1 Load dataset jsons
         # 2.1 Load into search engine if gold_document_store does not exist
         if gold_document_store.get_document_count() == 0:
+            documents = []
             if gold_database_source == "dataset":
-                
+                # prepare database based on data type
+                if data_type == "gazetteers":
+                    items = defaultdict(dict)
+                    for part in ["train", "dev", "test"]:
+                        with open(files[part], "r", encoding="utf-8") as file:
+                            docs = json.load(file)
+                        for doc in docs:
+                            for entity in doc["entities"]:
+                                ne = " ".join(doc["tokens"]
+                                              [entity["start"]:entity["end"]])
+                                key = entity["type"] + "_" + ne
+                                if "doc_id" not in items[key]:
+                                    items[key]["doc_id"] = []
+                                if doc["doc_id"] not in items[key]["doc_id"]:
+                                    items[key]["doc_id"].append(doc["doc_id"])
+                                if "dataset" not in items[key]:
+                                    items[key]["dataset"] = []
+                                if part not in items[key]["dataset"]:
+                                    items[key]["dataset"].append(part)
+                                items[key]["type"] = entity["type"]
+                                items[key]["content"] = ne
+                    documents = [
+                        Document(content=doc["content"],
+                                 meta={
+                                     "doc_id": doc["doc_id"],
+                                     "dataset": doc["dataset"],
+                                     "type": doc["type"],
+                                     "data_type": data_type
+                                 }) for doc in items.values()
+                    ]
 
-# 3. Augment train + dev (+ test if validate_on_test) set with gold_database
-# 3.1 search for similar documents; filter out exact matches
+                elif data_type == "sentences":
+                    for part in ["train", "dev", "test"]:
+                        docs = json.load(files[part])
+                        for doc in docs:
+                            documents.append(
+                                Document(content=" ".join(doc["tokens"]),
+                                         meta={
+                                             "entities": doc["entities"],
+                                             "data_type": data_type,
+                                             "doc_id": [doc["doc_id"]]
+                                         }))
+                else:
+                    raise Exception(
+                        "Argument error: data_type - must be: gazetteers | sentences, but is: "
+                        + data_type)
+            gold_document_store.write_documents(documents)
 
-# 4. Train baseline with gold database
-# 4.1 report metrics
+        if search_algorithm != "bm25":
+            if gold_document_store.get_document_count(
+            ) > gold_document_store.get_embedding_count():
+                gold_document_store.update_embeddings(
+                    gold_search.get_node("ANNRetriever"),  # type: ignore 
+                    update_existing_embeddings=False)
+
+        # 3. Augment train + dev (+ test if validate_on_test) set with gold_database
+        # 3.1 search for similar documents; filter out exact matches
+        files["tokenized_gold_train"] = tokenize_database_json(
+            tokenizer,
+            files["train"],
+            files["types"],
+            gold_search,
+            use_labels,
+            use_mentions,
+            "tokenized_gold_train",
+            filters={"dataset": ["train"]},
+            prepend_search_results=prepend_search_results)
+        files["tokenized_gold_dev"] = tokenize_database_json(
+            tokenizer,
+            files["dev"],
+            files["types"],
+            gold_search,
+            use_labels,
+            use_mentions,
+            "tokenized_gold_dev",
+            filters={"dataset": ["train", "dev"]},
+            prepend_search_results=prepend_search_results)
+        files["tokenized_gold_test"] = tokenize_database_json(
+            tokenizer,
+            files["test"],
+            files["types"],
+            gold_search,
+            use_labels,
+            use_mentions,
+            "tokenized_gold_test",
+            filters={"dataset": ["train", "dev", "test"]},
+            prepend_search_results=prepend_search_results)
+
+        # 4. Train baseline with gold database
+        trained_gold = False
+        while not trained_gold:
+            try:
+                (gold_train_result, gold_dev_result, gold_test_result, _, _,
+                 _) = run_experiment(
+                     name=name + "_gold",
+                     tokenized_train_data_file=files["tokenized_gold_train"],
+                     tokenized_dev_data_file=files["tokenized_gold_dev"],
+                     tokenized_test_data_file=files["tokenized_gold_test"],
+                     type_data_file=files["types"],
+                     logger_dir_path=run_dir_path,
+                     config=model_config,
+                     validate_on_test=validate_on_test)
+                trained_gold = True
+                # 4.1 report metrics
+                model_metrics[run_id]["gold"] = {}
+                model_metrics[run_id]["gold"]["train_f1"] = gold_train_result[
+                    0]["val_f1_epoch"]  # type: ignore
+                model_metrics[run_id]["gold"]["dev_f1"] = gold_dev_result[0][
+                    "val_f1_epoch"]  # type: ignore
+                if gold_test_result is not None:
+                    model_metrics[run_id]["gold"][
+                        "test_f1"] = gold_test_result[0][
+                            "test_f1_epoch"]  # type: ignore
+            except Exception:
+                model_config["gradient_accumulation_steps"] += 1
+                model_config[
+                    "batch_size"] = model_config["batch_size"] // model_config[
+                        "gradient_accumulation_steps"]
+
 
 # 5. Prepare errorneous database
 # 5.1 create new database: error_document_store = name + "error" + gold_database_source + seed
@@ -183,3 +304,11 @@ def run_evaluation(
 # 9. Report database metrics
 # 9.1 Overlap of dataset + databases
 # 10. Save best run based on overall F1 score
+    with open(os.path.join(eval_dir_path, "model_metrics.json"),
+              "w",
+              encoding="utf-8") as file:
+        json.dump(model_metrics, file)
+    with open(os.path.join(eval_dir_path, "database_metrics.json"),
+              "w",
+              encoding="utf-8") as file:
+        json.dump(database_metrics, file)
