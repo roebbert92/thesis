@@ -96,7 +96,8 @@ def run_experiment(name: str,
             accelerator="gpu",
             logger=True,
             devices=1,
-            log_every_n_steps=config["batch_size"],
+            log_every_n_steps=config["batch_size"] *
+            config["gradient_accumulation_steps"],
             accumulate_grad_batches=config["gradient_accumulation_steps"],
             precision=config["precision"],
             max_epochs=config["num_epochs"],
@@ -127,14 +128,16 @@ def run_experiment(name: str,
     trainer.fit(model, train_loader, val_dataloaders=val_loader)
 
     # Validation
-    train_validate_loader = DataLoader(train,
-                                       batch_size=config["batch_size"],
-                                       collate_fn=ner_collate_fn,
-                                       num_workers=3,
-                                       persistent_workers=False,
-                                       pin_memory=True,
-                                       shuffle=False,
-                                       prefetch_factor=20)
+    train_validate_loader = DataLoader(
+        train,
+        batch_size=int(config["batch_size"] *
+                       3) if config["batch_size"] > 1 else 8,
+        collate_fn=ner_collate_fn,
+        num_workers=3,
+        persistent_workers=False,
+        pin_memory=True,
+        shuffle=False,
+        prefetch_factor=20)
     train_result = trainer.validate(
         model,
         dataloaders=train_validate_loader,

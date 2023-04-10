@@ -223,7 +223,7 @@ def handle_results(tokenizer: PreTrainedTokenizer, processed_doc: list,
                 entity["end"]: entity
                 for entity in meta["entities"]
             }
-            for word_idx, word in enumerate(content):
+            for word_idx, word in enumerate(content.split()):
                 # entity end
                 if word_idx in entity_ends:
                     if use_labels:
@@ -250,14 +250,18 @@ def get_input_sentence_database(tokenizer: PreTrainedTokenizer,
                                 use_labels: bool,
                                 use_mentions: bool,
                                 filters: dict = {},
+                                filtered_document_ids=[],
                                 prepend_examples=False,
                                 insert_prefix=True):
-    results = database.run(query=" ".join(doc),
+    sentence = " ".join(doc)
+    results = database.run(query=sentence,
                            params={
                                "filters": {
                                    "$and": {
                                        "$not": {
-                                           "doc_id": [doc_id]
+                                           "doc_id": [doc_id],
+                                           "content": sentence,
+                                           "_id": filtered_document_ids
                                        },
                                        **filters
                                    }
@@ -292,6 +296,7 @@ def tokenize_database_json(tokenizer: PreTrainedTokenizer,
                            use_mentions: bool,
                            output_name,
                            filters: dict = {},
+                           filtered_document_ids=[],
                            prepend_task_description=True,
                            prepend_search_results=False):
     if MENTION_START not in tokenizer.get_vocab():
@@ -328,6 +333,7 @@ def tokenize_database_json(tokenizer: PreTrainedTokenizer,
             use_labels,
             use_mentions,
             filters,
+            filtered_document_ids=filtered_document_ids,
             prepend_examples=prepend_search_results,
             insert_prefix=prepend_task_description)
         tokenized_dataset.append({
