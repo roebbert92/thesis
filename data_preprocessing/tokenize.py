@@ -250,23 +250,28 @@ def get_input_sentence_database(tokenizer: PreTrainedTokenizer,
                                 use_labels: bool,
                                 use_mentions: bool,
                                 filters: dict = {},
+                                filter_exact_match: bool = True,
+                                filter_same_document: bool = True,
                                 filtered_document_ids=[],
                                 prepend_examples=False,
                                 insert_prefix=True):
     sentence = " ".join(doc)
-    results = database.run(query=sentence,
-                           params={
-                               "filters": {
-                                   "$and": {
-                                       "$not": {
-                                           "doc_id": [doc_id],
-                                           "content": sentence,
-                                           "_id": filtered_document_ids
-                                       },
-                                       **filters
-                                   }
-                               }
-                           })
+    exclude_filter = {}
+    if filter_exact_match:
+        exclude_filter["content"] = sentence
+    if filter_same_document:
+        exclude_filter["doc_id"] = [doc_id]
+    if len(filtered_document_ids) > 0:
+        exclude_filter["_id"] = filtered_document_ids
+
+    results = database.run(
+        query=sentence,
+        params={"filters": {
+            "$and": {
+                "$not": exclude_filter,
+                **filters
+            }
+        }})
     if results is None:
         results = []
     else:
@@ -296,6 +301,8 @@ def tokenize_database_json(tokenizer: PreTrainedTokenizer,
                            use_mentions: bool,
                            output_name,
                            filters: dict = {},
+                           filter_exact_match: bool = True,
+                           filter_same_document: bool = True,
                            filtered_document_ids=[],
                            prepend_task_description=True,
                            prepend_search_results=False):
@@ -333,6 +340,8 @@ def tokenize_database_json(tokenizer: PreTrainedTokenizer,
             use_labels,
             use_mentions,
             filters,
+            filter_exact_match=filter_exact_match,
+            filter_same_document=filter_same_document,
             filtered_document_ids=filtered_document_ids,
             prepend_examples=prepend_search_results,
             insert_prefix=prepend_task_description)

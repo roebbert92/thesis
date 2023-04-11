@@ -24,101 +24,69 @@ from pipelines.asp_training import run_experiment
 
 def setup_database(database_name: str, search_algorithm: str,
                    search_topk: int):
-    gold_document_store = ElasticsearchDocumentStore(index=database_name)
-    gold_search = Pipeline()
+    document_store = ElasticsearchDocumentStore(index=database_name)
+    if document_store.get_document_count() > 0:
+        document_store.delete_all_documents()
+    search = Pipeline()
     if search_algorithm == "bm25":
-        bm25_retriever = BM25Retriever(gold_document_store, top_k=search_topk)
-        gold_search.add_node(component=bm25_retriever,
-                             name="BM25Retriever",
-                             inputs=["Query"])
+        bm25_retriever = BM25Retriever(document_store, top_k=search_topk)
+        search.add_node(component=bm25_retriever,
+                        name="BM25Retriever",
+                        inputs=["Query"])
     elif search_algorithm.startswith("ann"):
         ann_retriever = EmbeddingRetriever(
-            document_store=gold_document_store,
+            document_store=document_store,
             embedding_model="sentence-transformers/all-mpnet-base-v2",
             model_format="sentence_transformers",
             top_k=search_topk *
             2 if search_algorithm.endswith("ranking") else search_topk)
-        gold_search.add_node(component=ann_retriever,
-                             name="ANNRetriever",
-                             inputs=["Query"])
+        search.add_node(component=ann_retriever,
+                        name="ANNRetriever",
+                        inputs=["Query"])
         if search_algorithm.endswith("ranking"):
             ranker = SentenceTransformersRanker(
                 model_name_or_path=
                 "sentence-transformers/msmarco-bert-base-dot-v5",
                 top_k=search_topk)
-            gold_search.add_node(component=ranker,
-                                 name="Ranker",
-                                 inputs=["ANNRetriever"])
+            search.add_node(component=ranker,
+                            name="Ranker",
+                            inputs=["ANNRetriever"])
 
-    if len(gold_search.components) == 0:
+    if len(search.components) == 0:
         raise Exception(
             "Argument error: search_algorithm - must be: bm25 | ann | ann+ranking, but is: "
             + search_algorithm)
 
-    return gold_document_store, gold_search
+    return document_store, search
 
 
 def augment_dataset(name,
                     tokenizer,
                     files,
+                    filters,
                     database,
                     use_labels,
                     use_mentions,
                     prepend_search_results,
+                    filter_exact_match,
+                    filter_same_document,
                     filtered_document_ids={}):
-    train_name = "tokenized_" + name + "_train"
-    files[train_name] = tokenize_database_json(
-        tokenizer,
-        files["train"],
-        files["types"],
-        database,
-        use_labels,
-        use_mentions,
-        train_name,
-        filters={"$or": [{
-            "dataset": ["train"]
-        }]},
-        filtered_document_ids=filtered_document_ids["train"]
-        if "train" in filtered_document_ids else [],
-        prepend_search_results=prepend_search_results)
-    dev_name = "tokenized_" + name + "_dev"
-    files[dev_name] = tokenize_database_json(
-        tokenizer,
-        files["dev"],
-        files["types"],
-        database,
-        use_labels,
-        use_mentions,
-        dev_name,
-        filters={"$or": [{
-            "dataset": ["train"]
-        }, {
-            "dataset": ["dev"]
-        }]},
-        filtered_document_ids=filtered_document_ids["dev"]
-        if "dev" in filtered_document_ids else [],
-        prepend_search_results=prepend_search_results)
-    test_name = "tokenized_" + name + "_test"
-    files[test_name] = tokenize_database_json(
-        tokenizer,
-        files["test"],
-        files["types"],
-        database,
-        use_labels,
-        use_mentions,
-        test_name,
-        filters={
-            "$or": [{
-                "dataset": ["train"]
-            }, {
-                "dataset": ["dev"]
-            }, {
-                "dataset": ["test"]
-            }]
-        },
-        filtered_document_ids=filtered_document_ids["test"]
-        if "test" in filtered_document_ids else [],
-        prepend_search_results=prepend_search_results)
+    for part, dataset_filters in filters.items():
+        tokenized_name = "tokenized_" + name + "_" + part
+        files[tokenized_name] = tokenize_database_json(
+            tokenizer,
+            files[part],
+            files["types"],
+            database,
+            use_labels,
+            use_mentions,
+            tokenized_name,
+            filters=get_or_filter_from_list("dataset", dataset_filters),
+            filter_exact_match=filter_exact_match,
+            filter_same_document=filter_same_document,
+            filtered_document_ids=filtered_document_ids[part]
+            if part in filtered_document_ids else [],
+            prepend_search_results=prepend_search_results)
 
 
 def report_metrics(model_metrics, run_id, name, train_result, dev_result,
@@ -235,6 +203,8 @@ def run_evaluation(
     bool,  # False query [SEP] results; True results [SEP] query
     gold_database_source: str,  # lowner, dataset
     error_database_size: float,  # 0...1 relative to gold_database_size
+    filter_exact_match: bool,  # filter out exact content match
+    filter_same_document: bool,  # filter out same doc_id
     data_type: str,  # sentences, gazetteers
     input_processing: str,  # fusion-in-decoder, few-shot
     use_labels: bool,  # :<label>
@@ -244,17 +214,27 @@ def run_evaluation(
     beam_size: int,  # 1 = greedy search; > 0
     validate_on_test:
     bool,  # False for validating on devset, True for validating on testset
-    num_runs: int  # > 1; how many runs
+    num_runs: int,  # > 1; how many runs
+    seeds: list  # list of seeds; must be same len as num_runs
 ):
+    assert num_runs == len(seeds)
     model_metrics = defaultdict(dict)
     database_metrics = defaultdict(dict)
+
+    # make evaluation dir
+    dir_path = os.path.join(eval_dir_path, name)
+    if not os.path.exists(dir_path):
+        os.makedirs(dir_path)
+
     # 0. loop over num_runs
-    for run_id in tqdm(range(num_runs), desc="Runs"):
-        run_dir_path = os.path.join(eval_dir_path, "run_" + str(run_id))
+    for seed, run_id in tqdm(zip(seeds, range(num_runs)),
+                             desc="Runs",
+                             total=num_runs):
+        run_dir_path = os.path.join(dir_path, "run_" + str(run_id))
         # 0.1 lightning seed everything with new random seed (clear environment variable PL_GLOBAL_SEED)
         if "PL_GLOBAL_SEED" in os.environ:
             del os.environ["PL_GLOBAL_SEED"]
-        seed = pl_seed.seed_everything()
+        pl_seed.seed_everything(seed)
 
         # 0.2 Copy dataset files to eval_dir_path/run_id/dataset
         files = {}
@@ -322,7 +302,6 @@ def run_evaluation(
                        baseline_test_result)
 
         # 2. Prepare gold database
-        # gold_document_store = name + "gold" + gold_database_source + seed
         gold_document_store, gold_search = setup_database(
             name + "_gold_" + gold_database_source + "_" + str(seed),
             search_algorithm, search_topk)
@@ -351,13 +330,20 @@ def run_evaluation(
             if gold_document_store.get_document_count(
             ) > gold_document_store.get_embedding_count():
                 gold_document_store.update_embeddings(
-                    gold_search.get_node("ANNRetriever"),  # type: ignore 
+                    gold_search.get_node("ANNRetriever"),  # type: ignore
                     update_existing_embeddings=False)
 
         # 3. Augment train + dev (+ test if validate_on_test) set with gold_database
+        filters = {
+            "train": ["train"],
+            "dev": ["train", "dev"],
+            "test": ["train", "dev", "test"]
+        }
+
         # 3.1 search for similar documents; filter out exact matches
-        augment_dataset("gold", tokenizer, files, gold_search, use_labels,
-                        use_mentions, prepend_search_results)
+        augment_dataset("gold", tokenizer, files, filters, gold_search,
+                        use_labels, use_mentions, prepend_search_results,
+                        filter_exact_match, filter_same_document)
 
         # 4. Train baseline with gold database
         trained_gold = False
@@ -390,12 +376,6 @@ def run_evaluation(
             name + "_error_" + gold_database_source + "_" + str(seed),
             search_algorithm, search_topk)
         # 5.1.1 copy items from gold_document_store
-        filters = {
-            "train": ["train"],
-            "dev": ["train", "dev"],
-            "test": ["train", "dev", "test"]
-        }
-
         # Get original doc from dataset json
         original_docs = dict()
         for file_name in [files[file] for file in filters["test"]]:
@@ -420,7 +400,7 @@ def run_evaluation(
             if error_document_store.get_document_count(
             ) > error_document_store.get_embedding_count():
                 error_document_store.update_embeddings(
-                    error_search.get_node("ANNRetriever"),  # type: ignore 
+                    error_search.get_node("ANNRetriever"),  # type: ignore
                     update_existing_embeddings=False)
 
         # 5.1.4 store and filter out random database entries until error_database_size is reached
@@ -445,8 +425,9 @@ def run_evaluation(
 
         # 6. Augment train + dev (+ test if validate_on_test) set with error_database
         # 6.1 search for similar documents; filter out exact matches
-        augment_dataset("error", tokenizer, files, error_search, use_labels,
-                        use_mentions, prepend_search_results,
+        augment_dataset("error", tokenizer, files, filters, error_search,
+                        use_labels, use_mentions, prepend_search_results,
+                        filter_exact_match, filter_same_document,
                         error_document_id_filter)
 
         #  7. Train baseline with errorneous database
@@ -513,11 +494,11 @@ def run_evaluation(
 # 9. Report database metrics
 # 9.1 Overlap of dataset + databases
 # 10. Save best run based on overall F1 score
-    with open(os.path.join(eval_dir_path, "model_metrics.json"),
+    with open(os.path.join(dir_path, "model_metrics.json"),
               "w",
               encoding="utf-8") as file:
         json.dump(model_metrics, file)
-    with open(os.path.join(eval_dir_path, "database_metrics.json"),
+    with open(os.path.join(dir_path, "database_metrics.json"),
               "w",
               encoding="utf-8") as file:
         json.dump(database_metrics, file)
