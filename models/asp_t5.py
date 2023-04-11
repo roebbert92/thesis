@@ -2,14 +2,14 @@ from typing import Any, List, Optional
 import lightning.pytorch as pl
 from transformers import T5Tokenizer, T5Model, PretrainedConfig
 from transformers.modeling_outputs import Seq2SeqModelOutput
-from transformers.generation.utils import GenerationConfig
+from transformers.generation.configuration_utils import GenerationConfig
 import torch
 import torch.nn as nn
 from models.outputs import ASPSeq2SeqLMOutput
 
 import models.utils as utils
 import models.generation as gen
-from models.metrics import F1ASP
+from models.metrics import F1ASP, FalsePositivesASP
 
 NEGINF = -20000
 
@@ -34,7 +34,7 @@ def get_scheduler_lambda(scheduler_type, warmup_steps, total_steps):
         raise ValueError(f'Unknown scheduler type {scheduler_type}')
 
 
-def get_tokenizer(config):
+def get_tokenizer(config) -> T5Tokenizer:
     tokenizer = T5Tokenizer.from_pretrained(
         config["plm_tokenizer_name"],
         model_max_length=config["model_max_length"])
@@ -113,7 +113,9 @@ class ASPT5Model(pl.LightningModule, gen.ASPGenerationMixin):
 
         # F1 metrics
         self.val_f1 = F1ASP()
+        self.val_fps = FalsePositivesASP()
         self.test_f1 = F1ASP()
+        self.test_fps = FalsePositivesASP()
 
     def get_encoder(self):
         return self.t5.get_encoder()
@@ -503,6 +505,10 @@ class ASPT5Model(pl.LightningModule, gen.ASPGenerationMixin):
 
         return mapping
 
+    def on_validation_epoch_start(self) -> None:
+        super().on_validation_epoch_start()
+        self.val_fps.reset()
+
     def validation_step(self, samples, batch_idx):
         """
         Validation step
@@ -565,12 +571,17 @@ class ASPT5Model(pl.LightningModule, gen.ASPGenerationMixin):
                               subtoken_map[mapping[i]], this_type)
                     preds.append(entity)
             self.val_f1.update(preds, targets)
+            self.val_fps.update(doc_keys[idx], preds, targets)
         self.log("val_f1",
                  self.val_f1,
                  prog_bar=True,
                  logger=True,
                  on_epoch=True,
                  on_step=True)
+
+    def on_test_epoch_start(self) -> None:
+        super().on_test_epoch_start()
+        self.test_fps.reset()
 
     def test_step(self, samples, batch_idx):
         """
@@ -634,6 +645,7 @@ class ASPT5Model(pl.LightningModule, gen.ASPGenerationMixin):
                               subtoken_map[mapping[i]], this_type)
                     preds.append(entity)
             self.test_f1.update(preds, targets)
+            self.test_fps.update(doc_keys[idx], preds, targets)
         self.log("test_f1",
                  self.test_f1,
                  prog_bar=True,
