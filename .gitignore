@@ -5,3 +5,4 @@ datasets/mlowner/wikigaz.tsv
 *.bin
 lightning_logs
 frameworks/apex
+run_*
