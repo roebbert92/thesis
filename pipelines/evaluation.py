@@ -20,6 +20,7 @@ from haystack.nodes import EmbeddingRetriever, SentenceTransformersRanker, BM25R
 from data_preprocessing.tokenize import tokenize_json, tokenize_database_json
 from models.asp_t5 import get_tokenizer
 from pipelines.asp_training import run_experiment
+from functools import reduce
 
 
 def setup_database(database_name: str, search_algorithm: str,
@@ -192,6 +193,16 @@ def get_documents_from_sentences(docs):
     return documents
 
 
+def factors(n):
+    return sorted(
+        list(
+            set(
+                reduce(list.__add__,
+                       ([i, n // i]
+                        for i in range(1,
+                                       int(n**0.5) + 1) if not n % i)))))
+
+
 def run_evaluation(
     eval_dir_path: str,
     name: str,
@@ -225,6 +236,9 @@ def run_evaluation(
     dir_path = os.path.join(eval_dir_path, name)
     if not os.path.exists(dir_path):
         os.makedirs(dir_path)
+
+    # Gradient accumulation steps, if data is too large for memory
+    grad_accum_steps = factors(model_config["batch_size"])
 
     # 0. loop over num_runs
     for seed, run_id in tqdm(zip(seeds, range(num_runs)),
@@ -366,7 +380,9 @@ def run_evaluation(
                                gold_train_result, gold_dev_result,
                                gold_test_result)
             except Exception:
-                gold_config["gradient_accumulation_steps"] += 1
+                gold_config["gradient_accumulation_steps"] = grad_accum_steps[
+                    grad_accum_steps.index(
+                        gold_config["gradient_accumulation_steps"]) + 1]
                 gold_config["batch_size"] = gold_config[
                     "batch_size"] // gold_config["gradient_accumulation_steps"]
 
@@ -451,7 +467,9 @@ def run_evaluation(
                                error_train_result, error_dev_result,
                                error_test_result)
             except Exception:
-                error_config["gradient_accumulation_steps"] += 1
+                error_config["gradient_accumulation_steps"] = grad_accum_steps[
+                    grad_accum_steps.index(
+                        error_config["gradient_accumulation_steps"]) + 1]
                 error_config[
                     "batch_size"] = error_config["batch_size"] // error_config[
                         "gradient_accumulation_steps"]
