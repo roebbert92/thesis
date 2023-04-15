@@ -290,7 +290,7 @@ def get_input_sentence_database(tokenizer: PreTrainedTokenizer,
         handle_results(tokenizer, processed_doc, results, use_labels,
                        use_mentions)
 
-    return processed_doc
+    return processed_doc, [result.score for result in results]
 
 
 def tokenize_database_json(tokenizer: PreTrainedTokenizer,
@@ -320,7 +320,7 @@ def tokenize_database_json(tokenizer: PreTrainedTokenizer,
         instances = json.load(file)
 
     name = os.path.basename(os.path.splitext(file_name)[0])
-
+    database_scores = {}
     for inst_id, instance in enumerate(instances):
         tokens = instance['tokens']
         entities = instance['entities']
@@ -332,7 +332,7 @@ def tokenize_database_json(tokenizer: PreTrainedTokenizer,
             tokenizer, label_to_id, tokens, entities)
 
         # insert prefix (instruction for model) here
-        input_sentence = get_input_sentence_database(
+        input_sentence, scores = get_input_sentence_database(
             tokenizer,
             doc_id,
             extended,
@@ -356,8 +356,9 @@ def tokenize_database_json(tokenizer: PreTrainedTokenizer,
             "ent_type_sequence": entity_type_sequence,
             "ent_indices": entity_indices
         })
+        database_scores[doc_id] = scores
 
     output_file_name = f"{os.path.join(os.path.dirname(file_name), output_name)}.{os.path.basename(os.path.splitext(tokenizer.name_or_path)[0])}.jsonlines"
     with open(output_file_name, "w", encoding="utf-8") as output_file:
         json.dump(tokenized_dataset, output_file)
-    return output_file_name
+    return output_file_name, database_scores
