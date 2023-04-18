@@ -6,8 +6,10 @@ import numpy as np
 from haystack import Pipeline, Document
 from haystack.document_stores import ElasticsearchDocumentStore
 from haystack.nodes import EmbeddingRetriever, SentenceTransformersRanker, BM25Retriever
+from sentence_transformers import SentenceTransformer
 from functools import reduce
 from typing import List, Iterable
+import torch
 import copy
 import json
 import sys
@@ -21,12 +23,16 @@ from data_preprocessing.tokenize import tokenize_json, tokenize_database_json
 from models.asp_t5 import get_tokenizer
 from pipelines.asp_training import run_experiment
 
+EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2" # "sentence-transformers/all-mpnet-base-v2"
+EMBEDDING_DIM = 384 # 768
 
 def setup_database(database_name: str, search_algorithm: str,
                    search_topk: int):
-    document_store = ElasticsearchDocumentStore(index=database_name)
-    if document_store.get_document_count() > 0:
-        document_store.delete_documents()
+    document_store = ElasticsearchDocumentStore(
+        index=database_name,
+        embedding_dim=EMBEDDING_DIM,
+        return_embedding=True if search_algorithm != "bm25" else False,
+        recreate_index=True)
     search = Pipeline()
     if search_algorithm == "bm25":
         bm25_retriever = BM25Retriever(document_store, top_k=search_topk)
@@ -36,7 +42,7 @@ def setup_database(database_name: str, search_algorithm: str,
     elif search_algorithm.startswith("ann"):
         ann_retriever = EmbeddingRetriever(
             document_store=document_store,
-            embedding_model="sentence-transformers/all-mpnet-base-v2",
+            embedding_model=EMBEDDING_MODEL,
             model_format="sentence_transformers",
             top_k=search_topk *
             2 if search_algorithm.endswith("ranking") else search_topk)
@@ -65,31 +71,39 @@ def augment_dataset(name,
                     files,
                     filters,
                     database,
+                    cosine_model,
+                    embed_cache,
                     use_labels,
                     use_mentions,
                     prepend_search_results,
                     filter_exact_match,
                     filter_same_document,
-                    database_metrics,
+                    score_metrics,
+                    similarity_metrics,
                     filtered_document_ids={}):
-    database_metrics[name] = {}
+    score_metrics[name] = {}
+    similarity_metrics[name] = {}
     for part, dataset_filters in filters.items():
         tokenized_name = "tokenized_" + name + "_" + part
-        files[tokenized_name], database_scores = tokenize_database_json(
-            tokenizer,
-            files[part],
-            files["types"],
-            database,
-            use_labels,
-            use_mentions,
-            tokenized_name,
-            filters=get_or_filter_from_list("dataset", dataset_filters),
-            filter_exact_match=filter_exact_match,
-            filter_same_document=filter_same_document,
-            filtered_document_ids=filtered_document_ids[part]
-            if part in filtered_document_ids else [],
-            prepend_search_results=prepend_search_results)
-        database_metrics[name][part] = database_scores
+        files[
+            tokenized_name], database_scores, database_similarities = tokenize_database_json(
+                tokenizer,
+                files[part],
+                files["types"],
+                database,
+                cosine_model,
+                embed_cache,
+                use_labels,
+                use_mentions,
+                tokenized_name,
+                filters=get_or_filter_from_list("dataset", dataset_filters),
+                filter_exact_match=filter_exact_match,
+                filter_same_document=filter_same_document,
+                filtered_document_ids=filtered_document_ids[part]
+                if part in filtered_document_ids else [],
+                prepend_search_results=prepend_search_results)
+        score_metrics[name][part] = database_scores
+        similarity_metrics[name][part] = database_similarities
 
 
 def report_metrics(model_metrics, run_id, name, train_result, dev_result,
@@ -318,6 +332,12 @@ def run_evaluation(
     # Gradient accumulation steps, if data is too large for memory
     grad_accum_steps = factors(model_config["batch_size"])
 
+    # Setup Model for cosine similarity
+    cosine_model = SentenceTransformer(EMBEDDING_MODEL,
+        device="gpu" if torch.cuda.is_available() else "cpu")
+
+    embed_cache = {}
+
     # 0. loop over num_runs
     for seed, run_id in tqdm(zip(seeds, range(num_runs)),
                              desc="Runs",
@@ -451,10 +471,13 @@ def run_evaluation(
         }
 
         # 3.1 search for similar documents; filter out exact matches
+        database_metrics[run_id]["scores"] = {}
         database_metrics[run_id]["similarity"] = {}
         augment_dataset("gold", tokenizer, files, filters, gold_search,
-                        use_labels, use_mentions, prepend_search_results,
-                        filter_exact_match, filter_same_document,
+                        cosine_model, embed_cache, use_labels, use_mentions,
+                        prepend_search_results, filter_exact_match,
+                        filter_same_document,
+                        database_metrics[run_id]["scores"],
                         database_metrics[run_id]["similarity"])
 
         # 3.2 Check dataset + dictionary overlap
@@ -545,8 +568,10 @@ def run_evaluation(
         # 6. Augment train + dev (+ test if validate_on_test) set with error_database
         # 6.1 search for similar documents; filter out exact matches
         augment_dataset("error", tokenizer, files, filters, error_search,
-                        use_labels, use_mentions, prepend_search_results,
-                        filter_exact_match, filter_same_document,
+                        cosine_model, embed_cache, use_labels, use_mentions,
+                        prepend_search_results, filter_exact_match,
+                        filter_same_document,
+                        database_metrics[run_id]["scores"],
                         database_metrics[run_id]["similarity"],
                         error_document_id_filter)
 

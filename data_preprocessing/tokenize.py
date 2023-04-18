@@ -4,6 +4,10 @@ import json
 from transformers import PreTrainedTokenizer
 from haystack import Pipeline, Document
 from typing import List, Optional
+from sentence_transformers import SentenceTransformer
+import numpy as np
+from numpy.linalg import norm
+from tqdm import tqdm
 
 MENTION_START = "<m>"
 MENTION_END = "</m>"
@@ -170,7 +174,9 @@ def tokenize_json(tokenizer: PreTrainedTokenizer,
 
         name = os.path.basename(os.path.splitext(file_name)[0])
 
-        for inst_id, instance in enumerate(instances):
+        for inst_id, instance in tqdm(enumerate(instances),
+                                      desc="Tokenization",
+                                      total=len(instances)):
             tokens = instance['tokens']
             entities = instance['entities']
             extended = instance['extended']
@@ -243,10 +249,25 @@ def handle_results(tokenizer: PreTrainedTokenizer, processed_doc: list,
             processed_doc.append(tokenizer.eos_token)
 
 
+def cosine_sim(a, b):
+    same_size_a = np.tile(a, (b.shape[0], 1))
+    np_array = np.sum(same_size_a * b,
+                      axis=1) / (norm(same_size_a, axis=1) * norm(b, axis=1))
+    return np_array.astype(float).tolist()
+
+
+def get_embedding(cosine_model, embed_cache, input: str):
+    if input not in embed_cache:
+        embed_cache[input] = cosine_model.encode(input)
+    return embed_cache[input]
+
+
 def get_input_sentence_database(tokenizer: PreTrainedTokenizer,
                                 doc_id,
                                 doc,
                                 database: Pipeline,
+                                cosine_model: SentenceTransformer,
+                                embed_cache,
                                 use_labels: bool,
                                 use_mentions: bool,
                                 filters: dict = {},
@@ -272,10 +293,19 @@ def get_input_sentence_database(tokenizer: PreTrainedTokenizer,
                 **filters
             }
         }})
-    if results is None:
-        results = []
-    else:
-        results = results["documents"]
+    results = results["documents"] if results is not None else []
+    similarities = []
+    if len(results) > 0:
+        if results[0].embedding is not None:
+            sent_embed = get_embedding(cosine_model, embed_cache, sentence)
+            embeds = np.asarray([r.embedding for r in results])
+            similarities = cosine_sim(sent_embed, embeds)
+        else:
+            embeds = np.asarray([
+                get_embedding(cosine_model, embed_cache, sent) for sent in
+                [sentence, *[" ".join(res.content) for res in results]]
+            ])
+            similarities = cosine_sim(embeds[0], embeds[1:])
 
     processed_doc = []
     if prepend_examples:
@@ -290,13 +320,15 @@ def get_input_sentence_database(tokenizer: PreTrainedTokenizer,
         handle_results(tokenizer, processed_doc, results, use_labels,
                        use_mentions)
 
-    return processed_doc, [result.score for result in results]
+    return processed_doc, [result.score for result in results], similarities
 
 
 def tokenize_database_json(tokenizer: PreTrainedTokenizer,
                            file_name,
                            type_file,
                            database: Pipeline,
+                           cosine_model: SentenceTransformer,
+                           embed_cache,
                            use_labels: bool,
                            use_mentions: bool,
                            output_name,
@@ -321,7 +353,10 @@ def tokenize_database_json(tokenizer: PreTrainedTokenizer,
 
     name = os.path.basename(os.path.splitext(file_name)[0])
     database_scores = {}
-    for inst_id, instance in enumerate(instances):
+    database_similarities = {}
+    for inst_id, instance in tqdm(enumerate(instances),
+                                  desc="Tokenization with DB",
+                                  total=len(instances)):
         tokens = instance['tokens']
         entities = instance['entities']
         extended = instance['extended']
@@ -332,11 +367,13 @@ def tokenize_database_json(tokenizer: PreTrainedTokenizer,
             tokenizer, label_to_id, tokens, entities)
 
         # insert prefix (instruction for model) here
-        input_sentence, scores = get_input_sentence_database(
+        input_sentence, scores, similarities = get_input_sentence_database(
             tokenizer,
             doc_id,
             extended,
             database,
+            cosine_model,
+            embed_cache,
             use_labels,
             use_mentions,
             filters,
@@ -357,8 +394,9 @@ def tokenize_database_json(tokenizer: PreTrainedTokenizer,
             "ent_indices": entity_indices
         })
         database_scores[doc_id] = scores
+        database_similarities[doc_id] = similarities
 
     output_file_name = f"{os.path.join(os.path.dirname(file_name), output_name)}.{os.path.basename(os.path.splitext(tokenizer.name_or_path)[0])}.jsonlines"
     with open(output_file_name, "w", encoding="utf-8") as output_file:
         json.dump(tokenized_dataset, output_file)
-    return output_file_name, database_scores
+    return output_file_name, database_scores, database_similarities
