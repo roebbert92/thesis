@@ -23,8 +23,9 @@ from data_preprocessing.tokenize import tokenize_json, tokenize_database_json
 from models.asp_t5 import get_tokenizer
 from pipelines.asp_training import run_experiment
 
-EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2" # "sentence-transformers/all-mpnet-base-v2"
-EMBEDDING_DIM = 384 # 768
+EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"  # "sentence-transformers/all-MiniLM-L6-v2"
+EMBEDDING_DIM = 768  #  384
+
 
 def setup_database(database_name: str, search_algorithm: str,
                    search_topk: int):
@@ -333,8 +334,8 @@ def run_evaluation(
     grad_accum_steps = factors(model_config["batch_size"])
 
     # Setup Model for cosine similarity
-    cosine_model = SentenceTransformer(EMBEDDING_MODEL,
-        device="gpu" if torch.cuda.is_available() else "cpu")
+    cosine_model = SentenceTransformer(
+        EMBEDDING_MODEL, device="cuda" if torch.cuda.is_available() else "cpu")
 
     embed_cache = {}
 
@@ -388,48 +389,48 @@ def run_evaluation(
                     ".")[0] + "." + tokenizer.name_or_path + ".jsonlines"
         # 1.2 Run experiment
         # 1.2.1 collect false positives from train + dev
-        # (baseline_train_result, baseline_dev_result, baseline_test_result,
-        #  baseline_train_false_positives, baseline_dev_false_positives,
-        #  baseline_test_false_positives) = run_experiment(
-        #      name=name,
-        #      tokenized_train_data_file=files["tokenized_train"],
-        #      tokenized_dev_data_file=files["tokenized_dev"],
-        #      tokenized_test_data_file=files["tokenized_train"],
-        #      type_data_file=files["types"],
-        #      logger_dir_path=run_dir_path,
-        #      config=model_config,
-        #      validate_on_test=validate_on_test)
+        (baseline_train_result, baseline_dev_result, baseline_test_result,
+         baseline_train_false_positives, baseline_dev_false_positives,
+         baseline_test_false_positives) = run_experiment(
+             name=name,
+             tokenized_train_data_file=files["tokenized_train"],
+             tokenized_dev_data_file=files["tokenized_dev"],
+             tokenized_test_data_file=files["tokenized_train"],
+             type_data_file=files["types"],
+             logger_dir_path=run_dir_path,
+             config=model_config,
+             validate_on_test=validate_on_test)
         with open(files["types"], encoding="utf-8") as file:
             labels = json.load(file)['entities']
         id_to_label = {id: label for id, label in enumerate(labels)}
 
-        # false_positives = {
-        #     "train":
-        #     transform_false_positives(id_to_label,
-        #                               baseline_train_false_positives),
-        #     "dev":
-        #     transform_false_positives(
-        #         id_to_label, baseline_train_false_positives
-        #         | baseline_dev_false_positives),
-        #     "test":
-        #     transform_false_positives(
-        #         id_to_label, baseline_train_false_positives
-        #         | baseline_dev_false_positives
-        #         | baseline_test_false_positives
-        #         if baseline_test_false_positives is not None else
-        #         baseline_train_false_positives
-        #         | baseline_dev_false_positives)
-        # }
-        with open(os.path.join(thesis_path,
-                               "evaluations/false_positives.json"),
-                  "r",
-                  encoding="utf-8") as file:
-            false_positives = json.load(file)
+        false_positives = {
+            "train":
+            transform_false_positives(id_to_label,
+                                      baseline_train_false_positives),
+            "dev":
+            transform_false_positives(
+                id_to_label, baseline_train_false_positives
+                | baseline_dev_false_positives),
+            "test":
+            transform_false_positives(
+                id_to_label, baseline_train_false_positives
+                | baseline_dev_false_positives
+                | baseline_test_false_positives
+                if baseline_test_false_positives is not None else
+                baseline_train_false_positives
+                | baseline_dev_false_positives)
+        }
+        # with open(os.path.join(thesis_path,
+        #                        "evaluations/false_positives.json"),
+        #           "r",
+        #           encoding="utf-8") as file:
+        #     false_positives = json.load(file)
 
         # 1.2.2 report metrics
-        # report_metrics(model_metrics, run_id, "baseline",
-        #                baseline_train_result, baseline_dev_result,
-        #                baseline_test_result)
+        report_metrics(model_metrics, run_id, "baseline",
+                       baseline_train_result, baseline_dev_result,
+                       baseline_test_result)
 
         # 2. Prepare gold database
         gold_document_store, gold_search = setup_database(
@@ -486,31 +487,31 @@ def run_evaluation(
                                 dev_counter, test_counter)
 
         # 4. Train baseline with gold database
-        # trained_gold = False
-        # gold_config = copy.deepcopy(model_config)
-        # while not trained_gold:
-        #     try:
-        #         (gold_train_result, gold_dev_result, gold_test_result, _, _,
-        #          _) = run_experiment(
-        #              name=name + "_gold",
-        #              tokenized_train_data_file=files["tokenized_gold_train"],
-        #              tokenized_dev_data_file=files["tokenized_gold_dev"],
-        #              tokenized_test_data_file=files["tokenized_gold_test"],
-        #              type_data_file=files["types"],
-        #              logger_dir_path=run_dir_path,
-        #              config=gold_config,
-        #              validate_on_test=validate_on_test)
-        #         trained_gold = True
-        #         # 4.1 report metrics
-        #         report_metrics(model_metrics, run_id, "gold",
-        #                        gold_train_result, gold_dev_result,
-        #                        gold_test_result)
-        #     except Exception:
-        #         gold_config["gradient_accumulation_steps"] = grad_accum_steps[
-        #             grad_accum_steps.index(
-        #                 gold_config["gradient_accumulation_steps"]) + 1]
-        #         gold_config["batch_size"] = gold_config[
-        #             "batch_size"] // gold_config["gradient_accumulation_steps"]
+        trained_gold = False
+        gold_config = copy.deepcopy(model_config)
+        while not trained_gold:
+            try:
+                (gold_train_result, gold_dev_result, gold_test_result, _, _,
+                 _) = run_experiment(
+                     name=name + "_gold",
+                     tokenized_train_data_file=files["tokenized_gold_train"],
+                     tokenized_dev_data_file=files["tokenized_gold_dev"],
+                     tokenized_test_data_file=files["tokenized_gold_test"],
+                     type_data_file=files["types"],
+                     logger_dir_path=run_dir_path,
+                     config=gold_config,
+                     validate_on_test=validate_on_test)
+                trained_gold = True
+                # 4.1 report metrics
+                report_metrics(model_metrics, run_id, "gold",
+                               gold_train_result, gold_dev_result,
+                               gold_test_result)
+            except Exception:
+                gold_config["gradient_accumulation_steps"] = grad_accum_steps[
+                    grad_accum_steps.index(
+                        gold_config["gradient_accumulation_steps"]) + 1]
+                gold_config["batch_size"] = gold_config[
+                    "batch_size"] // gold_config["gradient_accumulation_steps"]
 
         # 5. Prepare errorneous database
         # 5.1 create new database: error_document_store = name + "error" + gold_database_source + seed
@@ -582,32 +583,32 @@ def run_evaluation(
                                 error_document_id_filter)
 
         #  7. Train baseline with errorneous database
-        # trained_error = False
-        # error_config = copy.deepcopy(model_config)
-        # while not trained_error:
-        #     try:
-        #         (error_train_result, error_dev_result, error_test_result, _, _,
-        #          _) = run_experiment(
-        #              name=name + "_error",
-        #              tokenized_train_data_file=files["tokenized_error_train"],
-        #              tokenized_dev_data_file=files["tokenized_error_dev"],
-        #              tokenized_test_data_file=files["tokenized_error_test"],
-        #              type_data_file=files["types"],
-        #              logger_dir_path=run_dir_path,
-        #              config=error_config,
-        #              validate_on_test=validate_on_test)
-        #         trained_error = True
-        #         # 7.1 report metrics
-        #         report_metrics(model_metrics, run_id, "error",
-        #                        error_train_result, error_dev_result,
-        #                        error_test_result)
-        #     except Exception:
-        #         error_config["gradient_accumulation_steps"] = grad_accum_steps[
-        #             grad_accum_steps.index(
-        #                 error_config["gradient_accumulation_steps"]) + 1]
-        #         error_config[
-        #             "batch_size"] = error_config["batch_size"] // error_config[
-        #                 "gradient_accumulation_steps"]
+        trained_error = False
+        error_config = copy.deepcopy(model_config)
+        while not trained_error:
+            try:
+                (error_train_result, error_dev_result, error_test_result, _, _,
+                 _) = run_experiment(
+                     name=name + "_error",
+                     tokenized_train_data_file=files["tokenized_error_train"],
+                     tokenized_dev_data_file=files["tokenized_error_dev"],
+                     tokenized_test_data_file=files["tokenized_error_test"],
+                     type_data_file=files["types"],
+                     logger_dir_path=run_dir_path,
+                     config=error_config,
+                     validate_on_test=validate_on_test)
+                trained_error = True
+                # 7.1 report metrics
+                report_metrics(model_metrics, run_id, "error",
+                               error_train_result, error_dev_result,
+                               error_test_result)
+            except Exception:
+                error_config["gradient_accumulation_steps"] = grad_accum_steps[
+                    grad_accum_steps.index(
+                        error_config["gradient_accumulation_steps"]) + 1]
+                error_config[
+                    "batch_size"] = error_config["batch_size"] // error_config[
+                        "gradient_accumulation_steps"]
 
 
 # 8. Validate on error corrections
@@ -647,10 +648,10 @@ def run_evaluation(
 # 9. Report database metrics
 # 9.1 Overlap of dataset + databases
 # 10. Save best run based on overall F1 score
-# with open(os.path.join(dir_path, "model_metrics.json"),
-#           "w",
-#           encoding="utf-8") as file:
-#     json.dump(model_metrics, file)
+    with open(os.path.join(dir_path, "model_metrics.json"),
+              "w",
+              encoding="utf-8") as file:
+        json.dump(model_metrics, file)
     with open(os.path.join(dir_path, "database_metrics.json"),
               "w",
               encoding="utf-8") as file:
