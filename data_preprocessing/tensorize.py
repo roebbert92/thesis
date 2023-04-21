@@ -2,10 +2,13 @@ import copy
 import json
 import os
 import pickle
+from typing import Optional
 import torch.nn.functional as F
 from torch.utils.data import Dataset
 import torch
 from transformers import PreTrainedTokenizer
+import numpy as np
+import random
 
 
 class NERDataset(Dataset):
@@ -22,6 +25,17 @@ class NERDataset(Dataset):
 def one_hot_ignore_negative(labels, num_classes):
     return F.one_hot(torch.where((labels >= 0), labels, num_classes),
                      num_classes=num_classes + 1)[..., :-1].bool()
+
+
+def indices(lst, element):
+    result = []
+    offset = -1
+    while True:
+        try:
+            offset = lst.index(element, offset + 1) + 1
+        except ValueError:
+            return result
+        result.append(offset)
 
 
 class Tensorizer:
@@ -81,6 +95,7 @@ class Tensorizer:
 
         input_ids = torch.tensor(input_ids, dtype=torch.long)
         input_mask = torch.tensor(input_mask, dtype=torch.long)
+        input_eos = indices(input_sentence, self.tokenizer.eos_token)
 
         to_copy_ids = torch.tensor(to_copy_ids, dtype=torch.long)
 
@@ -114,10 +129,103 @@ class Tensorizer:
             "ent_indices": ent_indices,
             "ent_types": ent_types,
             "lr_pair_flag": lr_pair_flag,
-            "is_training": is_training
+            "is_training": is_training,
+            "input_eos": input_eos
         }
 
         return doc_key, example.get('subtoken_map', None), tensor
+
+
+class NERCollator(object):
+    def __init__(self,
+                 search_dropout: float = 0.0,
+                 search_shuffle: bool = False) -> None:
+        self.search_dropout = search_dropout
+        self.search_shuffle = search_shuffle
+
+    def __call__(self, collator_input):
+        """
+            Collate function for the NER dataloader.
+        """
+        doc_keys, subtoken_maps, batch = zip(*collator_input)
+        # apply dropout + shuffle
+        if self.search_dropout > 0.0 or self.search_shuffle:
+            for sample in batch:
+                if len(sample["input_eos"]) > 1:
+                    # can do dropout + shuffle
+                    tensors = torch.tensor_split(sample["input_ids"],
+                                                 sample["input_eos"])
+                    search_results = tensors[1:-1]
+                    if self.search_dropout > 0.0:
+                        search_mask = np.random.choice(
+                            [0, 1],
+                            size=len(search_results),
+                            p=[self.search_dropout, 1 - self.search_dropout])
+                        search_results = [
+                            res
+                            for mask, res in zip(search_mask, search_results)
+                            if mask == 1
+                        ]
+                    if self.search_shuffle:
+                        random.shuffle(search_results)
+                    sample["input_ids"] = torch.cat(
+                        [tensors[0], *search_results])
+
+        batch = {k: [sample[k] for sample in batch] for k in batch[0]}
+        batch_size = len(batch["input_ids"])
+
+        max_input_len = max([sample.size(0) for sample in batch["input_ids"]])
+        max_target_len = max(
+            [sample.size(0) for sample in batch["target_ids"]])
+        max_sent_id_len = max(
+            [sample.size(0) for sample in batch["to_copy_ids"]])
+
+        for k in ["to_copy_ids"]:
+            batch[k] = torch.stack([
+                F.pad(x, (0, max_sent_id_len - x.size(0)), value=0)
+                for x in batch[k]
+            ],
+                                   dim=0)
+        for k in ["input_ids", "input_mask", "sentence_idx"]:
+            if k not in batch:
+                continue
+            # (batch_size, max_target_len)
+            batch[k] = torch.stack([
+                F.pad(x, (0, max_input_len - x.size(0)), value=0)
+                for x in batch[k]
+            ],
+                                   dim=0)
+        for k in [
+                "target_ids", "target_mask", "ent_indices", "ent_types",
+                "action_labels", "target_sentence_idx"
+        ]:
+            # (batch_size, max_target_len)
+            if k not in batch:
+                continue
+            batch[k] = torch.stack([
+                F.pad(x, (0, max_target_len - x.size(0)), value=0)
+                for x in batch[k]
+            ],
+                                   dim=0)
+
+        max_num_l = max([sample.size(1) for sample in batch["lr_pair_flag"]])
+
+        for k in ["lr_pair_flag"]:
+            # (batch_size, max_target_len, max_num_l, num_class)
+            if max_num_l > 0:
+                batch[k] = torch.stack([
+                    F.pad(x, (0, 0, 0, max_num_l - x.size(1), 0,
+                              max_target_len - x.size(0)),
+                          value=0) for x in batch[k]
+                ],
+                                       dim=0)
+            else:
+                batch[k] = torch.zeros((batch_size, max_target_len, 0),
+                                       dtype=torch.long)
+
+        batch["is_training"] = torch.tensor(batch["is_training"],
+                                            dtype=torch.bool)
+        return doc_keys, subtoken_maps, batch
 
 
 def ner_collate_fn(batch):
@@ -184,7 +292,7 @@ class NERDataProcessor(object):
                  tokenizer: PreTrainedTokenizer,
                  train_file,
                  dev_file,
-                 test_file,
+                 test_file: Optional[str],
                  type_file,
                  use_cache=True):
         self.config = config
@@ -210,9 +318,18 @@ class NERDataProcessor(object):
             suffix = f'{self.tokenizer_name}.jsonlines'
             assert suffix in train_file
             assert suffix in dev_file
-            assert suffix in test_file
-
-            paths = {'train': train_file, 'dev': dev_file, 'test': test_file}
+            if test_file is not None:
+                assert suffix in test_file
+                paths = {
+                    'train': train_file,
+                    'dev': dev_file,
+                    'test': test_file
+                }
+            else:
+                paths = {
+                    'train': train_file,
+                    'dev': dev_file,
+                }
 
             for split, path in paths.items():
                 is_training = (split == 'train')
@@ -235,7 +352,8 @@ class NERDataProcessor(object):
     def get_tensor_samples(self):
         # For each split, return list of tensorized samples to allow variable length input (batch size = 1)
         return self.tensor_samples['train'], self.tensor_samples[
-            'dev'], self.tensor_samples['test']
+            'dev'], self.tensor_samples[
+                'test'] if "test" in self.tensor_samples else None
 
     def get_cache_path(self):
         cache_path = os.path.join(self.dir_name,

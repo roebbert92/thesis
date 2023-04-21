@@ -112,6 +112,8 @@ class ASPT5Model(pl.LightningModule, gen.ASPGenerationMixin):
         self.config = PretrainedConfig.from_dict(config)
 
         # F1 metrics
+        self.train_f1 = F1ASP()
+        self.train_fps = FalsePositivesASP()
         self.val_f1 = F1ASP()
         self.val_fps = FalsePositivesASP()
         self.test_f1 = F1ASP()
@@ -508,6 +510,7 @@ class ASPT5Model(pl.LightningModule, gen.ASPGenerationMixin):
     def on_validation_epoch_start(self) -> None:
         super().on_validation_epoch_start()
         self.val_fps.reset()
+        self.train_fps.reset()
 
     def validation_step(self, samples, batch_idx):
         """
@@ -570,8 +573,20 @@ class ASPT5Model(pl.LightningModule, gen.ASPGenerationMixin):
                     entity = (subtoken_map[mapping[start_ind[pairing[i]]]],
                               subtoken_map[mapping[i]], this_type)
                     preds.append(entity)
+            # if dataloader_idx == 0:
+            #     self.train_f1.update(preds, targets)
+            #     self.train_fps.update(doc_keys[idx], preds, targets)
+            # if dataloader_idx == 1:
             self.val_f1.update(preds, targets)
             self.val_fps.update(doc_keys[idx], preds, targets)
+        # if dataloader_idx == 0:
+        #     self.log("train_f1",
+        #              self.train_f1,
+        #              prog_bar=True,
+        #              logger=True,
+        #              on_epoch=True,
+        #              on_step=True)
+        # if dataloader_idx == 1:
         self.log("val_f1",
                  self.val_f1,
                  prog_bar=True,

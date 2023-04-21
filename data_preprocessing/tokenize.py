@@ -266,7 +266,7 @@ def get_input_sentence_database(tokenizer: PreTrainedTokenizer,
                                 doc_id,
                                 doc,
                                 database: Pipeline,
-                                cosine_model: SentenceTransformer,
+                                cosine_model: Optional[SentenceTransformer],
                                 embed_cache,
                                 use_labels: bool,
                                 use_mentions: bool,
@@ -295,7 +295,7 @@ def get_input_sentence_database(tokenizer: PreTrainedTokenizer,
         }})
     results = results["documents"] if results is not None else []
     similarities = []
-    if len(results) > 0:
+    if len(results) > 0 and cosine_model is not None:
         if results[0].embedding is not None:
             sent_embed = get_embedding(cosine_model, embed_cache, sentence)
             embeds = np.asarray([r.embedding for r in results])
@@ -327,7 +327,7 @@ def tokenize_database_json(tokenizer: PreTrainedTokenizer,
                            file_name,
                            type_file,
                            database: Pipeline,
-                           cosine_model: SentenceTransformer,
+                           cosine_model: Optional[SentenceTransformer],
                            embed_cache,
                            use_labels: bool,
                            use_mentions: bool,

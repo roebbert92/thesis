@@ -172,7 +172,8 @@ def get_documents_from_gazetteers(docs):
     for doc in docs:
         for entity in doc["entities"]:
             ne = " ".join(doc["tokens"][entity["start"]:entity["end"]])
-            key = entity["type"] + "_" + ne
+            dataset_part = doc["doc_id"].split("_")[1]
+            key = dataset_part + "_" + entity["type"] + "_" + ne
             if "doc_id" not in items[key]:
                 items[key]["doc_id"] = []
             if doc["doc_id"] not in items[key]["doc_id"]:
