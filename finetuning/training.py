@@ -230,7 +230,9 @@ def prep_data(path, tokenizer, config: dict):
     return files["tokenized_train"], files["tokenized_dev"], files["types"]
 
 
-def run_tune_training(config: dict, ):
+def run_tune_training(config: dict, fixed_params: dict):
+
+    config.update(fixed_params)
 
     if "PL_GLOBAL_SEED" in os.environ:
         del os.environ["PL_GLOBAL_SEED"]
@@ -255,29 +257,8 @@ def run_tune_training(config: dict, ):
     train, val, _ = processor.get_tensor_samples()
     config["train_len"] = len(train)
 
-    # Train loader
     collator = NERCollator(config["train_search_dropout"],
                            config["train_search_shuffle"])
-
-    train_loader = DataLoader(train,
-                              batch_size=config["batch_size"],
-                              collate_fn=collator,
-                              num_workers=3,
-                              persistent_workers=False,
-                              pin_memory=True,
-                              shuffle=True,
-                              prefetch_factor=20)
-    # Validation loaders
-    val_loader = DataLoader(
-        val,
-        batch_size=int(config["batch_size"] *
-                       3) if config["batch_size"] > 1 else 8,
-        collate_fn=ner_collate_fn,
-        num_workers=3,
-        persistent_workers=False,
-        pin_memory=True,
-        shuffle=False,
-        prefetch_factor=20)
 
     # Callbacks
     tune_report_f1 = TuneReportCallback(
@@ -299,6 +280,28 @@ def run_tune_training(config: dict, ):
     trained = False
     while not trained:
         try:
+            # Train loader
+
+            train_loader = DataLoader(train,
+                                      batch_size=train_config["batch_size"],
+                                      collate_fn=collator,
+                                      num_workers=3,
+                                      persistent_workers=False,
+                                      pin_memory=True,
+                                      shuffle=True,
+                                      prefetch_factor=20)
+            # Validation loaders
+            val_loader = DataLoader(
+                val,
+                batch_size=int(train_config["batch_size"] *
+                               3) if train_config["batch_size"] > 1 else 8,
+                collate_fn=ner_collate_fn,
+                num_workers=3,
+                persistent_workers=False,
+                pin_memory=True,
+                shuffle=False,
+                prefetch_factor=20)
+
             trainer = pl.Trainer(
                 accelerator="gpu",
                 logger=tb_logger,
