@@ -200,7 +200,15 @@ def prep_data(path, tokenizer, config: dict):
     docs = []
     for part in ["train", "dev"]:
         with open(files[part], "r", encoding="utf-8") as file:
-            docs.extend(json.load(file))
+            d = json.load(file)
+            if part == "dev":
+                mask = np.zeros(len(d), dtype=int)
+                mask[:len(d) // 2] = 1
+                np.random.shuffle(mask)
+                docs.extend(
+                    [doc for m, doc in zip(mask.tolist(), d) if m == 1])
+            else:
+                docs.extend(d)
     if config["search_data_type"] == "gazetteers":
         documents = get_documents_from_gazetteers(docs)
     elif config["search_data_type"] == "sentences":
@@ -211,21 +219,13 @@ def prep_data(path, tokenizer, config: dict):
         doc_store.update_embeddings(
             search.get_node("ANNRetriever"),  # type: ignore
             update_existing_embeddings=False)
-    # remove random 0.5 of dev
-    dev_docs = doc_store.get_all_documents(filters={"dataset": ["dev"]})
-    mask = np.zeros(len(dev_docs), dtype=int)
-    mask[:len(dev_docs) // 2] = 1
-    np.random.shuffle(mask)
-    filtered_dev_ids = [
-        doc.id for m, doc in zip(mask.tolist(), dev_docs) if m == 1
-    ]
 
     filters = {"train": ["train"], "dev": ["train", "dev"]}
 
     augment_dataset(tokenizer, files, filters, search, config["use_labels"],
                     config["use_mentions"], config["prepend_search_results"],
                     config["filter_exact_match"],
-                    config["filter_same_document"], {"dev": filtered_dev_ids})
+                    config["filter_same_document"])
 
     return files["tokenized_train"], files["tokenized_dev"], files["types"]
 
