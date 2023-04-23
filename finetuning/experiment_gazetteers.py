@@ -120,11 +120,10 @@ reporter = tune.CLIReporter(
     # parameter_columns=["batch_size"],
     metric_columns=["val_f1", "training_iteration"])
 
-ng_search = NevergradSearch(
-    optimizer=ng.optimizers.PortfolioDiscreteOnePlusOne,
-    metric="val_f1",
-    mode="max",
-    points_to_evaluate=best_configs)
+ng_search = NevergradSearch(optimizer=ng.optimizers.TwoPointsDE,
+                            metric="val_f1",
+                            mode="max",
+                            points_to_evaluate=best_configs)
 
 method = tune.with_resources(tune.with_parameters(run_tune_training,
                                                   fixed_params=fixed_params),
