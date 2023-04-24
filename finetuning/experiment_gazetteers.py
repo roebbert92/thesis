@@ -38,6 +38,7 @@ def tune_gazetteers():
     config["search_algorithm"] = "bm25"
     config["search_topk"] = 10
     config["seed"] = 42
+    config["num_epochs"] = 40
     config["train_search_dropout"] = 0.0
     config["train_search_shuffle"] = False
 
@@ -45,31 +46,25 @@ def tune_gazetteers():
     config["name"] = "gazetteers"
 
     best_configs = [{
-        'asp_hidden_dim': 629,
-        'asp_dropout_rate': 0.3,
-        'asp_init_std': 0.019999999999999976,
-        'asp_activation': 'tanh',
-        'plm_learning_rate': 4.999999999999997e-05,
-        'task_learning_rate': 0.00029999999999999987,
-        'adam_weight_decay': 0.1,
-        'warmup_ratio': 0.21860103276831117,
-        'use_labels': True,
-        'use_mentions': False,
-        'prepend_search_results': False,
-        'filter_exact_match': False,
-        'filter_same_document': False,
+        'asp_hidden_dim': 230,
+        'asp_activation': 'relu',
+        'task_learning_rate': 0.003981039177591235,
+        'adam_weight_decay': 0.09977663247649064,
+        'warmup_ratio': 0.28900287725463936,
         'search_algorithm': 'ann',
-        'search_topk': 10,
-        'train_search_dropout': 0.0,
-        'train_search_shuffle': False,
+        'search_topk': 18,
+        'train_search_dropout': 0.234542984910455,
         'plm_pretrained_name_or_path': 't5-base',
         'plm_tokenizer_name': 't5-small',
         'model_max_length': 4096,
         'mention_start_token': '<m>',
         'mention_end_token': '</m>',
+        'asp_dropout_rate': 0.3,
+        'asp_init_std': 0.02,
         'num_labels': 6,
         'max_nest_depth': 1,
         'beam_size': 1,
+        'plm_learning_rate': 5e-05,
         'plm_scheduler': 'linear_with_warmup',
         'task_scheduler': 'linear_with_warmup',
         'adam_eps': 1e-08,
@@ -78,14 +73,59 @@ def tune_gazetteers():
         'batch_size': 40,
         'train_len': 3394,
         'fused': True,
+        'use_labels': True,
+        'use_mentions': False,
+        'prepend_search_results': False,
+        'filter_exact_match': False,
+        'filter_same_document': False,
         'search_data_type': 'gazetteers',
         'seed': 42,
+        'train_search_shuffle': False,
+        'data_path': '/home/loebbert/projects/thesis/finetuning/tune',
+        'name': 'gazetteers',
+        'precision': 'bf16-mixed'
+    }, {
+        'asp_hidden_dim': 629,
+        'asp_activation': 'tanh',
+        'task_learning_rate': 0.00029999999999999987,
+        'adam_weight_decay': 0.1,
+        'warmup_ratio': 0.21860103276831117,
+        'search_algorithm': 'ann',
+        'search_topk': 10,
+        'train_search_dropout': 0.0,
+        'plm_pretrained_name_or_path': 't5-base',
+        'plm_tokenizer_name': 't5-small',
+        'model_max_length': 4096,
+        'mention_start_token': '<m>',
+        'mention_end_token': '</m>',
+        'asp_dropout_rate': 0.3,
+        'asp_init_std': 0.02,
+        'num_labels': 6,
+        'max_nest_depth': 1,
+        'beam_size': 1,
+        'plm_learning_rate': 5e-05,
+        'plm_scheduler': 'linear_with_warmup',
+        'task_scheduler': 'linear_with_warmup',
+        'adam_eps': 1e-08,
+        'num_epochs': 20,
+        'gradient_accumulation_steps': 1,
+        'batch_size': 40,
+        'train_len': 3394,
+        'fused': True,
+        'use_labels': True,
+        'use_mentions': False,
+        'prepend_search_results': False,
+        'filter_exact_match': False,
+        'filter_same_document': False,
+        'search_data_type': 'gazetteers',
+        'seed': 42,
+        'train_search_shuffle': False,
         'data_path': '/home/loebbert/projects/thesis/finetuning/tune',
         'name': 'gazetteers',
         'precision': 'bf16-mixed'
     }]
 
-    config["asp_hidden_dim"] = tune.qrandint(100, 1000, 10)
+    config["asp_hidden_dim"] = tune.qrandint(100, 800, 10)
     config["asp_dropout_rate"] = 0.3
     config["asp_init_std"] = 0.02
     config["asp_activation"] = tune.choice(["relu", "gelu_fast", "tanh"])
@@ -96,13 +136,13 @@ def tune_gazetteers():
     config["filter_exact_match"] = False
     config["filter_same_document"] = False
     config["search_data_type"] = "gazetteers"
-    config["search_algorithm"] = tune.choice(["bm25", "ann", "ann+reranking"])
+    config["search_algorithm"] = tune.choice(["bm25", "ann"])
     config["search_topk"] = tune.qrandint(1, 40)
     config["seed"] = 42
-    config["train_search_dropout"] = tune.quniform(0.0, 1.0, 0.05)
+    config["train_search_dropout"] = tune.quniform(0.0, 0.65, 0.05)
     config["train_search_shuffle"] = False
     config["task_learning_rate"] = tune.quniform(1e-5, 5e-3, 1e-5)
-    config["adam_weight_decay"] = tune.quniform(1e-3, 0.5, 5e-4)
+    config["adam_weight_decay"] = tune.quniform(5e-4, 0.5, 5e-4)
     config["warmup_ratio"] = tune.quniform(0.01, 0.99, 0.01)
 
     param_space = {}

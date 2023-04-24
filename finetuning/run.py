@@ -9,5 +9,6 @@ sys.path.append(thesis_path)
 from finetuning.experiment_gazetteers import tune_gazetteers
 from finetuning.experiment_sentences import tune_sentences
 
-tune_gazetteers()
+
 tune_sentences()
+tune_gazetteers()
