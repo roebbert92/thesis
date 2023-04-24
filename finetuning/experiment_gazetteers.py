@@ -167,7 +167,7 @@ def tune_gazetteers():
     config["asp_hidden_dim"] = tune.qrandint(100, 800, 10)
     config["asp_dropout_rate"] = 0.3
     config["asp_init_std"] = 0.02
-    config["asp_activation"] = tune.choice(["relu", "gelu_fast", "tanh"])
+    config["asp_activation"] = tune.choice(["relu", "tanh"])
     config["beam_size"] = 1
     config["use_labels"] = True
     config["use_mentions"] = False
