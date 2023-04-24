@@ -20,29 +20,31 @@ import nevergrad as ng
 
 import pickle as pkl
 
-config = T5_BASE
-config["asp_hidden_dim"] = 150
-config["asp_dropout_rate"] = 0.3
-config["asp_init_std"] = 0.02
-config["asp_activation"] = "relu"
-config["beam_size"] = 1
-config["use_labels"] = True
-config["use_mentions"] = True
-config["prepend_search_results"] = False
-config["filter_exact_match"] = False
-config["filter_same_document"] = False
-config["search_data_type"] = "gazetteers"
-config["search_algorithm"] = "bm25"
-config["search_topk"] = 10
-config["seed"] = 42
-config["train_search_dropout"] = 0.0
-config["train_search_shuffle"] = False
 
-config["data_path"] = os.path.join(thesis_path, "finetuning", "tune")
-config["name"] = "gazetteers"
+def tune_gazetteers():
 
-best_configs = [
-    copy.deepcopy(config), {
+    config = T5_BASE
+    config["asp_hidden_dim"] = 150
+    config["asp_dropout_rate"] = 0.3
+    config["asp_init_std"] = 0.02
+    config["asp_activation"] = "relu"
+    config["beam_size"] = 1
+    config["use_labels"] = True
+    config["use_mentions"] = True
+    config["prepend_search_results"] = False
+    config["filter_exact_match"] = False
+    config["filter_same_document"] = False
+    config["search_data_type"] = "gazetteers"
+    config["search_algorithm"] = "bm25"
+    config["search_topk"] = 10
+    config["seed"] = 42
+    config["train_search_dropout"] = 0.0
+    config["train_search_shuffle"] = False
+
+    config["data_path"] = os.path.join(thesis_path, "finetuning", "tune")
+    config["name"] = "gazetteers"
+
+    best_configs = [{
         'asp_hidden_dim': 629,
         'asp_dropout_rate': 0.3,
         'asp_init_std': 0.019999999999999976,
@@ -79,72 +81,81 @@ best_configs = [
         'search_data_type': 'gazetteers',
         'seed': 42,
         'data_path': '/home/loebbert/projects/thesis/finetuning/tune',
-        'name': 'gazetteers'
-    }
-]
+        'name': 'gazetteers',
+        'precision': 'bf16-mixed'
+    }]
 
-config["asp_hidden_dim"] = tune.qrandint(100, 1000, 10)
-config["asp_dropout_rate"] = tune.quniform(0.0, 0.5, 0.05)
-config["asp_init_std"] = tune.quniform(5e-3, 0.5, 5e-3)
-config["asp_activation"] = tune.choice(["relu", "gelu_fast", "tanh"])
-config["beam_size"] = 1
-config["use_labels"] = tune.choice([True, False])
-config["use_mentions"] = tune.choice([True, False])
-config["prepend_search_results"] = tune.choice([True, False])
-config["filter_exact_match"] = tune.choice([True, False])
-config["filter_same_document"] = tune.choice([True, False])
-config["search_data_type"] = "gazetteers"
-config["search_algorithm"] = tune.choice(["bm25", "ann", "ann+reranking"])
-config["search_topk"] = tune.qrandint(1, 40)
-config["seed"] = 42
-config["train_search_dropout"] = tune.quniform(0.0, 1.0, 0.05)
-config["train_search_shuffle"] = tune.choice([True, False])
-config["plm_learning_rate"] = tune.quniform(5e-6, 5e-4, 5e-7)
-config["task_learning_rate"] = tune.quniform(1e-5, 5e-3, 1e-5)
-config["adam_weight_decay"] = tune.quniform(1e-3, 0.5, 5e-4)
-config["warmup_ratio"] = tune.quniform(0.01, 0.99, 0.01)
+    config["asp_hidden_dim"] = tune.qrandint(100, 1000, 10)
+    config["asp_dropout_rate"] = 0.3
+    config["asp_init_std"] = 0.02
+    config["asp_activation"] = tune.choice(["relu", "gelu_fast", "tanh"])
+    config["beam_size"] = 1
+    config["use_labels"] = True
+    config["use_mentions"] = False
+    config["prepend_search_results"] = False
+    config["filter_exact_match"] = False
+    config["filter_same_document"] = False
+    config["search_data_type"] = "gazetteers"
+    config["search_algorithm"] = tune.choice(["bm25", "ann", "ann+reranking"])
+    config["search_topk"] = tune.qrandint(1, 40)
+    config["seed"] = 42
+    config["train_search_dropout"] = tune.quniform(0.0, 1.0, 0.05)
+    config["train_search_shuffle"] = False
+    config["task_learning_rate"] = tune.quniform(1e-5, 5e-3, 1e-5)
+    config["adam_weight_decay"] = tune.quniform(1e-3, 0.5, 5e-4)
+    config["warmup_ratio"] = tune.quniform(0.01, 0.99, 0.01)
 
-param_space = {}
-fixed_params = {}
-for key, value in config.items():
-    if isinstance(value, str) or isinstance(value, float) or isinstance(
-            value, int) or isinstance(value, bool) or value is None:
-        fixed_params[key] = value
-        for c in best_configs:
-            del c[key]
-    else:
-        param_space[key] = value
-        print(key)
+    param_space = {}
+    fixed_params = {}
+    for key, value in config.items():
+        if isinstance(value, str) or isinstance(value, float) or isinstance(
+                value, int) or isinstance(value, bool) or value is None:
+            fixed_params[key] = value
+            for c in best_configs:
+                del c[key]
+        else:
+            param_space[key] = value
+            print(key)
 
-reporter = tune.CLIReporter(
-    # parameter_columns=["batch_size"],
-    metric_columns=["val_f1", "training_iteration"])
+    for c in best_configs:
+        for key in list(c.keys()):
+            if key not in config:
+                del c[key]
 
-ng_search = NevergradSearch(optimizer=ng.optimizers.TwoPointsDE,
-                            metric="val_f1",
-                            mode="max",
-                            points_to_evaluate=best_configs)
+    reporter = tune.CLIReporter(
+        # parameter_columns=["batch_size"],
+        metric_columns=["val_f1", "training_iteration"])
 
-method = tune.with_resources(tune.with_parameters(run_tune_training,
-                                                  fixed_params=fixed_params),
-                             resources={
-                                 "cpu": 12,
-                                 "gpu": 1
-                             })
+    ng_search = NevergradSearch(optimizer=ng.optimizers.TwoPointsDE,
+                                metric="val_f1",
+                                mode="max",
+                                points_to_evaluate=best_configs)
 
-tuner = tune.Tuner(method,
-                   param_space=param_space,
-                   tune_config=tune.TuneConfig(metric="val_f1",
-                                               mode="max",
-                                               search_alg=ng_search,
-                                               num_samples=-1,
-                                               time_budget_s=4 * 60 * 60),
-                   run_config=air.RunConfig(local_dir=config["data_path"],
-                                            name="gazetteers",
-                                            progress_reporter=reporter))
-results = tuner.fit()
-print("Best hyperparameters found were: ", results.get_best_result().config)
+    method = tune.with_resources(tune.with_parameters(
+        run_tune_training, fixed_params=fixed_params),
+                                 resources={
+                                     "cpu": 12,
+                                     "gpu": 1
+                                 })
 
-with open(os.path.join(thesis_path, "finetuning", "gazetteers_result.pkl"),
-          "wb") as file:
-    pkl.dump(results, file)
+    tuner = tune.Tuner(method,
+                       param_space=param_space,
+                       tune_config=tune.TuneConfig(metric="val_f1",
+                                                   mode="max",
+                                                   search_alg=ng_search,
+                                                   num_samples=-1,
+                                                   time_budget_s=4 * 60 * 60),
+                       run_config=air.RunConfig(local_dir=config["data_path"],
+                                                name="gazetteers",
+                                                progress_reporter=reporter))
+    results = tuner.fit()
+    print("Best hyperparameters found were: ",
+          results.get_best_result().config)
+
+    with open(os.path.join(thesis_path, "finetuning", "gazetteers_result.pkl"),
+              "wb") as file:
+        pkl.dump(results, file)
+
+
+if __name__ == "__main__":
+    tune_gazetteers()

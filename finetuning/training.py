@@ -206,7 +206,7 @@ def prep_data(path, tokenizer, config: dict):
                 mask[:len(d) // 2] = 1
                 np.random.shuffle(mask)
                 docs.extend(
-                    [doc for m, doc in zip(mask.tolist(), d) if m == 1])
+                    [doc for m, doc in zip(mask.tolist(), d) if m == 0])
             else:
                 docs.extend(d)
     if config["search_data_type"] == "gazetteers":
