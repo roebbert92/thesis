@@ -32,7 +32,7 @@ def tune_sentences():
     config["search_algorithm"] = "ann"
     config["search_topk"] = 5
     config["seed"] = 42
-    config["num_epochs"] = 40
+    config["num_epochs"] = 24
     config["train_search_dropout"] = 0.0
     config["train_search_shuffle"] = False
 
@@ -44,10 +44,88 @@ def tune_sentences():
         'asp_activation': 'relu',
         'task_learning_rate': 0.001427004141277835,
         'adam_weight_decay': 0.3047154488657352,
-        'warmup_ratio': 0.9053807192033322,
+        'warmup_ratio': 0.5,
         'search_algorithm': 'bm25',
         'search_topk': 8,
         'train_search_dropout': 0.1211443957902944,
+        'plm_pretrained_name_or_path': 't5-base',
+        'plm_tokenizer_name': 't5-small',
+        'model_max_length': 4096,
+        'mention_start_token': '<m>',
+        'mention_end_token': '</m>',
+        'asp_dropout_rate': 0.3,
+        'asp_init_std': 0.02,
+        'num_labels': 6,
+        'max_nest_depth': 1,
+        'beam_size': 1,
+        'plm_learning_rate': 5e-05,
+        'plm_scheduler': 'linear_with_warmup',
+        'task_scheduler': 'linear_with_warmup',
+        'adam_eps': 1e-08,
+        'num_epochs': 40,
+        'gradient_accumulation_steps': 1,
+        'batch_size': 40,
+        'train_len': 3394,
+        'fused': True,
+        'use_labels': True,
+        'use_mentions': True,
+        'prepend_search_results': False,
+        'filter_exact_match': False,
+        'filter_same_document': False,
+        'search_data_type': 'sentences',
+        'seed': 42,
+        'train_search_shuffle': False,
+        'data_path': '/home/loebbert/projects/thesis/finetuning/tune',
+        'name': 'sentences',
+        'precision': 'bf16-mixed'
+    }, {
+        'asp_hidden_dim': 150,
+        'asp_activation': 'relu',
+        'task_learning_rate': 0.0003,
+        'adam_weight_decay': 0.2,
+        'warmup_ratio': 0.2,
+        'search_algorithm': 'bm25',
+        'search_topk': 8,
+        'train_search_dropout': 0.25,
+        'plm_pretrained_name_or_path': 't5-base',
+        'plm_tokenizer_name': 't5-small',
+        'model_max_length': 4096,
+        'mention_start_token': '<m>',
+        'mention_end_token': '</m>',
+        'asp_dropout_rate': 0.3,
+        'asp_init_std': 0.02,
+        'num_labels': 6,
+        'max_nest_depth': 1,
+        'beam_size': 1,
+        'plm_learning_rate': 5e-05,
+        'plm_scheduler': 'linear_with_warmup',
+        'task_scheduler': 'linear_with_warmup',
+        'adam_eps': 1e-08,
+        'num_epochs': 40,
+        'gradient_accumulation_steps': 1,
+        'batch_size': 40,
+        'train_len': 3394,
+        'fused': True,
+        'use_labels': True,
+        'use_mentions': True,
+        'prepend_search_results': False,
+        'filter_exact_match': False,
+        'filter_same_document': False,
+        'search_data_type': 'sentences',
+        'seed': 42,
+        'train_search_shuffle': False,
+        'data_path': '/home/loebbert/projects/thesis/finetuning/tune',
+        'name': 'sentences',
+        'precision': 'bf16-mixed'
+    }, {
+        'asp_hidden_dim': 150,
+        'asp_activation': 'relu',
+        'task_learning_rate': 0.00135,
+        'adam_weight_decay': 0.5,
+        'warmup_ratio': 0.2,
+        'search_algorithm': 'bm25',
+        'search_topk': 8,
+        'train_search_dropout': 0.22,
         'plm_pretrained_name_or_path': 't5-base',
         'plm_tokenizer_name': 't5-small',
         'model_max_length': 4096,
@@ -119,7 +197,7 @@ def tune_sentences():
         'precision': 'bf16-mixed'
     }]
 
-    config["asp_hidden_dim"] = tune.qrandint(100, 800, 10)
+    config["asp_hidden_dim"] = tune.qrandint(100, 250, 10)
     config["asp_dropout_rate"] = 0.3
     config["asp_init_std"] = 0.02
     config["asp_activation"] = tune.choice(["relu", "tanh"])
@@ -137,7 +215,7 @@ def tune_sentences():
     config["train_search_shuffle"] = False
     config["task_learning_rate"] = tune.quniform(1e-5, 5e-3, 1e-5)
     config["adam_weight_decay"] = tune.quniform(5e-4, 0.5, 5e-4)
-    config["warmup_ratio"] = tune.quniform(0.01, 0.99, 0.01)
+    config["warmup_ratio"] = tune.quniform(0.01, 0.5, 0.01)
 
     param_space = {}
     fixed_params = {}
@@ -160,7 +238,7 @@ def tune_sentences():
         # parameter_columns=["batch_size"],
         metric_columns=["val_f1", "training_iteration"])
 
-    ng_search = NevergradSearch(optimizer=ng.optimizers.TwoPointsDE,
+    ng_search = NevergradSearch(optimizer=ng.optimizers.BayesOptimBO,
                                 metric="val_f1",
                                 mode="max",
                                 points_to_evaluate=best_configs)

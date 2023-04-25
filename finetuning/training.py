@@ -198,7 +198,10 @@ def prep_data(path, tokenizer, config: dict):
     documents = []
     # prepare database based on data type
     docs = []
-    for part in ["train", "dev"]:
+    for part in [
+            "train",
+            #"dev"
+    ]:
         with open(files[part], "r", encoding="utf-8") as file:
             d = json.load(file)
             if part == "dev":
@@ -220,7 +223,8 @@ def prep_data(path, tokenizer, config: dict):
             search.get_node("ANNRetriever"),  # type: ignore
             update_existing_embeddings=False)
 
-    filters = {"train": ["train"], "dev": ["train", "dev"]}
+    #filters = {"train": ["train"], "dev": ["train", "dev"]}
+    filters = {"train": ["train"], "dev": ["train"]}
 
     augment_dataset(tokenizer, files, filters, search, config["use_labels"],
                     config["use_mentions"], config["prepend_search_results"],

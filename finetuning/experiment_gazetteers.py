@@ -182,7 +182,7 @@ def tune_gazetteers():
     config["train_search_shuffle"] = False
     config["task_learning_rate"] = tune.quniform(1e-5, 5e-3, 1e-5)
     config["adam_weight_decay"] = tune.quniform(5e-4, 0.5, 5e-4)
-    config["warmup_ratio"] = tune.quniform(0.01, 0.99, 0.01)
+    config["warmup_ratio"] = tune.quniform(0.01, 0.5, 0.01)
 
     param_space = {}
     fixed_params = {}
@@ -205,7 +205,7 @@ def tune_gazetteers():
         # parameter_columns=["batch_size"],
         metric_columns=["val_f1", "training_iteration"])
 
-    ng_search = NevergradSearch(optimizer=ng.optimizers.TwoPointsDE,
+    ng_search = NevergradSearch(optimizer=ng.optimizers.BayesOptimBO,
                                 metric="val_f1",
                                 mode="max",
                                 points_to_evaluate=best_configs)
