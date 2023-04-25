@@ -38,7 +38,7 @@ def tune_gazetteers():
     config["search_algorithm"] = "bm25"
     config["search_topk"] = 10
     config["seed"] = 42
-    config["num_epochs"] = 40
+    config["num_epochs"] = 24
     config["train_search_dropout"] = 0.0
     config["train_search_shuffle"] = False
 
@@ -205,10 +205,11 @@ def tune_gazetteers():
         # parameter_columns=["batch_size"],
         metric_columns=["val_f1", "training_iteration"])
 
-    ng_search = NevergradSearch(optimizer=ng.optimizers.BayesOptimBO,
-                                metric="val_f1",
-                                mode="max",
-                                points_to_evaluate=best_configs)
+    ng_search = NevergradSearch(
+        optimizer=ng.optimizers.RecombiningPortfolioDiscreteOnePlusOne,
+        metric="val_f1",
+        mode="max",
+        points_to_evaluate=best_configs)
 
     method = tune.with_resources(tune.with_parameters(
         run_tune_training, fixed_params=fixed_params),
