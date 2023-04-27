@@ -13,34 +13,62 @@ thesis_path = "/" + os.path.join(
 sys.path.append(thesis_path)
 
 from data_similarity.cosine import dataset_similarity
+from data_similarity.exact_match import dataset_overlap
 
 
-def get_similarity_data(dataset_files: dict) -> pd.DataFrame:
-    records = []
+def get_data(dataset_files: dict):
+    similarities = []
+    overlaps = []
     for left, right in combinations_with_replacement(dataset_files, 2):
         with open(dataset_files[left], encoding="utf-8") as file:
             left_dataset = json.load(file)
         if left == right:
             similarity = dataset_similarity(left_dataset)
+            overlap = dataset_overlap(left_dataset)
         else:
             with open(dataset_files[right], encoding="utf-8") as file:
                 right_dataset = json.load(file)
             similarity = dataset_similarity(left_dataset, right_dataset)
+            overlap = dataset_overlap(left_dataset, right_dataset)
         for data_type, data in similarity.items():
-            records.append({
+            similarities.append({
                 "first": left,
                 "second": right,
                 "data_type": data_type,
                 "cosine_similarity": data[0]
             })
-            records.append({
+            similarities.append({
                 "first": right,
                 "second": left,
                 "data_type": data_type,
                 "cosine_similarity": data[1]
             })
+        overlaps.append({
+            "first": left,
+            "second": right,
+            "overlap": overlap[0]
+        })
+        overlaps.append({
+            "first": right,
+            "second": left,
+            "overlap": overlap[1]
+        })
 
-    return pd.DataFrame.from_records(records)
+    return pd.DataFrame.from_records(similarities), pd.DataFrame.from_records(
+        overlaps)
+
+
+def visualize_overlap_data(data: pd.DataFrame):
+    conf_matrix = data.pivot_table("overlap", index="first", columns="second")
+    datasets = conf_matrix.columns.to_list()
+    cmp_dataset_names = cmp_to_key(compare_dataset_names)
+    datasets.sort(key=cmp_dataset_names)
+    conf_matrix = conf_matrix[datasets].sort_index(
+        level="first", key=lambda x: pd.Series([datasets.index(y) for y in x]))
+    sns_plot = sns.heatmap(conf_matrix,
+                           annot=True,
+                           cmap=sns.color_palette("Blues", as_cmap=True))
+    return sns_plot.get_figure()
 
 
 def visualize_similarity_data(data: pd.DataFrame, data_type: str):
@@ -85,13 +113,18 @@ if __name__ == "__main__":
         "/home/loebbert/projects/thesis/data/mlowner/en/lowner_test.json",
     }
 
-    wnut_lowner_sim = get_similarity_data(dataset_files)
+    wnut_lowner_sim, wnut_lowner_overlap = get_data(dataset_files)
 
     wnut_lowner_sim.to_csv(os.path.join(thesis_path, "data_similarity",
                                         "wnut_lowner_sim.csv"),
                            sep=";",
                            decimal=",")
+    wnut_lowner_overlap.to_csv(os.path.join(thesis_path, "data_similarity",
+                                            "wnut_lowner_overlap.csv"),
+                               sep=";",
+                               decimal=",")
 
+    plt.figure(figsize=(10, 8))
     plot = visualize_similarity_data(wnut_lowner_sim, "sentences")
     plot.suptitle("WNUT + LOWNER sentences similarity")
     plt.savefig(os.path.join(thesis_path, "data_similarity",
@@ -99,9 +132,22 @@ if __name__ == "__main__":
                 dpi=150,
                 format="png")
 
+    plt.close()
+
+    plt.figure(figsize=(10, 8))
     plot = visualize_similarity_data(wnut_lowner_sim, "gazetteers")
     plot.suptitle("WNUT + LOWNER gazetteers similarity")
     plt.savefig(os.path.join(thesis_path, "data_similarity",
                              "wnut_lowner_gazetteers.png"),
+                dpi=150,
+                format="png")
+
+    plt.close()
+
+    plt.figure(figsize=(10, 8))
+    plot = visualize_overlap_data(wnut_lowner_overlap)
+    plot.suptitle("WNUT + LOWNER entity overlap")
+    plt.savefig(os.path.join(thesis_path, "data_similarity",
+                             "wnut_lowner_overlap.png"),
                 dpi=150,
                 format="png")
