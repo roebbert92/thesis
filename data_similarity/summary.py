@@ -1,5 +1,6 @@
+from typing import List
 import pandas as pd
-from itertools import combinations_with_replacement
+from itertools import combinations_with_replacement, product
 import json
 import sys
 import os
@@ -16,10 +17,12 @@ from data_similarity.cosine import dataset_similarity
 from data_similarity.exact_match import dataset_overlap
 
 
-def get_data(dataset_files: dict):
+def get_data(dataset_files: dict, already_seen: List[tuple] = []):
     similarities = []
     overlaps = []
     for left, right in combinations_with_replacement(dataset_files, 2):
+        if (left, right) in already_seen:
+            continue
         with open(dataset_files[left], encoding="utf-8") as file:
             left_dataset = json.load(file)
         if left == right:
@@ -99,6 +102,12 @@ def compare_dataset_names(a, b):
 
 if __name__ == "__main__":
     dataset_files = {
+        "conll03_train":
+        "/home/loebbert/projects/thesis/data/conll03/conll03_train.json",
+        "conll03_dev":
+        "/home/loebbert/projects/thesis/data/conll03/conll03_dev.json",
+        "conll03_test":
+        "/home/loebbert/projects/thesis/data/conll03/conll03_test.json",
         "wnut_train":
         "/home/loebbert/projects/thesis/data/wnut/wnut_train.json",
         "wnut_dev":
@@ -113,14 +122,41 @@ if __name__ == "__main__":
         "/home/loebbert/projects/thesis/data/mlowner/en/lowner_test.json",
     }
 
-    wnut_lowner_sim, wnut_lowner_overlap = get_data(dataset_files)
+    if os.path.exists(
+            os.path.join(thesis_path, "data_similarity",
+                         "wnut_lowner_sim.csv")):
+        wnut_lowner_sim = pd.read_csv(os.path.join(thesis_path,
+                                                   "data_similarity",
+                                                   "wnut_lowner_sim.csv"),
+                                      sep=";",
+                                      decimal=",")
+        wnut_lowner_overlap = pd.read_csv(os.path.join(
+            thesis_path, "data_similarity", "wnut_lowner_overlap.csv"),
+                                          sep=";",
+                                          decimal=",")
+
+        already_seen = list(
+            product(wnut_lowner_overlap["first"].unique(), repeat=2))
+
+        conll_wnut_lowner_sim, conll_wnut_lowner_overlap = get_data(
+            dataset_files, already_seen)
+
+        sims = wnut_lowner_sim.to_dict(orient="records")
+        sims.extend(conll_wnut_lowner_sim.to_dict("records"))
+        wnut_lowner_sim = pd.DataFrame.from_records(sims)
+
+        overlaps = wnut_lowner_overlap.to_dict(orient="records")
+        overlaps.extend(conll_wnut_lowner_overlap.to_dict("records"))
+        wnut_lowner_overlap = pd.DataFrame.from_records(overlaps)
+    else:
+        wnut_lowner_sim, wnut_lowner_overlap = get_data(dataset_files)
 
     wnut_lowner_sim.to_csv(os.path.join(thesis_path, "data_similarity",
-                                        "wnut_lowner_sim.csv"),
+                                        "conll_wnut_lowner_sim.csv"),
                            sep=";",
                            decimal=",")
     wnut_lowner_overlap.to_csv(os.path.join(thesis_path, "data_similarity",
-                                            "wnut_lowner_overlap.csv"),
+                                            "conll_wnut_lowner_overlap.csv"),
                                sep=";",
                                decimal=",")
 
@@ -128,7 +164,7 @@ if __name__ == "__main__":
     plot = visualize_similarity_data(wnut_lowner_sim, "sentences")
     plot.suptitle("WNUT + LOWNER sentences similarity")
     plt.savefig(os.path.join(thesis_path, "data_similarity",
-                             "wnut_lowner_sentences.png"),
+                             "conll_wnut_lowner_sentences.png"),
                 dpi=150,
                 format="png")
 
@@ -138,7 +174,7 @@ if __name__ == "__main__":
     plot = visualize_similarity_data(wnut_lowner_sim, "gazetteers")
     plot.suptitle("WNUT + LOWNER gazetteers similarity")
     plt.savefig(os.path.join(thesis_path, "data_similarity",
-                             "wnut_lowner_gazetteers.png"),
+                             "conll_wnut_lowner_gazetteers.png"),
                 dpi=150,
                 format="png")
 
@@ -148,6 +184,6 @@ if __name__ == "__main__":
     plot = visualize_overlap_data(wnut_lowner_overlap)
     plot.suptitle("WNUT + LOWNER entity overlap")
     plt.savefig(os.path.join(thesis_path, "data_similarity",
-                             "wnut_lowner_overlap.png"),
+                             "conll_wnut_lowner_overlap.png"),
                 dpi=150,
                 format="png")
