@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Dict, Optional, List, Tuple
 from sentence_transformers import SentenceTransformer
 import torch
 from torch import Tensor
@@ -78,24 +78,26 @@ def compute_similarity(fn: torch.nn.Module,
     avg_first_to_second = torch.mean(first_to_second).cpu().numpy()
     avg_second_to_first = torch.mean(second_to_first).cpu().numpy()
 
-    return float(avg_first_to_second), float(avg_second_to_first)
+    return float(avg_first_to_second), first_to_second.cpu().numpy(), float(
+        avg_second_to_first), second_to_first.cpu().numpy()
 
 
-def get_embeddings(model: SentenceTransformer, first: List[str],
-                   second: List[str], is_same_dataset: bool):
-    first_embed: Tensor = model.encode(first,
+def get_embeddings(model: SentenceTransformer, first: List[Tuple[str, str]],
+                   second: List[Tuple[str, str]], is_same_dataset: bool):
+    first_embed: Tensor = model.encode([f[1] for f in first],
                                        convert_to_numpy=False,
                                        convert_to_tensor=True)  # type: ignore
     if is_same_dataset:
         second_embed = first_embed
     else:
         second_embed: Tensor = model.encode(
-            second, convert_to_numpy=False,
+            [s[1] for s in second],
+            convert_to_numpy=False,
             convert_to_tensor=True)  # type: ignore
     return first_embed, second_embed
 
 
-def get_gazetteers(dataset: List[dict]) -> List[str]:
+def get_gazetteers(dataset: List[dict]) -> List[Tuple[str, str]]:
     entities = set()
     for item in dataset:
         for entity in item["entities"]:
@@ -104,13 +106,13 @@ def get_gazetteers(dataset: List[dict]) -> List[str]:
             entities.add(
                 (" ".join(item["tokens"][entity["start"]:entity["end"]]),
                  entity["type"]))
-    return [e[0] for e in entities]
+    return [("_".join(e), e[0]) for e in entities]
 
 
-def get_sentences(dataset: List[dict]) -> List[str]:
+def get_sentences(dataset: List[dict]) -> List[Tuple[str, str]]:
     sentences = []
     for item in dataset:
-        sentences.append(" ".join(item["tokens"]))
+        sentences.append((item["doc_id"], " ".join(item["tokens"])))
     return sentences
 
 
@@ -144,6 +146,10 @@ def dataset_similarity(first: List[dict], second: Optional[List[dict]] = None):
                                            device)
         del first_gaz_embed
         del second_gaz_embed
+        gazetteer_sim[1] = [
+            (gaz[0], sim)
+            for gaz, sim in zip(first_gazetteers, gazetteer_sim[1].tolist())
+        ]
 
         first_sent_embed, second_sent_embed = get_embeddings(
             model, first_sentences, second_sentences, is_same_dataset)
@@ -156,5 +162,4 @@ def dataset_similarity(first: List[dict], second: Optional[List[dict]] = None):
         if device == "cuda":
             torch.cuda.empty_cache()
 
-    # repeat for other side if not the same path
     return {"gazetteers": gazetteer_sim, "sentences": sentence_sim}

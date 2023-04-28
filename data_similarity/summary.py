@@ -18,6 +18,7 @@ from data_similarity.exact_match import dataset_overlap
 
 
 def get_data(dataset_files: dict, already_seen: List[tuple] = []):
+    mean_similarities = []
     similarities = []
     overlaps = []
     for left, right in combinations_with_replacement(dataset_files, 2):
@@ -34,17 +35,17 @@ def get_data(dataset_files: dict, already_seen: List[tuple] = []):
             similarity = dataset_similarity(left_dataset, right_dataset)
             overlap = dataset_overlap(left_dataset, right_dataset)
         for data_type, data in similarity.items():
-            similarities.append({
+            mean_similarities.append({
                 "first": left,
                 "second": right,
                 "data_type": data_type,
                 "cosine_similarity": data[0]
             })
-            similarities.append({
+            mean_similarities.append({
                 "first": right,
                 "second": left,
                 "data_type": data_type,
-                "cosine_similarity": data[1]
+                "cosine_similarity": data[2]
             })
         overlaps.append({
             "first": left,
@@ -57,8 +58,8 @@ def get_data(dataset_files: dict, already_seen: List[tuple] = []):
             "overlap": overlap[1]
         })
 
-    return pd.DataFrame.from_records(similarities), pd.DataFrame.from_records(
-        overlaps)
+    return pd.DataFrame.from_records(
+        mean_similarities), pd.DataFrame.from_records(overlaps)
 
 
 def visualize_overlap_data(data: pd.DataFrame):
