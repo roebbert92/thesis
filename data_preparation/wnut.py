@@ -11,10 +11,11 @@ class Entity():
     end: int
 
 
-def wnut_to_json(train_file: str,
-                 dev_file: str,
-                 test_file: str,
-                 dir_path: Optional[str] = None):
+def bio_to_json(dataset_name: str,
+                train_file: str,
+                dev_file: str,
+                test_file: str,
+                dir_path: Optional[str] = None):
     if dir_path is None:
         dir_path = os.path.dirname(train_file)
 
@@ -114,12 +115,20 @@ def wnut_to_json(train_file: str,
             dataset.append(doc)
 
         for doc_id, doc in enumerate(dataset):
-            doc["doc_id"] = "wnut_" + name + "_" + str(doc_id)
+            doc["doc_id"] = dataset_name + "_" + name + "_" + str(doc_id)
 
-        with open(f"{dir_path}/wnut_{name}.json", "w",
+        with open(f"{dir_path}/{dataset_name}_{name}.json",
+                  "w",
                   encoding="utf-8") as json_file:
             json.dump(dataset, json_file)
 
-    with open(f"{dir_path}/wnut_types.json", "w",
+    with open(f"{dir_path}/{dataset_name}_types.json", "w",
               encoding="utf-8") as json_file:
         json.dump({"entities": wnut_types}, json_file)
+
+
+def wnut_to_json(train_file: str,
+                 dev_file: str,
+                 test_file: str,
+                 dir_path: Optional[str] = None):
+    bio_to_json("wnut", train_file, dev_file, test_file, dir_path)

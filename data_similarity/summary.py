@@ -100,7 +100,7 @@ def compare_dataset_names(a, b):
     return scores[a2] - scores[b2]
 
 
-if __name__ == "__main__":
+def conll_lowner_wnut():
     dataset_files = {
         "conll03_train":
         "/home/loebbert/projects/thesis/data/conll03/conll03_train.json",
@@ -185,5 +185,103 @@ if __name__ == "__main__":
     plot.suptitle("WNUT + LOWNER entity overlap")
     plt.savefig(os.path.join(thesis_path, "data_similarity",
                              "conll_wnut_lowner_overlap.png"),
+                dpi=150,
+                format="png")
+
+
+def cross_ner():
+    dataset_files = {
+        "conll03_train":
+        "/home/loebbert/projects/thesis/data/conll03/conll03_train.json",
+        "conll03_dev":
+        "/home/loebbert/projects/thesis/data/conll03/conll03_dev.json",
+        "conll03_test":
+        "/home/loebbert/projects/thesis/data/conll03/conll03_test.json",
+        "wnut_train":
+        "/home/loebbert/projects/thesis/data/wnut/wnut_train.json",
+        "wnut_dev":
+        "/home/loebbert/projects/thesis/data/wnut/wnut_dev.json",
+        "wnut_test":
+        "/home/loebbert/projects/thesis/data/wnut/wnut_test.json",
+        "ai_train":
+        "/home/loebbert/projects/thesis/data/crossner/ai/ai_train.json",
+        "ai_dev":
+        "/home/loebbert/projects/thesis/data/crossner/ai/ai_dev.json",
+        "ai_test":
+        "/home/loebbert/projects/thesis/data/crossner/ai/ai_test.json",
+        "literature_train":
+        "/home/loebbert/projects/thesis/data/crossner/literature/literature_train.json",
+        "literature_dev":
+        "/home/loebbert/projects/thesis/data/crossner/literature/literature_dev.json",
+        "literature_test":
+        "/home/loebbert/projects/thesis/data/crossner/literature/literature_test.json",
+        "music_train":
+        "/home/loebbert/projects/thesis/data/crossner/music/music_train.json",
+        "music_dev":
+        "/home/loebbert/projects/thesis/data/crossner/music/music_dev.json",
+        "music_test":
+        "/home/loebbert/projects/thesis/data/crossner/music/music_test.json",
+        "politics_train":
+        "/home/loebbert/projects/thesis/data/crossner/politics/politics_train.json",
+        "politics_dev":
+        "/home/loebbert/projects/thesis/data/crossner/politics/politics_dev.json",
+        "politics_test":
+        "/home/loebbert/projects/thesis/data/crossner/politics/politics_test.json",
+        "science_train":
+        "/home/loebbert/projects/thesis/data/crossner/science/science_train.json",
+        "science_dev":
+        "/home/loebbert/projects/thesis/data/crossner/science/science_dev.json",
+        "science_test":
+        "/home/loebbert/projects/thesis/data/crossner/science/science_test.json",
+    }
+
+    if os.path.exists(
+            os.path.join(thesis_path, "data_similarity", "cross_sim.csv")):
+        cross_sim = pd.read_csv(os.path.join(thesis_path, "data_similarity",
+                                             "cross_sim.csv"),
+                                sep=";",
+                                decimal=",")
+        cross_overlap = pd.read_csv(os.path.join(thesis_path,
+                                                 "data_similarity",
+                                                 "cross_overlap.csv"),
+                                    sep=";",
+                                    decimal=",")
+    else:
+        cross_sim, cross_overlap = get_data(dataset_files)
+
+    cross_sim.to_csv(os.path.join(thesis_path, "data_similarity",
+                                  "cross_sim.csv"),
+                     sep=";",
+                     decimal=",")
+    cross_overlap.to_csv(os.path.join(thesis_path, "data_similarity",
+                                      "cross_overlap.csv"),
+                         sep=";",
+                         decimal=",")
+
+    plt.figure(figsize=(15, 15))
+    plot = visualize_similarity_data(cross_sim, "sentences")
+    plot.suptitle("CrossNER sentences similarity")
+    plt.savefig(os.path.join(thesis_path, "data_similarity",
+                             "cross_sentences.png"),
+                dpi=150,
+                format="png")
+
+    plt.close()
+
+    plt.figure(figsize=(15, 15))
+    plot = visualize_similarity_data(cross_sim, "gazetteers")
+    plot.suptitle("CrossNER gazetteers similarity")
+    plt.savefig(os.path.join(thesis_path, "data_similarity",
+                             "cross_gazetteers.png"),
+                dpi=150,
+                format="png")
+
+    plt.close()
+
+    plt.figure(figsize=(15, 15))
+    plot = visualize_overlap_data(cross_overlap)
+    plot.suptitle("CrossNER entity overlap")
+    plt.savefig(os.path.join(thesis_path, "data_similarity",
+                             "cross_overlap.png"),
                 dpi=150,
                 format="png")
