@@ -20,11 +20,10 @@ def overlap_metrics(first: Counter, second: Counter):
     total_count = len(overlap)
     if total_count == 0:
         return 0.0, 0.0
-    rel_first = sum([first[item] for item in overlap]) / sum(
+    yield "first", sum([first[item] for item in overlap]) / sum(
         [value for value in first.values()])
-    rel_second = sum([second[item] for item in overlap]) / sum(
+    yield "second", sum([second[item] for item in overlap]) / sum(
         [value for value in second.values()])
-    return rel_first, rel_second
 
 
 def dataset_overlap(first: List[dict], second: Optional[List[dict]] = None):

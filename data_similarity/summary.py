@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from locale import strcoll
 from functools import cmp_to_key
+import numpy as np
 
 thesis_path = "/" + os.path.join(
     *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-1])
@@ -18,48 +19,42 @@ from data_similarity.exact_match import dataset_overlap
 
 
 def get_data(dataset_files: dict, already_seen: List[tuple] = []):
-    mean_similarities = []
     similarities = []
     overlaps = []
+    cache = {}
     for left, right in combinations_with_replacement(dataset_files, 2):
         if (left, right) in already_seen:
             continue
         with open(dataset_files[left], encoding="utf-8") as file:
             left_dataset = json.load(file)
         if left == right:
-            similarity = dataset_similarity(left_dataset)
+            similarity = dataset_similarity(cache, left, left_dataset)
             overlap = dataset_overlap(left_dataset)
         else:
             with open(dataset_files[right], encoding="utf-8") as file:
                 right_dataset = json.load(file)
-            similarity = dataset_similarity(left_dataset, right_dataset)
+            similarity = dataset_similarity(cache, left, left_dataset, right,
+                                            right_dataset)
             overlap = dataset_overlap(left_dataset, right_dataset)
-        for data_type, data in similarity.items():
-            mean_similarities.append({
-                "first": left,
-                "second": right,
+        for direction, data_type, data_ids, data in similarity:
+            first = left if direction == "first" else right
+            second = right if direction == "first" else left
+            similarities.extend([{
+                "first": first,
+                "second": second,
                 "data_type": data_type,
-                "cosine_similarity": data[0]
+                "data_id": id,
+                "cosine_similarity": d
+            } for id, d in zip(data_ids, data)])
+        for direction, data in overlap:
+            overlaps.append({
+                "first": left if direction == "first" else right,
+                "second": right if direction == "first" else left,
+                "overlap": data
             })
-            mean_similarities.append({
-                "first": right,
-                "second": left,
-                "data_type": data_type,
-                "cosine_similarity": data[2]
-            })
-        overlaps.append({
-            "first": left,
-            "second": right,
-            "overlap": overlap[0]
-        })
-        overlaps.append({
-            "first": right,
-            "second": left,
-            "overlap": overlap[1]
-        })
 
-    return pd.DataFrame.from_records(
-        mean_similarities), pd.DataFrame.from_records(overlaps)
+    return pd.DataFrame.from_records(similarities), pd.DataFrame.from_records(
+        overlaps)
 
 
 def visualize_overlap_data(data: pd.DataFrame):
@@ -77,7 +72,7 @@ def visualize_overlap_data(data: pd.DataFrame):
 
 def visualize_similarity_data(data: pd.DataFrame, data_type: str):
     conf_matrix = data.loc[data["data_type"] == data_type].pivot_table(
-        "cosine_similarity", index="first", columns="second")
+        "cosine_similarity", index="first", columns="second", aggfunc=np.mean)
     datasets = conf_matrix.columns.to_list()
     cmp_dataset_names = cmp_to_key(compare_dataset_names)
     datasets.sort(key=cmp_dataset_names)
@@ -130,11 +125,11 @@ def conll_lowner_wnut():
                                                    "data_similarity",
                                                    "wnut_lowner_sim.csv"),
                                       sep=";",
-                                      decimal=",")
+                                      decimal=",").reset_index()
         wnut_lowner_overlap = pd.read_csv(os.path.join(
             thesis_path, "data_similarity", "wnut_lowner_overlap.csv"),
                                           sep=";",
-                                          decimal=",")
+                                          decimal=",").reset_index()
 
         already_seen = list(
             product(wnut_lowner_overlap["first"].unique(), repeat=2))
@@ -151,15 +146,17 @@ def conll_lowner_wnut():
         wnut_lowner_overlap = pd.DataFrame.from_records(overlaps)
     else:
         wnut_lowner_sim, wnut_lowner_overlap = get_data(dataset_files)
+    wnut_lowner_sim["cosine_similarity"] = wnut_lowner_sim[
+        "cosine_similarity"].clip(-1, 1)
 
     wnut_lowner_sim.to_csv(os.path.join(thesis_path, "data_similarity",
                                         "conll_wnut_lowner_sim.csv"),
                            sep=";",
-                           decimal=",")
+                           decimal=",", index=False)
     wnut_lowner_overlap.to_csv(os.path.join(thesis_path, "data_similarity",
                                             "conll_wnut_lowner_overlap.csv"),
                                sep=";",
-                               decimal=",")
+                               decimal=",", index=False)
 
     plt.figure(figsize=(10, 8))
     plot = visualize_similarity_data(wnut_lowner_sim, "sentences")
@@ -241,23 +238,26 @@ def cross_ner():
         cross_sim = pd.read_csv(os.path.join(thesis_path, "data_similarity",
                                              "cross_sim.csv"),
                                 sep=";",
-                                decimal=",")
+                                decimal=",").reset_index()
         cross_overlap = pd.read_csv(os.path.join(thesis_path,
                                                  "data_similarity",
                                                  "cross_overlap.csv"),
                                     sep=";",
-                                    decimal=",")
+                                    decimal=",").reset_index()
     else:
         cross_sim, cross_overlap = get_data(dataset_files)
+    cross_sim["cosine_similarity"] = cross_sim["cosine_similarity"].clip(-1, 1)
 
     cross_sim.to_csv(os.path.join(thesis_path, "data_similarity",
                                   "cross_sim.csv"),
                      sep=";",
-                     decimal=",")
+                     decimal=",",
+                     index=False)
     cross_overlap.to_csv(os.path.join(thesis_path, "data_similarity",
                                       "cross_overlap.csv"),
                          sep=";",
-                         decimal=",")
+                         decimal=",",
+                         index=False)
 
     plt.figure(figsize=(15, 15))
     plot = visualize_similarity_data(cross_sim, "sentences")
