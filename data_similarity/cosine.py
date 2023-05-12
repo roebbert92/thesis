@@ -6,8 +6,17 @@ from tqdm import tqdm
 
 
 def batched_similarity(fn: torch.nn.Module, x_tensors: Tensor,
-                       compare_tensors: Tensor, scores: Tensor, idx: int):
-    sims = fn(x_tensors, compare_tensors)
+                       compare_tensors: Tensor, scores: Tensor, idx: int,
+                       set_batch_size: int):
+    if set_batch_size > 1:
+        _sims = []
+        for x_tensor, compare_tensor in zip(
+                torch.tensor_split(x_tensors, set_batch_size, dim=1),
+                torch.tensor_split(compare_tensors, set_batch_size, dim=1)):
+            _sims.append(fn(x_tensor, compare_tensor))
+        sims = torch.cat(_sims, dim=-1)
+    else:
+        sims = fn(x_tensors, compare_tensors)
     best_scores = torch.max(sims, dim=-1).values
     len_scores = best_scores.shape[0]
     scores[idx - len_scores:idx] = best_scores
@@ -18,9 +27,11 @@ def compute_similarity(fn: torch.nn.Module,
                        second_embed: Tensor,
                        is_same_dataset: bool,
                        device: str,
-                       batch_size: int = 20):
+                       batch_size: int = 20,
+                       max_set_size: int = 3000):
     embedding_dim = first_embed.shape[1]
     set_size = len(second_embed) - 1 if is_same_dataset else len(second_embed)
+    set_batch_size = set_size // max_set_size + 1
     first_to_second = torch.empty((len(first_embed), ), device=device)
     x_tensors = torch.empty((batch_size, set_size, embedding_dim),
                             device=device)
@@ -34,7 +45,7 @@ def compute_similarity(fn: torch.nn.Module,
         batch_idx = idx % batch_size
         if idx > 0 and batch_idx == 0:
             batched_similarity(fn, x_tensors, compare_tensors, first_to_second,
-                               idx)
+                               idx, set_batch_size)
         x_tensors[batch_idx] = x.repeat((set_size, 1))
         if is_same_dataset:
             indices = torch.tensor(
@@ -48,7 +59,7 @@ def compute_similarity(fn: torch.nn.Module,
     if batch_idx > 0:
         batched_similarity(fn, x_tensors[:batch_idx + 1],
                            compare_tensors[:batch_idx + 1], first_to_second,
-                           len(first_embed))
+                           len(first_embed), set_batch_size)
 
     yield "first_to_second", first_to_second.cpu().numpy().tolist()
 
@@ -60,6 +71,7 @@ def compute_similarity(fn: torch.nn.Module,
                                 device=device)
         compare_tensors = torch.empty(
             (batch_size, len(first_embed), embedding_dim), device=device)
+        set_batch_size = len(first_embed) // max_set_size + 1
         batch_idx = 0
         for idx, x in tqdm(enumerate(second_embed),
                            total=len(second_embed),
@@ -67,14 +79,15 @@ def compute_similarity(fn: torch.nn.Module,
             batch_idx = idx % batch_size
             if idx > 0 and batch_idx == 0:
                 batched_similarity(fn, x_tensors, compare_tensors,
-                                   second_to_first, idx)
+                                   second_to_first, idx, set_batch_size)
             x_tensors[batch_idx] = x.repeat((len(first_embed), 1))
             compare_tensors[batch_idx] = first_embed
 
         if batch_idx > 0:
             batched_similarity(fn, x_tensors[:batch_idx + 1],
                                compare_tensors[:batch_idx + 1],
-                               second_to_first, len(second_embed))
+                               second_to_first, len(second_embed),
+                               set_batch_size)
 
     # avg
     # avg_first_to_second = torch.mean(first_to_second).cpu().numpy()
@@ -134,8 +147,10 @@ def dataset_similarity(cache: Dict[str, Tensor],
                        second: Optional[List[dict]] = None):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2",
-                                device=device)
+    model = SentenceTransformer(
+        "sentence-transformers/all-mpnet-base-v2"
+        if device == "cuda" else "sentence-transformers/all-MiniLM-L6-v2",
+        device=device)
     cosine = torch.nn.CosineSimilarity(dim=-1)
 
     is_same_dataset = second is None

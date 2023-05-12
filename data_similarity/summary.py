@@ -99,35 +99,35 @@ def compare_dataset_names(a, b):
 def conll_lowner_wnut():
     dataset_files = {
         "conll03_train":
-        "/home/loebbert/projects/thesis/data/conll03/conll03_train.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/conll03/conll03_train.json",
         "conll03_dev":
-        "/home/loebbert/projects/thesis/data/conll03/conll03_dev.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/conll03/conll03_dev.json",
         "conll03_test":
-        "/home/loebbert/projects/thesis/data/conll03/conll03_test.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/conll03/conll03_test.json",
         "wnut_train":
-        "/home/loebbert/projects/thesis/data/wnut/wnut_train.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/wnut/wnut_train.json",
         "wnut_dev":
-        "/home/loebbert/projects/thesis/data/wnut/wnut_dev.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/wnut/wnut_dev.json",
         "wnut_test":
-        "/home/loebbert/projects/thesis/data/wnut/wnut_test.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/wnut/wnut_test.json",
         "lowner_train":
-        "/home/loebbert/projects/thesis/data/mlowner/en/lowner_train.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/mlowner/lowner_train.json",
         "lowner_dev":
-        "/home/loebbert/projects/thesis/data/mlowner/en/lowner_dev.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/mlowner/lowner_dev.json",
         "lowner_test":
-        "/home/loebbert/projects/thesis/data/mlowner/en/lowner_test.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/mlowner/lowner_test.json",
     }
 
     if os.path.exists(
             os.path.join(thesis_path, "data_similarity",
-                         "wnut_lowner_sim.csv")):
+                         "conll_wnut_lowner_sim.csv")):
         wnut_lowner_sim = pd.read_csv(os.path.join(thesis_path,
                                                    "data_similarity",
-                                                   "wnut_lowner_sim.csv"),
+                                                   "conll_wnut_lowner_sim.csv"),
                                       sep=";",
                                       decimal=",").reset_index()
         wnut_lowner_overlap = pd.read_csv(os.path.join(
-            thesis_path, "data_similarity", "wnut_lowner_overlap.csv"),
+            thesis_path, "data_similarity", "conll_wnut_lowner_overlap.csv"),
                                           sep=";",
                                           decimal=",").reset_index()
 
@@ -190,47 +190,47 @@ def conll_lowner_wnut():
 def cross_ner():
     dataset_files = {
         "conll03_train":
-        "/home/loebbert/projects/thesis/data/conll03/conll03_train.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/conll03/conll03_train.json",
         "conll03_dev":
-        "/home/loebbert/projects/thesis/data/conll03/conll03_dev.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/conll03/conll03_dev.json",
         "conll03_test":
-        "/home/loebbert/projects/thesis/data/conll03/conll03_test.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/conll03/conll03_test.json",
         "wnut_train":
-        "/home/loebbert/projects/thesis/data/wnut/wnut_train.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/wnut/wnut_train.json",
         "wnut_dev":
-        "/home/loebbert/projects/thesis/data/wnut/wnut_dev.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/wnut/wnut_dev.json",
         "wnut_test":
-        "/home/loebbert/projects/thesis/data/wnut/wnut_test.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/wnut/wnut_test.json",
         "ai_train":
-        "/home/loebbert/projects/thesis/data/crossner/ai/ai_train.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/crossner/ai/ai_train.json",
         "ai_dev":
-        "/home/loebbert/projects/thesis/data/crossner/ai/ai_dev.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/crossner/ai/ai_dev.json",
         "ai_test":
-        "/home/loebbert/projects/thesis/data/crossner/ai/ai_test.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/crossner/ai/ai_test.json",
         "literature_train":
-        "/home/loebbert/projects/thesis/data/crossner/literature/literature_train.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/crossner/literature/literature_train.json",
         "literature_dev":
-        "/home/loebbert/projects/thesis/data/crossner/literature/literature_dev.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/crossner/literature/literature_dev.json",
         "literature_test":
-        "/home/loebbert/projects/thesis/data/crossner/literature/literature_test.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/crossner/literature/literature_test.json",
         "music_train":
-        "/home/loebbert/projects/thesis/data/crossner/music/music_train.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/crossner/music/music_train.json",
         "music_dev":
-        "/home/loebbert/projects/thesis/data/crossner/music/music_dev.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/crossner/music/music_dev.json",
         "music_test":
-        "/home/loebbert/projects/thesis/data/crossner/music/music_test.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/crossner/music/music_test.json",
         "politics_train":
-        "/home/loebbert/projects/thesis/data/crossner/politics/politics_train.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/crossner/politics/politics_train.json",
         "politics_dev":
-        "/home/loebbert/projects/thesis/data/crossner/politics/politics_dev.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/crossner/politics/politics_dev.json",
         "politics_test":
-        "/home/loebbert/projects/thesis/data/crossner/politics/politics_test.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/crossner/politics/politics_test.json",
         "science_train":
-        "/home/loebbert/projects/thesis/data/crossner/science/science_train.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/crossner/science/science_train.json",
         "science_dev":
-        "/home/loebbert/projects/thesis/data/crossner/science/science_dev.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/crossner/science/science_dev.json",
         "science_test":
-        "/home/loebbert/projects/thesis/data/crossner/science/science_test.json",
+        "/Users/robinloebbert/Masterarbeit/thesis/data/crossner/science/science_test.json",
     }
 
     if os.path.exists(
