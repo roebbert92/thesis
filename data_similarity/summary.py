@@ -57,8 +57,11 @@ def get_data(dataset_files: dict, already_seen: List[tuple] = []):
         overlaps)
 
 
-def visualize_overlap_data(data: pd.DataFrame):
-    conf_matrix = data.pivot_table("overlap", index="first", columns="second")
+def visualize_confusion_matrix(data: pd.DataFrame, metric_column: str):
+    conf_matrix = data.pivot_table(metric_column,
+                                   index="first",
+                                   columns="second",
+                                   aggfunc=np.mean)
     datasets = conf_matrix.columns.to_list()
     cmp_dataset_names = cmp_to_key(compare_dataset_names)
     datasets.sort(key=cmp_dataset_names)
@@ -68,21 +71,15 @@ def visualize_overlap_data(data: pd.DataFrame):
                            annot=True,
                            cmap=sns.color_palette("Blues", as_cmap=True))
     return sns_plot.get_figure()
+
+
+def visualize_overlap_data(data: pd.DataFrame):
+    return visualize_confusion_matrix(data, "overlap")
 
 
 def visualize_similarity_data(data: pd.DataFrame, data_type: str):
-    conf_matrix = data.loc[data["data_type"] == data_type].pivot_table(
-        "cosine_similarity", index="first", columns="second", aggfunc=np.mean)
-    datasets = conf_matrix.columns.to_list()
-    cmp_dataset_names = cmp_to_key(compare_dataset_names)
-    datasets.sort(key=cmp_dataset_names)
-    conf_matrix = conf_matrix[datasets].sort_index(
-        level="first", key=lambda x: pd.Series([datasets.index(y) for y in x]))
-    sns_plot = sns.heatmap(conf_matrix,
-                           annot=True,
-                           cmap=sns.color_palette("Blues", as_cmap=True))
-    return sns_plot.get_figure()
-
+    return visualize_confusion_matrix(data.loc[data["data_type"] == data_type],
+                                      "cosine_similarity")
 
 def compare_dataset_names(a, b):
     scores = {"train": 0, "dev": 1, "test": 2}
@@ -121,9 +118,8 @@ def conll_lowner_wnut():
     if os.path.exists(
             os.path.join(thesis_path, "data_similarity",
                          "conll_wnut_lowner_sim.csv")):
-        wnut_lowner_sim = pd.read_csv(os.path.join(thesis_path,
-                                                   "data_similarity",
-                                                   "conll_wnut_lowner_sim.csv"),
+        wnut_lowner_sim = pd.read_csv(os.path.join(
+            thesis_path, "data_similarity", "conll_wnut_lowner_sim.csv"),
                                       sep=";",
                                       decimal=",").reset_index()
         wnut_lowner_overlap = pd.read_csv(os.path.join(
@@ -152,11 +148,13 @@ def conll_lowner_wnut():
     wnut_lowner_sim.to_csv(os.path.join(thesis_path, "data_similarity",
                                         "conll_wnut_lowner_sim.csv"),
                            sep=";",
-                           decimal=",", index=False)
+                           decimal=",",
+                           index=False)
     wnut_lowner_overlap.to_csv(os.path.join(thesis_path, "data_similarity",
                                             "conll_wnut_lowner_overlap.csv"),
                                sep=";",
-                               decimal=",", index=False)
+                               decimal=",",
+                               index=False)
 
     plt.figure(figsize=(10, 8))
     plot = visualize_similarity_data(wnut_lowner_sim, "sentences")
