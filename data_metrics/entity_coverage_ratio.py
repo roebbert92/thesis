@@ -31,6 +31,7 @@ def entity_coverage_ratio(first: List[dict], second: List[dict]):
     types = first_types.union(second_types)
     ratio = {}
     c = {}
+    expected = 0.0
     for entity, second_total_count in second_entity_count.items():
         if entity not in first_entity_count:
             ratio[entity] = 0.0
@@ -46,7 +47,9 @@ def entity_coverage_ratio(first: List[dict], second: List[dict]):
                                   first_entity_count[entity]
                                   ) * second_entity_type_count[(entity, t)]
             ratio[entity] /= second_total_count
-    return ratio, c
+            expected += ratio[entity] * second_total_count
+    expected /= sum([value for value in second_entity_count.values()])
+    return ratio, c, expected
 
 
 def display_entity_coverage_ratio(ratio: dict, c: dict, name: str):
@@ -73,19 +76,18 @@ def display_entity_coverage_ratio(ratio: dict, c: dict, name: str):
     return plt.figure()
 
 
-def confusion_matrix_entity_coverage_ratio(datasets: List[List[dict]],
-                                           names: List[str]):
+def confusion_matrix_expected_entity_coverage_ratio(datasets: List[List[dict]],
+                                                    names: List[str]):
     assert len(datasets) == len(names)
     results = []
     for first_idx, second_idx in product(range(len(datasets)),
                                          range(len(datasets))):
-        ratio, _ = entity_coverage_ratio(datasets[first_idx],
-                                         datasets[second_idx])
-        values = [value for value in ratio.values()]
+        _, _, expected = entity_coverage_ratio(datasets[first_idx],
+                                               datasets[second_idx])
         results.append({
             "first": names[first_idx],
             "second": names[second_idx],
-            "entity_coverage_ratio": sum(values) / len(values)
+            "expected_entity_coverage_ratio": expected
         })
     return pd.DataFrame.from_records(results)
 

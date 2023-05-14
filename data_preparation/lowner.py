@@ -10,15 +10,7 @@ class Entity():
     start: int
     end: int
 
-
-def lowner_to_json(train_file: str,
-                   dev_file: str,
-                   test_file: str,
-                   dir_path: Optional[str] = None):
-    if dir_path is None:
-        dir_path = os.path.dirname(train_file)
-
-    wnut_types = {
+wnut_types = {
         "PER": "person",
         "GRP": "group",
         "CORP": "corporation",
@@ -26,6 +18,13 @@ def lowner_to_json(train_file: str,
         "CW": "creative-work",
         "PROD": "product"
     }
+
+def lowner_to_json(train_file: str,
+                   dev_file: str,
+                   test_file: str,
+                   dir_path: Optional[str] = None):
+    if dir_path is None:
+        dir_path = os.path.dirname(train_file)
 
     files = {"train": train_file, "dev": dev_file, "test": test_file}
 
