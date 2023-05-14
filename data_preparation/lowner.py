@@ -1,6 +1,7 @@
 from dataclasses import dataclass, asdict
 import os
 import json
+import regex
 from typing import Optional
 
 
@@ -10,14 +11,61 @@ class Entity():
     start: int
     end: int
 
+
 wnut_types = {
-        "PER": "person",
-        "GRP": "group",
-        "CORP": "corporation",
-        "LOC": "location",
-        "CW": "creative-work",
-        "PROD": "product"
-    }
+    "PER": "person",
+    "GRP": "group",
+    "CORP": "corporation",
+    "LOC": "location",
+    "CW": "creative-work",
+    "PROD": "product"
+}
+
+pattern = regex.compile(r"\\(\w+)\"")
+
+
+def gazetteer_entry_correction(entity: str):
+    if "\t" in entity and entity.endswith('"'):
+        entity = entity.replace("\t", "")
+        entity = entity[:-1]
+        entity = pattern.sub('"\\1"', entity)
+
+
+def lowner_gaz_to_json(gaz_file: str):
+    dir_path = os.path.dirname(gaz_file)
+
+    gazetteer = []
+    with open(gaz_file, encoding="utf-8") as file:
+        for line in file:
+            line = line.strip()
+            try:
+                items = line.split("\t")
+                if len(items) < 4:
+                    items = line.split(",")
+                elif len(items) > 4:
+                    items = []
+                    start = 0
+                    while len(items) < 3:
+                        split = line.find("\t", start)
+                        items.append(line[start:split])
+                        start = split + 1
+                    items.append(line[start:])
+                assert len(items) == 4
+                ent_id, ent_type, _, ent = items
+                assert ent_type in wnut_types
+                gazetteer_entry_correction(ent)
+                gazetteer.append({
+                    "entity_id": ent_id,
+                    "type": wnut_types[ent_type],
+                    "entity": ent
+                })
+            except AssertionError:
+                print(line)
+
+    with open(f"{dir_path}/lowner_gazetteer.json", "w",
+              encoding="utf-8") as json_file:
+        json.dump(gazetteer, json_file)
+
 
 def lowner_to_json(train_file: str,
                    dev_file: str,

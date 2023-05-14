@@ -6,3 +6,4 @@ lightning_logs
 frameworks/apex
 run_*
 finetuning/tune
+data/mlowner/lowner_gazetteer.json

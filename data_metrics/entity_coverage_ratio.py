@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 
-def count_entities(dataset: List[dict]):
+def count_entities_dataset(dataset: List[dict]):
     entity_type_count = []
     entity_count = []
     types = set()
@@ -23,16 +23,43 @@ def count_entities(dataset: List[dict]):
     return Counter(entity_count), Counter(entity_type_count), types
 
 
-def entity_coverage_ratio(first: List[dict], second: List[dict]):
-    first_entity_count, first_entity_type_count, first_types = count_entities(
-        first)
-    second_entity_count, second_entity_type_count, second_types = count_entities(
-        second)
+def count_entities_gazetteer(gazetteer: List[dict]):
+    entity_type_count = []
+    entity_count = []
+    types = set()
+    for item in gazetteer:
+        entity_text = item["entity"].lower()
+        entity_type_count.append((entity_text, item["type"]))
+        entity_count.append(entity_text)
+        types.add(item["type"])
+
+    return Counter(entity_count), Counter(entity_type_count), types
+
+
+def entity_coverage_ratio(first: List[dict],
+                          second: List[dict],
+                          first_is_dataset=True,
+                          second_is_dataset=True):
+    if first_is_dataset:
+        first_entity_count, first_entity_type_count, first_types = count_entities_dataset(
+            first)
+    else:
+        first_entity_count, first_entity_type_count, first_types = count_entities_gazetteer(
+            first)
+    if second_is_dataset:
+        second_entity_count, second_entity_type_count, second_types = count_entities_dataset(
+            second)
+    else:
+        second_entity_count, second_entity_type_count, second_types = count_entities_gazetteer(
+            second)
+
     types = first_types.union(second_types)
     ratio = {}
     c = {}
     expected = 0.0
+    total_second_entity_count = 0
     for entity, second_total_count in second_entity_count.items():
+        total_second_entity_count += second_total_count
         if entity not in first_entity_count:
             ratio[entity] = 0.0
             c[entity] = 0
@@ -48,7 +75,7 @@ def entity_coverage_ratio(first: List[dict], second: List[dict]):
                                   ) * second_entity_type_count[(entity, t)]
             ratio[entity] /= second_total_count
             expected += ratio[entity] * second_total_count
-    expected /= sum([value for value in second_entity_count.values()])
+    expected /= total_second_entity_count
     return ratio, c, expected
 
 
@@ -77,20 +104,19 @@ def display_entity_coverage_ratio(ratio: dict, c: dict, name: str):
 
 
 def confusion_matrix_expected_entity_coverage_ratio(datasets: List[List[dict]],
-                                                    names: List[str]):
-    assert len(datasets) == len(names)
+                                                    names: List[str],
+                                                    are_datasets: List[bool]):
+    assert len(datasets) == len(names) == len(are_datasets)
     results = []
     for first_idx, second_idx in product(range(len(datasets)),
                                          range(len(datasets))):
         _, _, expected = entity_coverage_ratio(datasets[first_idx],
-                                               datasets[second_idx])
+                                               datasets[second_idx],
+                                               are_datasets[first_idx],
+                                               are_datasets[second_idx])
         results.append({
             "first": names[first_idx],
             "second": names[second_idx],
             "expected_entity_coverage_ratio": expected
         })
     return pd.DataFrame.from_records(results)
-
-
-def entity_coverage_ratio_gazetteer(dataset: List[dict], gazetteer: set):
-    pass

@@ -82,7 +82,7 @@ def visualize_similarity_data(data: pd.DataFrame, data_type: str):
                                       "cosine_similarity")
 
 def compare_dataset_names(a, b):
-    scores = {"train": 0, "dev": 1, "test": 2}
+    scores = {"train": 0, "dev": 1, "test": 2, "gaz": 3}
     a1, a2 = a.split("_")
     b1, b2 = b.split("_")
     dataset_eq = strcoll(a1, b1)
