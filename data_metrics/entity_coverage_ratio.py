@@ -79,7 +79,10 @@ def entity_coverage_ratio(first: List[dict],
     return ratio, c, expected
 
 
-def display_entity_coverage_ratio(ratio: dict, c: dict, name: str):
+def display_entity_coverage_ratio(ratio: dict,
+                                  c: dict,
+                                  name: str,
+                                  ax: Optional[plt.Axes] = None):
     case1 = [key for key, value in ratio.items() if value == 1.0]
     case2_1 = [key for key, value in ratio.items() if 0.5 < value < 1.0]
     case2_2 = [key for key, value in ratio.items() if 0.0 < value <= 0.5]
@@ -94,13 +97,16 @@ def display_entity_coverage_ratio(ratio: dict, c: dict, name: str):
     x_ticks = np.arange(len(x))
     y = [len(case1), len(case2_1), len(case2_2), len(case3), len(case4)]
 
-    bar_container = plt.bar(x_ticks, y, align="center")
+    if ax is None:
+        bar_container = plt.bar(x_ticks, y, align="center")
+    else:
+        bar_container = ax.bar(x_ticks, y, align="center")
     plt.xticks(x_ticks, x)
     plt.ylabel("# of entities")
     plt.bar_label(bar_container, y)
     plt.title(f"Entity Coverage Histogram {name}")
 
-    return plt.figure()
+    return plt.figure() if ax is None else ax.figure
 
 
 def confusion_matrix_expected_entity_coverage_ratio(datasets: List[List[dict]],
@@ -117,6 +123,6 @@ def confusion_matrix_expected_entity_coverage_ratio(datasets: List[List[dict]],
         results.append({
             "first": names[first_idx],
             "second": names[second_idx],
-            "expected_entity_coverage_ratio": expected
+            "expected_entity_coverage_ratio": round(expected, 4)
         })
     return pd.DataFrame.from_records(results)
