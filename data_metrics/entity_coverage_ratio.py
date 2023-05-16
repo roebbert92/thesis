@@ -79,10 +79,10 @@ def entity_coverage_ratio(first: List[dict],
     return ratio, c, expected
 
 
-def display_entity_coverage_ratio(ratio: dict,
-                                  c: dict,
-                                  name: str,
-                                  ax: Optional[plt.Axes] = None):
+def display_cases_entity_coverage_ratio(ratio: dict,
+                                        c: dict,
+                                        name: str,
+                                        ax: Optional[plt.Axes] = None):
     case1 = [key for key, value in ratio.items() if value == 1.0]
     case2_1 = [key for key, value in ratio.items() if 0.5 < value < 1.0]
     case2_2 = [key for key, value in ratio.items() if 0.0 < value <= 0.5]
