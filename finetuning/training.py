@@ -16,7 +16,7 @@ from lightning.pytorch.loggers import TensorBoardLogger
 from models.asp_t5 import ASPT5Model, get_tokenizer
 from configs.asp_t5 import T5_BASE
 from data_preprocessing.tensorize import NERDataProcessor, ner_collate_fn, NERCollator
-from data_preprocessing.tokenize import tokenize_json, tokenize_database_json
+from data_preprocessing.tokenize import tokenize_json, tokenize_database_json_with_filter
 
 from torch.utils.data import DataLoader
 import torch
@@ -87,7 +87,7 @@ def augment_dataset(tokenizer,
                     filtered_document_ids={}):
     for part, dataset_filters in filters.items():
         tokenized_name = "tokenized_" + part
-        files[tokenized_name], _, _ = tokenize_database_json(
+        files[tokenized_name], _, _ = tokenize_database_json_with_filter(
             tokenizer,
             files[part],
             files["types"],

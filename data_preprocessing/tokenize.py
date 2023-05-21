@@ -153,10 +153,9 @@ def get_input_sentence(tokenizer: PreTrainedTokenizer,
 
 
 def tokenize_json(tokenizer: PreTrainedTokenizer,
-                  train_file,
-                  dev_file,
-                  test_file,
+                  file_name,
                   type_file,
+                  output_path,
                   prepend_task_description=True):
     if MENTION_START not in tokenizer.get_vocab():
         tokenizer.add_tokens(MENTION_START)
@@ -167,46 +166,46 @@ def tokenize_json(tokenizer: PreTrainedTokenizer,
         labels = json.load(file)['entities']
     label_to_id = {label: id for id, label in enumerate(labels)}
 
-    for file_name in [train_file, dev_file, test_file]:
-        tokenized_dataset = []
-        with open(file_name, encoding="utf-8") as file:
-            instances = json.load(file)
+    tokenized_dataset = []
+    with open(file_name, encoding="utf-8") as file:
+        instances = json.load(file)
 
-        name = os.path.basename(os.path.splitext(file_name)[0])
+    name = os.path.basename(os.path.splitext(file_name)[0])
 
-        for inst_id, instance in tqdm(enumerate(instances),
-                                      desc="Tokenization",
-                                      total=len(instances)):
-            tokens = instance['tokens']
-            entities = instance['entities']
-            extended = instance['extended']
-            doc_id = instance[
-                'doc_id'] if "doc_id" in instance else name + "_" + str(
-                    inst_id)
+    for inst_id, instance in tqdm(enumerate(instances),
+                                  desc="Tokenization",
+                                  total=len(instances)):
+        tokens = instance['tokens']
+        entities = instance['entities']
+        extended = instance['extended']
+        doc_id = instance[
+            'doc_id'] if "doc_id" in instance else name + "_" + str(inst_id)
 
-            tokenized_sentence, target_sentence, entity_type_sequence, entity_indices, subtoken_map = get_target_sentence(
-                tokenizer, label_to_id, tokens, entities)
+        tokenized_sentence, target_sentence, entity_type_sequence, entity_indices, subtoken_map = get_target_sentence(
+            tokenizer, label_to_id, tokens, entities)
 
-            # insert prefix (instruction for model) here
-            input_sentence = get_input_sentence(tokenizer, extended,
-                                                prepend_task_description)
-            tokenized_dataset.append({
-                "doc_id": doc_id,
-                "sentence": tokenized_sentence,
-                # sentence is for copy mechanism, might be different from
-                # input_sentence which is for encoding only
-                "input_sentence": input_sentence,
-                "target_sentence": target_sentence,
-                "subtoken_map": subtoken_map,
-                "ent_type_sequence": entity_type_sequence,
-                "ent_indices": entity_indices
-            })
+        # insert prefix (instruction for model) here
+        input_sentence = get_input_sentence(tokenizer, extended,
+                                            prepend_task_description)
+        tokenized_dataset.append({
+            "doc_id": doc_id,
+            "sentence": tokenized_sentence,
+            # sentence is for copy mechanism, might be different from
+            # input_sentence which is for encoding only
+            "input_sentence": input_sentence,
+            "target_sentence": target_sentence,
+            "subtoken_map": subtoken_map,
+            "ent_type_sequence": entity_type_sequence,
+            "ent_indices": entity_indices
+        })
 
-        with open(
-                f"{os.path.splitext(file_name)[0]}.{os.path.basename(os.path.splitext(tokenizer.name_or_path)[0])}.jsonlines",
-                "w",
-                encoding="utf-8") as output_file:
-            json.dump(tokenized_dataset, output_file)
+    output_file_name = os.path.join(
+        output_path,
+        f"{os.path.basename(os.path.splitext(file_name)[0])}.{os.path.basename(os.path.splitext(tokenizer.name_or_path)[0])}.jsonlines"
+    )
+    with open(output_file_name, "w", encoding="utf-8") as output_file:
+        json.dump(tokenized_dataset, output_file)
+    return output_file_name
 
 
 def handle_results(tokenizer: PreTrainedTokenizer, processed_doc: list,
@@ -262,20 +261,21 @@ def get_embedding(cosine_model, embed_cache, input: str):
     return embed_cache[input]
 
 
-def get_input_sentence_database(tokenizer: PreTrainedTokenizer,
-                                doc_id,
-                                doc,
-                                database: Pipeline,
-                                cosine_model: Optional[SentenceTransformer],
-                                embed_cache,
-                                use_labels: bool,
-                                use_mentions: bool,
-                                filters: dict = {},
-                                filter_exact_match: bool = True,
-                                filter_same_document: bool = True,
-                                filtered_document_ids=[],
-                                prepend_examples=False,
-                                insert_prefix=True):
+def get_input_sentence_database_with_filter(
+        tokenizer: PreTrainedTokenizer,
+        doc_id,
+        doc,
+        database: Pipeline,
+        cosine_model: Optional[SentenceTransformer],
+        embed_cache,
+        use_labels: bool,
+        use_mentions: bool,
+        filters: dict = {},
+        filter_exact_match: bool = True,
+        filter_same_document: bool = True,
+        filtered_document_ids=[],
+        prepend_examples=False,
+        insert_prefix=True):
     sentence = " ".join(doc)
     exclude_filter = {}
     if filter_exact_match:
@@ -323,21 +323,22 @@ def get_input_sentence_database(tokenizer: PreTrainedTokenizer,
     return processed_doc, [result.score for result in results], similarities
 
 
-def tokenize_database_json(tokenizer: PreTrainedTokenizer,
-                           file_name,
-                           type_file,
-                           database: Pipeline,
-                           cosine_model: Optional[SentenceTransformer],
-                           embed_cache,
-                           use_labels: bool,
-                           use_mentions: bool,
-                           output_name,
-                           filters: dict = {},
-                           filter_exact_match: bool = True,
-                           filter_same_document: bool = True,
-                           filtered_document_ids=[],
-                           prepend_task_description=True,
-                           prepend_search_results=False):
+def tokenize_database_json_with_filter(
+        tokenizer: PreTrainedTokenizer,
+        file_name,
+        type_file,
+        database: Pipeline,
+        cosine_model: Optional[SentenceTransformer],
+        embed_cache,
+        use_labels: bool,
+        use_mentions: bool,
+        output_path,
+        filters: dict = {},
+        filter_exact_match: bool = True,
+        filter_same_document: bool = True,
+        filtered_document_ids=[],
+        prepend_task_description=True,
+        prepend_search_results=False):
     if MENTION_START not in tokenizer.get_vocab():
         tokenizer.add_tokens(MENTION_START)
     if MENTION_END not in tokenizer.get_vocab():
@@ -367,7 +368,7 @@ def tokenize_database_json(tokenizer: PreTrainedTokenizer,
             tokenizer, label_to_id, tokens, entities)
 
         # insert prefix (instruction for model) here
-        input_sentence, scores, similarities = get_input_sentence_database(
+        input_sentence, scores, similarities = get_input_sentence_database_with_filter(
             tokenizer,
             doc_id,
             extended,
@@ -396,7 +397,103 @@ def tokenize_database_json(tokenizer: PreTrainedTokenizer,
         database_scores[doc_id] = scores
         database_similarities[doc_id] = similarities
 
-    output_file_name = f"{os.path.join(os.path.dirname(file_name), output_name)}.{os.path.basename(os.path.splitext(tokenizer.name_or_path)[0])}.jsonlines"
+    output_file_name = os.path.join(
+        output_path,
+        f"{os.path.basename(os.path.splitext(file_name)[0])}.{os.path.basename(os.path.splitext(tokenizer.name_or_path)[0])}.jsonlines"
+    )
     with open(output_file_name, "w", encoding="utf-8") as output_file:
         json.dump(tokenized_dataset, output_file)
     return output_file_name, database_scores, database_similarities
+
+
+def get_input_sentence_database(tokenizer: PreTrainedTokenizer,
+                                doc_id,
+                                doc,
+                                search: Pipeline,
+                                use_labels: bool,
+                                use_mentions: bool,
+                                prepend_examples=False,
+                                insert_prefix=True):
+    sentence = " ".join(doc)
+
+    results = search.run(query=sentence)
+    results = results["documents"] if results is not None else []
+
+    processed_doc = []
+    if prepend_examples:
+        handle_results(tokenizer, processed_doc, results, use_labels,
+                       use_mentions)
+
+    processed_doc.extend(get_input_sentence(tokenizer, doc, insert_prefix))
+
+    if not prepend_examples:
+        handle_results(tokenizer, processed_doc, results, use_labels,
+                       use_mentions)
+
+    return processed_doc
+
+
+def tokenize_database_json(tokenizer: PreTrainedTokenizer,
+                           file_name,
+                           type_file,
+                           search: Pipeline,
+                           use_labels: bool,
+                           use_mentions: bool,
+                           output_path,
+                           prepend_task_description=True,
+                           prepend_search_results=False):
+    if MENTION_START not in tokenizer.get_vocab():
+        tokenizer.add_tokens(MENTION_START)
+    if MENTION_END not in tokenizer.get_vocab():
+        tokenizer.add_tokens(MENTION_END)
+
+    with open(type_file, encoding="utf-8") as file:
+        labels = json.load(file)['entities']
+    label_to_id = {label: id for id, label in enumerate(labels)}
+
+    tokenized_dataset = []
+    with open(file_name, encoding="utf-8") as file:
+        instances = json.load(file)
+
+    name = os.path.basename(os.path.splitext(file_name)[0])
+    for inst_id, instance in tqdm(enumerate(instances),
+                                  desc="Tokenization with DB",
+                                  total=len(instances)):
+        tokens = instance['tokens']
+        entities = instance['entities']
+        extended = instance['extended']
+        doc_id = instance[
+            'doc_id'] if "doc_id" in instance else name + "_" + str(inst_id)
+
+        tokenized_sentence, target_sentence, entity_type_sequence, entity_indices, subtoken_map = get_target_sentence(
+            tokenizer, label_to_id, tokens, entities)
+
+        # insert prefix (instruction for model) here
+        input_sentence = get_input_sentence_database(
+            tokenizer,
+            doc_id,
+            extended,
+            search,
+            use_labels,
+            use_mentions,
+            prepend_examples=prepend_search_results,
+            insert_prefix=prepend_task_description)
+        tokenized_dataset.append({
+            "doc_id": doc_id,
+            "sentence": tokenized_sentence,
+            # sentence is for copy mechanism, might be different from
+            # input_sentence which is for encoding only
+            "input_sentence": input_sentence,
+            "target_sentence": target_sentence,
+            "subtoken_map": subtoken_map,
+            "ent_type_sequence": entity_type_sequence,
+            "ent_indices": entity_indices
+        })
+
+    output_file_name = os.path.join(
+        output_path,
+        f"{os.path.basename(os.path.splitext(file_name)[0])}.{os.path.basename(os.path.splitext(tokenizer.name_or_path)[0])}.jsonlines"
+    )
+    with open(output_file_name, "w", encoding="utf-8") as output_file:
+        json.dump(tokenized_dataset, output_file)
+    return output_file_name

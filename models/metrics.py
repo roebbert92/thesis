@@ -246,6 +246,9 @@ class ASPMetrics(Metric):
         # dataframe with f1, precision, recall, error types per sample_id
         return pd.DataFrame.from_records(self.metrics)
 
+    def reset(self):
+        self.metrics.clear()
+
 
 class FalsePositivesASP():
     def __init__(self) -> None:

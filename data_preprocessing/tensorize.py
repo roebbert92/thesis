@@ -346,8 +346,9 @@ class NERDataProcessor(object):
                          for doc_key, subtoken_map, tensor in tensor_samples],
                         key=lambda x: -x[2]['input_ids'].size(0)))
             # Cache tensorized samples
-            pickle.dump((self.tensor_samples, self.labels),
-                        open(cache_path, 'wb'))
+            if use_cache:
+                pickle.dump((self.tensor_samples, self.labels),
+                            open(cache_path, 'wb'))
 
     def get_tensor_samples(self):
         # For each split, return list of tensorized samples to allow variable length input (batch size = 1)

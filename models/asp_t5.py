@@ -9,7 +9,7 @@ from models.outputs import ASPSeq2SeqLMOutput
 
 import models.utils as utils
 import models.generation as gen
-from models.metrics import F1ASP, FalsePositivesASP
+from models.metrics import ASPMetrics
 
 NEGINF = -20000
 
@@ -112,12 +112,7 @@ class ASPT5Model(pl.LightningModule, gen.ASPGenerationMixin):
         self.config = PretrainedConfig.from_dict(config)
 
         # F1 metrics
-        self.train_f1 = F1ASP()
-        self.train_fps = FalsePositivesASP()
-        self.val_f1 = F1ASP()
-        self.val_fps = FalsePositivesASP()
-        self.test_f1 = F1ASP()
-        self.test_fps = FalsePositivesASP()
+        self.test_metrics = ASPMetrics()
 
     def get_encoder(self):
         return self.t5.get_encoder()
@@ -240,7 +235,7 @@ class ASPT5Model(pl.LightningModule, gen.ASPGenerationMixin):
             return_dict=return_dict,
         )
 
-        assert isinstance(outputs, Seq2SeqModelOutput)
+        # assert isinstance(outputs, Seq2SeqModelOutput)
 
         outputs.last_hidden_state = outputs.last_hidden_state.to(self.device)
         batch_size = full_decoder_input_ids.size(0)
@@ -347,10 +342,7 @@ class ASPT5Model(pl.LightningModule, gen.ASPGenerationMixin):
             pairing=l_choice,
             typing=typing_choice)
 
-    def training_step(self, samples, batch_idx):
-        """
-        Training method
-        """
+    def __calc_loss(self, samples):
         # process batch
         (doc_keys, subtoken_maps, batch) = samples
         input_ids = batch["input_ids"]
@@ -377,7 +369,7 @@ class ASPT5Model(pl.LightningModule, gen.ASPGenerationMixin):
             return_dict=return_dict,
         )
 
-        assert isinstance(outputs, Seq2SeqModelOutput)
+        # assert isinstance(outputs, Seq2SeqModelOutput)
 
         outputs.last_hidden_state = outputs.last_hidden_state.to(self.device)
 
@@ -481,14 +473,21 @@ class ASPT5Model(pl.LightningModule, gen.ASPGenerationMixin):
             self.t5.gradient_checkpointing_disable()
             flag_grad_ckpt = False
 
+        return loss, input_ids.size(0)
+
+    def training_step(self, samples, batch_idx):
+        """
+        Training method
+        """
+        loss, batch_size = self.__calc_loss(samples)
         self.log("train_loss",
                  loss,
                  on_step=True,
                  on_epoch=True,
                  prog_bar=True,
-                 logger=True)
-
-        return {"loss": loss}
+                 logger=True,
+                 batch_size=batch_size)
+        return loss
 
     def get_mapping_to_input_sequence(self, output_ids):
         # Get the mapping from the output with special tokens
@@ -507,96 +506,95 @@ class ASPT5Model(pl.LightningModule, gen.ASPGenerationMixin):
 
         return mapping
 
-    def on_validation_epoch_start(self) -> None:
-        super().on_validation_epoch_start()
-        self.val_fps.reset()
-        self.train_fps.reset()
+    # def on_validation_epoch_start(self) -> None:
+    #     super().on_validation_epoch_start()
+    #     self.val_fps.reset()
+    #     self.train_fps.reset()
 
     def validation_step(self, samples, batch_idx):
         """
         Validation step
         """
-        # process batch
-        (doc_keys, subtoken_maps, batch) = samples
-        input_ids = batch["input_ids"]
-        to_copy_ids = batch["to_copy_ids"]
-        target_ids = batch["target_ids"]
-        ent_types = batch["ent_types"]
-
-        # save the decoded actions
-        decoder_pairing, decoder_typing = [], []
-        model_output = self.generate(input_ids,
-                                     generation_config=self.generation_config,
-                                     **{
-                                         "decoder_encoder_input_ids":
-                                         to_copy_ids,
-                                         "decoder_pairing": decoder_pairing,
-                                         "decoder_typing": decoder_typing
-                                     })
-        # taking the best sequence in the beam, removing </s>
-        for idx in range(input_ids.size(0)):
-            subtoken_map = subtoken_maps[idx]
-            idx_target_ids = target_ids[idx]
-            labels = ent_types[idx]
-            # targets
-            mapping = self.get_mapping_to_input_sequence(idx_target_ids)
-            targets, start_ind = [], []
-
-            # TODO: allow nested mentions
-            # reconstructing mention_indices and antecedent_indices
-            for i in range(len(idx_target_ids)):
-                if idx_target_ids[i] == self.mention_start_id:
-                    start_ind.append(i)
-                if idx_target_ids[i] == self.mention_end_id:
-                    entity = (
-                        int(subtoken_map[int(
-                            mapping[start_ind[-1]])]),  # no nested
-                        int(subtoken_map[int(mapping[i])]),
-                        int(labels[i]))
-                    targets.append(entity)
-
-            # TODO: allow nested mentions
-            # predictions
-            output_ids = model_output.sequences[idx][1:]
-            pairing = [x[idx] for x in decoder_pairing]
-            typing = [x[idx] for x in decoder_typing]
-            mapping = self.get_mapping_to_input_sequence(output_ids)
-            preds, start_ind = [], []
-            # reconstructing mention_indices and antecedent_indices
-            for i in range(len(output_ids)):
-                if output_ids[i] == self.tokenizer.pad_token_id:
-                    break
-                if output_ids[i] == self.mention_start_id:
-                    start_ind.append(i)
-                if output_ids[i] == self.mention_end_id:
-                    this_type = int(typing[i])
-                    entity = (subtoken_map[mapping[start_ind[pairing[i]]]],
-                              subtoken_map[mapping[i]], this_type)
-                    preds.append(entity)
-            # if dataloader_idx == 0:
-            #     self.train_f1.update(preds, targets)
-            #     self.train_fps.update(doc_keys[idx], preds, targets)
-            # if dataloader_idx == 1:
-            self.val_f1.update(preds, targets)
-            self.val_fps.update(doc_keys[idx], preds, targets)
-        # if dataloader_idx == 0:
-        #     self.log("train_f1",
-        #              self.train_f1,
-        #              prog_bar=True,
-        #              logger=True,
-        #              on_epoch=True,
-        #              on_step=True)
-        # if dataloader_idx == 1:
-        self.log("val_f1",
-                 self.val_f1,
+        loss, batch_size = self.__calc_loss(samples)
+        self.log("val_loss",
+                 loss,
+                 on_step=False,
+                 on_epoch=True,
                  prog_bar=True,
                  logger=True,
-                 on_epoch=True,
-                 on_step=True)
+                 batch_size=batch_size)
+        return loss
+        # # process batch
+        # (doc_keys, subtoken_maps, batch) = samples
+        # input_ids = batch["input_ids"]
+        # to_copy_ids = batch["to_copy_ids"]
+        # target_ids = batch["target_ids"]
+        # ent_types = batch["ent_types"]
+
+
+#
+# # save the decoded actions
+# decoder_pairing, decoder_typing = [], []
+# model_output = self.generate(input_ids,
+#                              generation_config=self.generation_config,
+#                              **{
+#                                  "decoder_encoder_input_ids":
+#                                  to_copy_ids,
+#                                  "decoder_pairing": decoder_pairing,
+#                                  "decoder_typing": decoder_typing
+#                              })
+# # taking the best sequence in the beam, removing </s>
+# for idx in range(input_ids.size(0)):
+#     subtoken_map = subtoken_maps[idx]
+#     idx_target_ids = target_ids[idx]
+#     labels = ent_types[idx]
+#     # targets
+#     mapping = self.get_mapping_to_input_sequence(idx_target_ids)
+#     targets, start_ind = [], []
+#
+#     # TODO: allow nested mentions
+#     # reconstructing mention_indices and antecedent_indices
+#     for i in range(len(idx_target_ids)):
+#         if idx_target_ids[i] == self.mention_start_id:
+#             start_ind.append(i)
+#         if idx_target_ids[i] == self.mention_end_id:
+#             entity = (
+#                 int(subtoken_map[int(
+#                     mapping[start_ind[-1]])]),  # no nested
+#                 int(subtoken_map[int(mapping[i])]),
+#                 int(labels[i]))
+#             targets.append(entity)
+#
+#     # TODO: allow nested mentions
+#     # predictions
+#     output_ids = model_output.sequences[idx][1:]
+#     pairing = [x[idx] for x in decoder_pairing]
+#     typing = [x[idx] for x in decoder_typing]
+#     mapping = self.get_mapping_to_input_sequence(output_ids)
+#     preds, start_ind = [], []
+#     # reconstructing mention_indices and antecedent_indices
+#     for i in range(len(output_ids)):
+#         if output_ids[i] == self.tokenizer.pad_token_id:
+#             break
+#         if output_ids[i] == self.mention_start_id:
+#             start_ind.append(i)
+#         if output_ids[i] == self.mention_end_id:
+#             this_type = int(typing[i])
+#             entity = (subtoken_map[mapping[start_ind[pairing[i]]]],
+#                       subtoken_map[mapping[i]], this_type)
+#             preds.append(entity)
+#     self.val_f1.update(preds, targets)
+#     self.val_fps.update(doc_keys[idx], preds, targets)
+# self.log("val_f1",
+#          self.val_f1,
+#          prog_bar=True,
+#          logger=True,
+#          on_epoch=True,
+#          on_step=True)
 
     def on_test_epoch_start(self) -> None:
         super().on_test_epoch_start()
-        self.test_fps.reset()
+        self.test_metrics.reset()
 
     def test_step(self, samples, batch_idx):
         """
@@ -659,11 +657,24 @@ class ASPT5Model(pl.LightningModule, gen.ASPGenerationMixin):
                     entity = (subtoken_map[mapping[start_ind[pairing[i]]]],
                               subtoken_map[mapping[i]], this_type)
                     preds.append(entity)
-            self.test_f1.update(preds, targets)
-            self.test_fps.update(doc_keys[idx], preds, targets)
-        self.log("test_f1",
-                 self.test_f1,
-                 prog_bar=True,
-                 logger=True,
-                 on_epoch=True,
-                 on_step=True)
+            self.test_metrics.update(doc_keys[idx], preds, targets)
+
+    def on_test_epoch_end(self) -> None:
+        super().on_test_epoch_end()
+        errors = self.test_metrics.errors()
+        f1 = self.test_metrics.f1()
+        precision = self.test_metrics.precision()
+        recall = self.test_metrics.recall()
+        self.log_dict(
+            {
+                "f1": f1,
+                "precision": precision,
+                "recall": recall,
+                "error_type1": errors[0],
+                "error_type2": errors[1],
+                "error_type3": errors[2],
+                "error_type4": errors[3],
+                "error_type5": errors[4],
+            },
+            logger=True,
+            on_epoch=True)

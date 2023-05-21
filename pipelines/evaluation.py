@@ -19,7 +19,7 @@ thesis_path = "/" + os.path.join(
     *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-1])
 sys.path.append(thesis_path)
 
-from data_preprocessing.tokenize import tokenize_json, tokenize_database_json
+from data_preprocessing.tokenize import tokenize_json, tokenize_database_json_with_filter
 from models.asp_t5 import get_tokenizer
 from pipelines.asp_training import run_experiment
 
@@ -87,7 +87,7 @@ def augment_dataset(name,
     for part, dataset_filters in filters.items():
         tokenized_name = "tokenized_" + name + "_" + part
         files[
-            tokenized_name], database_scores, database_similarities = tokenize_database_json(
+            tokenized_name], database_scores, database_similarities = tokenize_database_json_with_filter(
                 tokenizer,
                 files[part],
                 files["types"],

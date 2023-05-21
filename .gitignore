@@ -7,3 +7,4 @@ frameworks/apex
 run_*
 finetuning/tune
 data/mlowner/lowner_gazetteer.json
+search/fetahugaz/faiss_index.faiss
