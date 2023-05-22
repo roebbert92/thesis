@@ -209,16 +209,17 @@ def tokenize_json(tokenizer: PreTrainedTokenizer,
 
 
 def handle_results(tokenizer: PreTrainedTokenizer, processed_doc: list,
-                   results: List[Document], use_labels: bool,
-                   use_mentions: bool):
+                   results: List[Document], sent_use_labels: bool,
+                   sent_use_mentions: bool, gaz_use_labels: bool,
+                   gaz_use_mentions: bool):
     for result in results:
         meta = result.meta
         content = str(result.content)
         if meta["data_type"] == "gazetteers":
             text = tokenizer.tokenize(content)
-            if use_labels:
+            if gaz_use_labels:
                 text.extend(tokenizer.tokenize(":" + meta["type"]))
-            if use_mentions:
+            if gaz_use_mentions:
                 text = [MENTION_START, *text, MENTION_END]
             processed_doc.extend(text)
             processed_doc.append(tokenizer.eos_token)
@@ -231,15 +232,15 @@ def handle_results(tokenizer: PreTrainedTokenizer, processed_doc: list,
             for word_idx, word in enumerate(content.split()):
                 # entity end
                 if word_idx in entity_ends:
-                    if use_labels:
+                    if sent_use_labels:
                         processed_doc.extend(
                             tokenizer.tokenize(":" +
                                                entity_ends[word_idx]["type"]))
-                    if use_mentions:
+                    if sent_use_mentions:
                         processed_doc.append(MENTION_END)
                 # entity start
                 if word_idx in entity_starts:
-                    if use_mentions:
+                    if sent_use_mentions:
                         processed_doc.append(MENTION_START)
 
                 subtokens = get_subtokens(tokenizer, word)
@@ -407,11 +408,12 @@ def tokenize_database_json_with_filter(
 
 
 def get_input_sentence_database(tokenizer: PreTrainedTokenizer,
-                                doc_id,
                                 doc,
                                 search: Pipeline,
-                                use_labels: bool,
-                                use_mentions: bool,
+                                sent_use_labels: bool,
+                                sent_use_mentions: bool,
+                                gaz_use_labels: bool,
+                                gaz_use_mentions: bool,
                                 prepend_examples=False,
                                 insert_prefix=True):
     sentence = " ".join(doc)
@@ -421,14 +423,14 @@ def get_input_sentence_database(tokenizer: PreTrainedTokenizer,
 
     processed_doc = []
     if prepend_examples:
-        handle_results(tokenizer, processed_doc, results, use_labels,
-                       use_mentions)
+        handle_results(tokenizer, processed_doc, results, sent_use_labels,
+                       sent_use_mentions, gaz_use_labels, gaz_use_mentions)
 
     processed_doc.extend(get_input_sentence(tokenizer, doc, insert_prefix))
 
     if not prepend_examples:
-        handle_results(tokenizer, processed_doc, results, use_labels,
-                       use_mentions)
+        handle_results(tokenizer, processed_doc, results, sent_use_labels,
+                       sent_use_mentions, gaz_use_labels, gaz_use_mentions)
 
     return processed_doc
 
@@ -437,8 +439,10 @@ def tokenize_database_json(tokenizer: PreTrainedTokenizer,
                            file_name,
                            type_file,
                            search: Pipeline,
-                           use_labels: bool,
-                           use_mentions: bool,
+                           sent_use_labels: bool,
+                           sent_use_mentions: bool,
+                           gaz_use_labels: bool,
+                           gaz_use_mentions: bool,
                            output_path,
                            prepend_task_description=True,
                            prepend_search_results=False):
@@ -471,11 +475,12 @@ def tokenize_database_json(tokenizer: PreTrainedTokenizer,
         # insert prefix (instruction for model) here
         input_sentence = get_input_sentence_database(
             tokenizer,
-            doc_id,
             extended,
             search,
-            use_labels,
-            use_mentions,
+            sent_use_labels,
+            sent_use_mentions,
+            gaz_use_labels,
+            gaz_use_mentions,
             prepend_examples=prepend_search_results,
             insert_prefix=prepend_task_description)
         tokenized_dataset.append({

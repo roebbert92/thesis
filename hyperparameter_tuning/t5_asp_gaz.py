@@ -17,7 +17,7 @@ import torch
 from torch.utils.data import DataLoader
 from data_preprocessing.tensorize import NERCollator, NERDataProcessor, ner_collate_fn
 from data_preprocessing.tokenize import tokenize_database_json, tokenize_json
-from hyperparameter_tuning.training import factors
+from hyperparameter_tuning.training import factors, get_gazetteers_from_documents
 from hyperparameter_tuning.ray_logging import TuneReportCallback
 from lightning.fabric.utilities.seed import seed_everything
 from lightning.pytorch.loggers import TensorBoardLogger
@@ -31,12 +31,12 @@ EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"  # "sentence-transfo
 EMBEDDING_DIM = 768  #  384
 
 
-def t5_asp_fetahugaz_configs():
+def t5_asp_gaz_configs():
     config = T5_BASE.copy()
 
     config["data_path"] = os.path.join(thesis_path, "hyperparameter_tuning",
                                        "tune")
-    config["name"] = "t5_asp_fetahugaz"
+    config["name"] = "t5_asp_gaz"
     config["batch_size"] = 40
 
     best_configs = [{
@@ -77,63 +77,29 @@ def t5_asp_fetahugaz_configs():
     return config, best_configs
 
 
-def create_faiss_document_store():
-    document_store = FAISSDocumentStore(
-        sql_url="postgresql://postgres:thesis123.@localhost:5432/fetahugaz",
-        index="fetahugaz",
-        faiss_index_factory_str="OPQ128_384,IVF20000,PQ128",
-        embedding_dim=768,
-        similarity="cosine")
-    return document_store
-
-
-def add_fetahugaz_documents(doc_store: BaseDocumentStore):
+def add_multiconer_gazetteers(doc_store: BaseDocumentStore):
     if doc_store.get_document_count() == 0:
-        documents = []
-        with open(os.path.join("data", "mlowner", "lowner_gazetteer.json"),
+        with open(os.path.join(thesis_path, "data", "multiconer",
+                               "multiconer_test.json"),
                   "r",
                   encoding="utf-8") as file:
-            fetahu_gaz = json.load(file)
-        for gaz in tqdm(fetahu_gaz):
-            documents.append(
-                Document(content=gaz["entity"],
-                         meta={
-                             "data_type": "gazetteers",
-                             "type": gaz["type"],
-                             "entity_id": gaz["entity_id"]
-                         }))
+            gaz = json.load(file)
+        documents = get_gazetteers_from_documents(gaz, "multiconer_test")
         doc_store.write_documents(documents)
-
-
-def train_update_faiss_index(document_store: FAISSDocumentStore,
-                             retriever: EmbeddingRetriever):
-    documents = document_store.get_all_documents()
-    embeddings = retriever.embed_documents(documents)
-    document_store.train_index(embeddings=embeddings)
-    document_store.update_embeddings(retriever)
-    document_store.save(index_path=os.path.join(thesis_path, "search",
-                                                "fetahugaz",
-                                                "faiss_index.faiss"),
-                        config_path=os.path.join(thesis_path, "search",
-                                                 "fetahugaz",
-                                                 "faiss_config.json"))
 
 
 def setup_database(search_algorithm: str, search_topk: int):
     search = Pipeline()
+    document_store = ElasticsearchDocumentStore(index="gaz",
+                                                embedding_dim=EMBEDDING_DIM,
+                                                similarity="cosine")
+    add_multiconer_gazetteers(document_store)
     if search_algorithm == "bm25":
-        document_store = ElasticsearchDocumentStore(
-            index="fetahugaz", embedding_dim=EMBEDDING_DIM)
         bm25_retriever = BM25Retriever(document_store, top_k=search_topk)
         search.add_node(component=bm25_retriever,
                         name="BM25Retriever",
                         inputs=["Query"])
     elif search_algorithm.startswith("ann"):
-        document_store = FAISSDocumentStore.load(
-            index_path=os.path.join(thesis_path, "search", "fetahugaz",
-                                    "faiss_index.faiss"),
-            config_path=os.path.join(thesis_path, "search", "fetahugaz",
-                                     "faiss_config.json"))
         ann_retriever = EmbeddingRetriever(
             document_store=document_store,
             embedding_model=EMBEDDING_MODEL,
@@ -142,6 +108,8 @@ def setup_database(search_algorithm: str, search_topk: int):
         search.add_node(component=ann_retriever,
                         name="ANNRetriever",
                         inputs=["Query"])
+        if document_store.get_embedding_count() == 0:
+            document_store.update_embeddings(ann_retriever)
 
     if len(search.components) == 0:
         raise Exception(
@@ -149,12 +117,6 @@ def setup_database(search_algorithm: str, search_topk: int):
             + search_algorithm)
 
     return search
-
-
-def get_or_filter_from_list(key_name, values):
-    if len(values) > 0:
-        return {"$or": [{key_name: value} for value in values]}
-    return {}
 
 
 def augment_dataset(
@@ -174,6 +136,8 @@ def augment_dataset(
             files[part],
             files["types"],
             database,
+            False,
+            False,
             use_labels,
             use_mentions,
             data_path,
@@ -219,7 +183,7 @@ def prep_data(path, tokenizer, config: dict):
         thesis_path, "data", "mlowner", "lowner_types.json")
 
 
-def run_t5_asp_fetahugaz_training(config: dict, fixed_params: dict):
+def run_t5_asp_gaz_training(config: dict, fixed_params: dict):
     config.update(fixed_params)
 
     if "PL_GLOBAL_SEED" in os.environ:

@@ -16,6 +16,10 @@ import pickle as pkl
 
 from hyperparameter_tuning.t5_asp import t5_asp_configs, run_t5_asp_training
 from hyperparameter_tuning.t5_asp_fetahugaz import t5_asp_fetahugaz_configs, run_t5_asp_fetahugaz_training
+from hyperparameter_tuning.t5_asp_gaz import t5_asp_gaz_configs, run_t5_asp_gaz_training
+from hyperparameter_tuning.t5_asp_sent import t5_asp_sent_configs, run_t5_asp_sent_training
+from hyperparameter_tuning.t5_asp_gaz_sent import t5_asp_gaz_sent_configs, run_t5_asp_gaz_sent_training
+from hyperparameter_tuning.t5_asp_fetahugaz_sent import t5_asp_fetahugaz_sent_configs, run_t5_asp_fetahugaz_sent_training
 
 
 def tune_hyperparameters(name, config, best_configs, tune_training_method,
@@ -85,11 +89,29 @@ def tune_hyperparameters(name, config, best_configs, tune_training_method,
         pkl.dump(results, file)
 
 
-t5_asp_config = t5_asp_configs()
-tune_hyperparameters("t5_asp", t5_asp_config[0], t5_asp_config[1],
-                     run_t5_asp_training, 5)
+t5_asp_fetahugaz_sent_config = t5_asp_fetahugaz_sent_configs()
+tune_hyperparameters("t5_asp_fetahugaz_sent", t5_asp_fetahugaz_sent_config[0],
+                     t5_asp_fetahugaz_sent_config[1],
+                     run_t5_asp_fetahugaz_sent_training, 8)
+
+t5_asp_gaz_sent_config = t5_asp_gaz_sent_configs()
+tune_hyperparameters("t5_asp_gaz_sent", t5_asp_gaz_sent_config[0],
+                     t5_asp_gaz_sent_config[1], run_t5_asp_gaz_sent_training,
+                     8)
+
+t5_asp_sent_config = t5_asp_sent_configs()
+tune_hyperparameters("t5_asp_sent", t5_asp_sent_config[0],
+                     t5_asp_sent_config[1], run_t5_asp_sent_training, 8)
+
+t5_asp_gaz_config = t5_asp_gaz_configs()
+tune_hyperparameters("t5_asp_gaz", t5_asp_gaz_config[0], t5_asp_gaz_config[1],
+                     run_t5_asp_gaz_training, 8)
 
 t5_asp_fetahugaz_config = t5_asp_fetahugaz_configs()
 tune_hyperparameters("t5_asp_fetahugaz", t5_asp_fetahugaz_config[0],
                      t5_asp_fetahugaz_config[1], run_t5_asp_fetahugaz_training,
-                     5)
+                     8)
+
+t5_asp_config = t5_asp_configs()
+tune_hyperparameters("t5_asp", t5_asp_config[0], t5_asp_config[1],
+                     run_t5_asp_training, 8)

@@ -104,12 +104,13 @@ def augment_dataset(tokenizer,
             prepend_search_results=prepend_search_results)
 
 
-def get_gazetteers_from_documents(docs):
+def get_gazetteers_from_documents(docs, name: str = ""):
     items = defaultdict(dict)
     for doc in docs:
         for entity in doc["entities"]:
             ne = " ".join(doc["tokens"][entity["start"]:entity["end"]])
-            dataset_part = doc["doc_id"].split("_")[1]
+            dataset_part = name if len(name) > 0 else doc["doc_id"].split(
+                "_")[1]
             key = dataset_part + "_" + entity["type"] + "_" + ne
             if "doc_id" not in items[key]:
                 items[key]["doc_id"] = []
@@ -117,7 +118,6 @@ def get_gazetteers_from_documents(docs):
                 items[key]["doc_id"].append(doc["doc_id"])
             if "dataset" not in items[key]:
                 items[key]["dataset"] = []
-            dataset_part = doc["doc_id"].split("_")[1]
             if dataset_part not in items[key]["dataset"]:
                 items[key]["dataset"].append(dataset_part)
             items[key]["type"] = entity["type"]
@@ -133,10 +133,10 @@ def get_gazetteers_from_documents(docs):
     ]
 
 
-def get_sentences_from_documents(docs):
+def get_sentences_from_documents(docs, name: str = ""):
     documents = []
     for doc in docs:
-        dataset_part = doc["doc_id"].split("_")[1]
+        dataset_part = name if len(name) > 0 else doc["doc_id"].split("_")[1]
         documents.append(
             Document(content=" ".join(doc["tokens"]),
                      meta={

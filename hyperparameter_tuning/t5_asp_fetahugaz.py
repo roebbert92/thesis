@@ -90,7 +90,8 @@ def create_faiss_document_store():
 def add_fetahugaz_documents(doc_store: BaseDocumentStore):
     if doc_store.get_document_count() == 0:
         documents = []
-        with open(os.path.join("data", "mlowner", "lowner_gazetteer.json"),
+        with open(os.path.join(thesis_path, "data", "mlowner",
+                               "lowner_gazetteer.json"),
                   "r",
                   encoding="utf-8") as file:
             fetahu_gaz = json.load(file)
@@ -151,12 +152,6 @@ def setup_database(search_algorithm: str, search_topk: int):
     return search
 
 
-def get_or_filter_from_list(key_name, values):
-    if len(values) > 0:
-        return {"$or": [{key_name: value} for value in values]}
-    return {}
-
-
 def augment_dataset(
     data_path,
     tokenizer,
@@ -174,6 +169,8 @@ def augment_dataset(
             files[part],
             files["types"],
             database,
+            False,
+            False,
             use_labels,
             use_mentions,
             data_path,
