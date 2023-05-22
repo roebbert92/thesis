@@ -14,12 +14,12 @@ import nevergrad as ng
 
 import pickle as pkl
 
-from finetuning.t5_asp import t5_asp_configs, run_t5_asp_training
-from finetuning.t5_asp_fetahugaz import t5_asp_fetahugaz_configs, run_t5_asp_fetahugaz_training
+from hyperparameter_tuning.t5_asp import t5_asp_configs, run_t5_asp_training
+from hyperparameter_tuning.t5_asp_fetahugaz import t5_asp_fetahugaz_configs, run_t5_asp_fetahugaz_training
 
 
-def finetune(name, config, best_configs, tune_training_method,
-             training_budget_in_h):
+def tune_hyperparameters(name, config, best_configs, tune_training_method,
+                         training_budget_in_h):
     param_space = {}
     fixed_params = {}
     for key, value in config.items():
@@ -40,13 +40,13 @@ def finetune(name, config, best_configs, tune_training_method,
 
     reporter = tune.CLIReporter(
         # parameter_columns=["batch_size"],
-        metric_columns=["val_loss", "training_iteration"])
+        metric_columns=["val_f1", "training_iteration"])
 
-    ng_search = NevergradSearch(
-        optimizer=ng.optimizers.RecombiningPortfolioDiscreteOnePlusOne,
-        metric="val_loss",
-        mode="min",
-        points_to_evaluate=best_configs)
+    ng_search = NevergradSearch(optimizer=ng.optimizers.ScrHammersleySearch,
+                                optimizer_kwargs={"budget": 1000},
+                                metric="val_f1",
+                                mode="max",
+                                points_to_evaluate=best_configs)
 
     method = tune.with_resources(tune.with_parameters(
         tune_training_method, fixed_params=fixed_params),
@@ -57,12 +57,12 @@ def finetune(name, config, best_configs, tune_training_method,
 
     scheduler = ASHAScheduler(
         time_attr='training_iteration',
-        metric='val_loss',
-        mode='min',
+        metric='val_f1',
+        mode='max',
         max_t=100,
-        grace_period=5,
-        reduction_factor=4,
-        brackets=5,
+        grace_period=1,
+        reduction_factor=2,
+        brackets=3,
     )
 
     tuner = tune.Tuner(method,
@@ -76,20 +76,20 @@ def finetune(name, config, best_configs, tune_training_method,
                                                 name=name,
                                                 progress_reporter=reporter))
     results = tuner.fit()
-    print("Best val_loss hyperparameters found were: ",
-          results.get_best_result("val_loss", "min", "all").config)
+    print("Best hyperparameters found were: ",
+          results.get_best_result("val_f1", "max", "all").config)
 
-    with open(os.path.join(thesis_path, "finetuning", f"{name}_result.pkl"),
-              "wb") as file:
+    with open(
+            os.path.join(thesis_path, "hyperparameter_tuning",
+                         f"{name}_result.pkl"), "wb") as file:
         pkl.dump(results, file)
 
 
-# t5_asp_config = t5_asp_configs()
-# finetune("t5_asp", t5_asp_config[0], t5_asp_config[1], run_t5_asp_training, 5)
-
 t5_asp_config = t5_asp_configs()
-finetune("t5_asp", t5_asp_config[0], t5_asp_config[1], run_t5_asp_training, 5)
+tune_hyperparameters("t5_asp", t5_asp_config[0], t5_asp_config[1],
+                     run_t5_asp_training, 5)
 
 t5_asp_fetahugaz_config = t5_asp_fetahugaz_configs()
-finetune("t5_asp_fetahugaz", t5_asp_fetahugaz_config[0],
-         t5_asp_fetahugaz_config[1], run_t5_asp_fetahugaz_training, 5)
+tune_hyperparameters("t5_asp_fetahugaz", t5_asp_fetahugaz_config[0],
+                     t5_asp_fetahugaz_config[1], run_t5_asp_fetahugaz_training,
+                     5)

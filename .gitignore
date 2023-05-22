@@ -5,6 +5,6 @@ wikigaz.tsv
 lightning_logs
 frameworks/apex
 run_*
-finetuning/tune
+hyperparameter_tuning/tune
 data/mlowner/lowner_gazetteer.json
 search/fetahugaz/faiss_index.faiss

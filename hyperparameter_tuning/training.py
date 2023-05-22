@@ -20,7 +20,7 @@ from data_preprocessing.tokenize import tokenize_json, tokenize_database_json_wi
 
 from torch.utils.data import DataLoader
 import torch
-from finetuning.ray_logging import TuneReportCallback
+from hyperparameter_tuning.ray_logging import TuneReportCallback
 from haystack import Pipeline, Document
 from haystack.document_stores import ElasticsearchDocumentStore
 from haystack.nodes import EmbeddingRetriever, SentenceTransformersRanker, BM25Retriever
@@ -104,7 +104,7 @@ def augment_dataset(tokenizer,
             prepend_search_results=prepend_search_results)
 
 
-def get_documents_from_gazetteers(docs):
+def get_gazetteers_from_documents(docs):
     items = defaultdict(dict)
     for doc in docs:
         for entity in doc["entities"]:
@@ -133,7 +133,7 @@ def get_documents_from_gazetteers(docs):
     ]
 
 
-def get_documents_from_sentences(docs):
+def get_sentences_from_documents(docs):
     documents = []
     for doc in docs:
         dataset_part = doc["doc_id"].split("_")[1]
@@ -213,9 +213,9 @@ def prep_data(path, tokenizer, config: dict):
             else:
                 docs.extend(d)
     if config["search_data_type"] == "gazetteers":
-        documents = get_documents_from_gazetteers(docs)
+        documents = get_gazetteers_from_documents(docs)
     elif config["search_data_type"] == "sentences":
-        documents = get_documents_from_sentences(docs)
+        documents = get_sentences_from_documents(docs)
     doc_store.write_documents(documents)
 
     if config["search_algorithm"] != "bm25":

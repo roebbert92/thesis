@@ -14,8 +14,8 @@ import torch
 from torch.utils.data import DataLoader
 from data_preprocessing.tensorize import NERDataProcessor, ner_collate_fn
 from data_preprocessing.tokenize import tokenize_json
-from finetuning.training import factors
-from finetuning.ray_logging import TuneReportCallback
+from hyperparameter_tuning.training import factors
+from hyperparameter_tuning.ray_logging import TuneReportCallback
 from lightning.fabric.utilities.seed import seed_everything
 from lightning.pytorch.loggers import TensorBoardLogger
 import lightning.pytorch as pl
@@ -41,25 +41,29 @@ def t5_asp_configs():
     config["train_search_dropout"] = 0.0
     config["train_search_shuffle"] = False
 
-    config["data_path"] = os.path.join(thesis_path, "finetuning", "tune")
+    config["data_path"] = os.path.join(thesis_path, "hyperparameter_tuning",
+                                       "tune")
     config["name"] = "t5_asp"
 
-    best_configs = [{
-        "adam_eps": 1e-8,
-        "adam_weight_decay": 0.23588487514616147,
-        "asp_activation": "relu",
-        "asp_dropout_rate": 0.24422749793507542,
-        "asp_hidden_dim": 323,
-        "asp_init_std": 0.02,
-        "batch_size": 60,
-        "beam_size": 1,
-        "gradient_accumulation_steps": 1,
-        "num_epochs": 22,
-        "num_labels": 6,
-        "plm_learning_rate": 0.000049999999999999975,
-        "task_learning_rate": 0.0013567436131267515,
-        "warmup_ratio": 0.3147284381262512,
-    }]
+    best_configs = [
+        T5_BASE.copy(), {
+            "adam_weight_decay": 0.23588487514616147,
+            "asp_dropout_rate": 0.24422749793507542,
+            "asp_hidden_dim": 323,
+            "plm_learning_rate": 5e-5,
+            "task_learning_rate": 0.0013567436131267515,
+            "warmup_ratio": 0.3147284381262512,
+            "num_epochs": 10
+        }, {
+            "adam_weight_decay": 0.2637723452107371,
+            "asp_dropout_rate": 0.27548604937281485,
+            "asp_hidden_dim": 689,
+            "plm_learning_rate": 5e-05,
+            "task_learning_rate": 0.002735443003884387,
+            "warmup_ratio": 0.2850151436321613,
+            "num_epochs": 10
+        }
+    ]
 
     config["asp_hidden_dim"] = tune.randint(100, 800)
     config["asp_dropout_rate"] = tune.uniform(0.01, 0.5)
@@ -79,9 +83,9 @@ def t5_asp_configs():
     config["train_search_shuffle"] = None
     config["plm_learning_rate"] = tune.uniform(5e-6, 5e-3)
     config["task_learning_rate"] = tune.uniform(1e-5, 5e-3)
-    config["adam_weight_decay"] = tune.uniform(5e-4, 0.5)
+    config["adam_weight_decay"] = tune.uniform(5e-4, 0.27)
     config["warmup_ratio"] = tune.uniform(0.01, 0.5)
-    config["num_epochs"] = 15
+    config["num_epochs"] = tune.randint(10, 40)
 
     return config, best_configs
 
@@ -139,7 +143,7 @@ def run_t5_asp_training(config: dict, fixed_params: dict):
     config["train_len"] = len(train)
 
     # Callbacks
-    tune_report_f1 = TuneReportCallback({"val_loss": "val_loss"},
+    tune_report_f1 = TuneReportCallback({"val_f1": "val_f1"},
                                         on=["validation_end"])
 
     config["fused"] = True
@@ -155,7 +159,6 @@ def run_t5_asp_training(config: dict, fixed_params: dict):
     while not trained:
         try:
             # Train loader
-
             train_loader = DataLoader(train,
                                       batch_size=train_config["batch_size"],
                                       collate_fn=ner_collate_fn,
@@ -165,16 +168,15 @@ def run_t5_asp_training(config: dict, fixed_params: dict):
                                       shuffle=True,
                                       prefetch_factor=20)
             # Validation loaders
-            val_loader = DataLoader(
-                val,
-                batch_size=int(train_config["batch_size"] *
-                               3) if train_config["batch_size"] > 1 else 8,
-                collate_fn=ner_collate_fn,
-                num_workers=3,
-                persistent_workers=False,
-                pin_memory=True,
-                shuffle=False,
-                prefetch_factor=20)
+            val_loader = DataLoader(val,
+                                    batch_size=int(train_config["batch_size"] *
+                                                   4),
+                                    collate_fn=ner_collate_fn,
+                                    num_workers=3,
+                                    persistent_workers=False,
+                                    pin_memory=True,
+                                    shuffle=False,
+                                    prefetch_factor=20)
 
             trainer = pl.Trainer(
                 accelerator="gpu",
@@ -186,7 +188,7 @@ def run_t5_asp_training(config: dict, fixed_params: dict):
                     "gradient_accumulation_steps"],
                 precision=train_config["precision"],
                 max_epochs=train_config["num_epochs"],
-                check_val_every_n_epoch=1,
+                check_val_every_n_epoch=2,
                 num_sanity_val_steps=0,
                 enable_checkpointing=False,
                 enable_progress_bar=False,
@@ -196,7 +198,6 @@ def run_t5_asp_training(config: dict, fixed_params: dict):
             model = ASPT5Model(train_config, tokenizer)
 
             trainer.fit(model, train_loader, val_dataloaders=val_loader)
-            trainer.test(model, val_loader)
             trained = True
         except Exception:
             train_config["gradient_accumulation_steps"] = grad_accum_steps[

@@ -17,15 +17,15 @@ import torch
 from torch.utils.data import DataLoader
 from data_preprocessing.tensorize import NERCollator, NERDataProcessor, ner_collate_fn
 from data_preprocessing.tokenize import tokenize_database_json, tokenize_json
-from finetuning.training import factors
-from finetuning.ray_logging import TuneReportCallback
+from hyperparameter_tuning.training import factors
+from hyperparameter_tuning.ray_logging import TuneReportCallback
 from lightning.fabric.utilities.seed import seed_everything
 from lightning.pytorch.loggers import TensorBoardLogger
 import lightning.pytorch as pl
 
 from haystack import Pipeline, Document
 from haystack.document_stores import ElasticsearchDocumentStore, FAISSDocumentStore, BaseDocumentStore
-from haystack.nodes import EmbeddingRetriever, SentenceTransformersRanker, BM25Retriever
+from haystack.nodes import EmbeddingRetriever, BM25Retriever
 
 EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"  # "sentence-transformers/all-MiniLM-L6-v2"
 EMBEDDING_DIM = 768  #  384
@@ -34,19 +34,31 @@ EMBEDDING_DIM = 768  #  384
 def t5_asp_fetahugaz_configs():
     config = T5_BASE.copy()
 
-    config["data_path"] = os.path.join(thesis_path, "finetuning", "tune")
+    config["data_path"] = os.path.join(thesis_path, "hyperparameter_tuning",
+                                       "tune")
     config["name"] = "t5_asp_fetahugaz"
     config["batch_size"] = 40
 
-    best_configs = []
+    best_configs = [{
+        "adam_weight_decay": 0.16654221006912023,
+        "asp_dropout_rate": 0.255,
+        "asp_hidden_dim": 764,
+        "plm_learning_rate": 0.0017761923667238327,
+        "search_algorithm": "ann",
+        "search_topk": 23,
+        "task_learning_rate": 0.002245444580169059,
+        "train_search_dropout": 0.34795288270300007,
+        "warmup_ratio": 0.40508103379041166,
+        "num_epochs": 10
+    }]
 
     config["asp_hidden_dim"] = tune.randint(100, 1000)
     config["asp_dropout_rate"] = tune.uniform(0.01, 0.5)
     config["asp_init_std"] = 0.02
     config["asp_activation"] = "relu"
     config["beam_size"] = 1
-    config["use_labels"] = tune.choice([True, False])
-    config["use_mentions"] = tune.choice([True, False])
+    config["use_labels"] = True
+    config["use_mentions"] = False
     config["prepend_search_results"] = False
     config["filter_exact_match"] = False
     config["filter_same_document"] = False
@@ -58,11 +70,21 @@ def t5_asp_fetahugaz_configs():
     config["train_search_shuffle"] = False
     config["plm_learning_rate"] = tune.uniform(5e-6, 5e-3)
     config["task_learning_rate"] = tune.uniform(1e-5, 5e-3)
-    config["adam_weight_decay"] = tune.uniform(5e-4, 0.5)
+    config["adam_weight_decay"] = tune.uniform(5e-4, 0.17)
     config["warmup_ratio"] = tune.uniform(0.01, 0.5)
-    config["num_epochs"] = 15
+    config["num_epochs"] = tune.randint(10, 40)
 
     return config, best_configs
+
+
+def create_faiss_document_store():
+    document_store = FAISSDocumentStore(
+        sql_url="postgresql://postgres:thesis123.@localhost:5432/fetahugaz",
+        index="fetahugaz",
+        faiss_index_factory_str="OPQ128_384,IVF20000,PQ128",
+        embedding_dim=768,
+        similarity="cosine")
+    return document_store
 
 
 def add_fetahugaz_documents(doc_store: BaseDocumentStore):
@@ -89,6 +111,12 @@ def train_update_faiss_index(document_store: FAISSDocumentStore,
     embeddings = retriever.embed_documents(documents)
     document_store.train_index(embeddings=embeddings)
     document_store.update_embeddings(retriever)
+    document_store.save(index_path=os.path.join(thesis_path, "search",
+                                                "fetahugaz",
+                                                "faiss_index.faiss"),
+                        config_path=os.path.join(thesis_path, "search",
+                                                 "fetahugaz",
+                                                 "faiss_config.json"))
 
 
 def setup_database(search_algorithm: str, search_topk: int):
@@ -218,7 +246,7 @@ def run_t5_asp_fetahugaz_training(config: dict, fixed_params: dict):
     config["train_len"] = len(train)
 
     # Callbacks
-    tune_report_f1 = TuneReportCallback({"val_loss": "val_loss"},
+    tune_report_f1 = TuneReportCallback({"val_f1": "val_f1"},
                                         on=["validation_end"])
 
     config["fused"] = True
@@ -247,16 +275,15 @@ def run_t5_asp_fetahugaz_training(config: dict, fixed_params: dict):
                                       shuffle=True,
                                       prefetch_factor=20)
             # Validation loaders
-            val_loader = DataLoader(
-                val,
-                batch_size=int(train_config["batch_size"] *
-                               3) if train_config["batch_size"] > 1 else 8,
-                collate_fn=ner_collate_fn,
-                num_workers=3,
-                persistent_workers=False,
-                pin_memory=True,
-                shuffle=False,
-                prefetch_factor=20)
+            val_loader = DataLoader(val,
+                                    batch_size=int(train_config["batch_size"] *
+                                                   4),
+                                    collate_fn=ner_collate_fn,
+                                    num_workers=3,
+                                    persistent_workers=False,
+                                    pin_memory=True,
+                                    shuffle=False,
+                                    prefetch_factor=20)
 
             trainer = pl.Trainer(
                 accelerator="gpu",
@@ -268,7 +295,7 @@ def run_t5_asp_fetahugaz_training(config: dict, fixed_params: dict):
                     "gradient_accumulation_steps"],
                 precision=train_config["precision"],
                 max_epochs=train_config["num_epochs"],
-                check_val_every_n_epoch=1,
+                check_val_every_n_epoch=2,
                 num_sanity_val_steps=0,
                 enable_checkpointing=False,
                 enable_progress_bar=False,
@@ -278,7 +305,6 @@ def run_t5_asp_fetahugaz_training(config: dict, fixed_params: dict):
             model = ASPT5Model(train_config, tokenizer)
 
             trainer.fit(model, train_loader, val_dataloaders=val_loader)
-            trainer.test(model, val_loader)
             trained = True
         except Exception:
             train_config["gradient_accumulation_steps"] = grad_accum_steps[
