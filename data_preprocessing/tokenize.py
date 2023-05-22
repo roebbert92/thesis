@@ -409,30 +409,38 @@ def tokenize_database_json_with_filter(
 
 def get_input_sentence_database(tokenizer: PreTrainedTokenizer,
                                 doc,
-                                search: Pipeline,
+                                search_result: List[Document],
                                 sent_use_labels: bool,
                                 sent_use_mentions: bool,
                                 gaz_use_labels: bool,
                                 gaz_use_mentions: bool,
                                 prepend_examples=False,
                                 insert_prefix=True):
-    sentence = " ".join(doc)
-
-    results = search.run(query=sentence)
-    results = results["documents"] if results is not None else []
-
     processed_doc = []
     if prepend_examples:
-        handle_results(tokenizer, processed_doc, results, sent_use_labels,
-                       sent_use_mentions, gaz_use_labels, gaz_use_mentions)
+        handle_results(tokenizer, processed_doc, search_result,
+                       sent_use_labels, sent_use_mentions, gaz_use_labels,
+                       gaz_use_mentions)
 
     processed_doc.extend(get_input_sentence(tokenizer, doc, insert_prefix))
 
     if not prepend_examples:
-        handle_results(tokenizer, processed_doc, results, sent_use_labels,
-                       sent_use_mentions, gaz_use_labels, gaz_use_mentions)
+        handle_results(tokenizer, processed_doc, search_result,
+                       sent_use_labels, sent_use_mentions, gaz_use_labels,
+                       gaz_use_mentions)
 
     return processed_doc
+
+
+def query_database(instances: List, search: Pipeline, name: str):
+    chunk_size = 1000
+    for i in range(0, len(instances), chunk_size):
+        chunk = instances[i:i + chunk_size]
+        results = search.run_batch(
+            [" ".join(instance['extended']) for instance in chunk])
+        for j, res in zip(range(len(chunk)),
+                          results["documents"] if results is not None else []):
+            yield j + i, res
 
 
 def tokenize_database_json(tokenizer: PreTrainedTokenizer,
@@ -460,14 +468,17 @@ def tokenize_database_json(tokenizer: PreTrainedTokenizer,
         instances = json.load(file)
 
     name = os.path.basename(os.path.splitext(file_name)[0])
-    for inst_id, instance in tqdm(enumerate(instances),
-                                  desc="Tokenization with DB",
-                                  total=len(instances)):
+    for instance_idx, search_result in tqdm(query_database(
+            instances, search, name),
+                                            desc="Tokenization with DB",
+                                            total=len(instances)):
+        instance = instances[instance_idx]
         tokens = instance['tokens']
         entities = instance['entities']
         extended = instance['extended']
         doc_id = instance[
-            'doc_id'] if "doc_id" in instance else name + "_" + str(inst_id)
+            'doc_id'] if "doc_id" in instance else name + "_" + str(
+                instance_idx)
 
         tokenized_sentence, target_sentence, entity_type_sequence, entity_indices, subtoken_map = get_target_sentence(
             tokenizer, label_to_id, tokens, entities)
@@ -476,7 +487,7 @@ def tokenize_database_json(tokenizer: PreTrainedTokenizer,
         input_sentence = get_input_sentence_database(
             tokenizer,
             extended,
-            search,
+            search_result,
             sent_use_labels,
             sent_use_mentions,
             gaz_use_labels,

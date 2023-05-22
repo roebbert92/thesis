@@ -29,6 +29,7 @@ import lightning.pytorch as pl
 from haystack import Pipeline, Document
 from haystack.document_stores import ElasticsearchDocumentStore, FAISSDocumentStore, BaseDocumentStore
 from haystack.nodes import EmbeddingRetriever, BM25Retriever, JoinDocuments
+import faiss
 
 EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"  # "sentence-transformers/all-MiniLM-L6-v2"
 EMBEDDING_DIM = 768  #  384
@@ -47,11 +48,11 @@ def t5_asp_fetahugaz_sent_configs():
         'task_learning_rate': 0.0013480523331922776,
         'adam_weight_decay': 0.49637507889057786,
         'warmup_ratio': 0.184451637360714,
-        'sent_search_algorithm': 'bm25',
+        'sent_search_algorithm': 'ann',
         'sent_search_topk': 8,
         'sent_use_labels': True,
         'sent_use_mentions': True,
-        'gaz_search_algorithm': 'bm25',
+        'gaz_search_algorithm': 'ann',
         'gaz_search_topk': 8,
         'gaz_use_labels': True,
         'gaz_use_mentions': True,
@@ -116,6 +117,9 @@ def setup_database(sent_search_algorithm: str, sent_search_topk: int,
                                     "faiss_index.faiss"),
             config_path=os.path.join(thesis_path, "search", "sent",
                                      "faiss_config.json"))
+        document_store.faiss_indexes[
+            document_store.index] = faiss.index_cpu_to_all_gpus(
+                index=document_store.faiss_indexes[document_store.index])
         ann_retriever = EmbeddingRetriever(
             document_store=document_store,
             embedding_model=EMBEDDING_MODEL,
@@ -237,6 +241,11 @@ def prep_data(path, tokenizer, config: dict):
                     config["sent_use_labels"], config["sent_use_mentions"],
                     config["gaz_use_labels"], config["gaz_use_mentions"],
                     config["prepend_search_results"])
+
+    del search
+
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
     return files["tokenized_train"], files["tokenized_dev"], os.path.join(
         thesis_path, "data", "mlowner", "lowner_types.json")

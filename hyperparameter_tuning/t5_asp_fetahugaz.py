@@ -215,6 +215,11 @@ def prep_data(path, tokenizer, config: dict):
                     config["use_labels"], config["use_mentions"],
                     config["prepend_search_results"])
 
+    del search
+
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
     return files["tokenized_train"], files["tokenized_dev"], os.path.join(
         thesis_path, "data", "mlowner", "lowner_types.json")
 

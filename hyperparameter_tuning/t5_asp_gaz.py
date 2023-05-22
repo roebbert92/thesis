@@ -26,6 +26,7 @@ import lightning.pytorch as pl
 from haystack import Pipeline, Document
 from haystack.document_stores import ElasticsearchDocumentStore, FAISSDocumentStore, BaseDocumentStore
 from haystack.nodes import EmbeddingRetriever, BM25Retriever
+import faiss
 
 EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"  # "sentence-transformers/all-MiniLM-L6-v2"
 EMBEDDING_DIM = 768  #  384
@@ -125,6 +126,9 @@ def setup_database(search_algorithm: str, search_topk: int):
                                     "faiss_index.faiss"),
             config_path=os.path.join(thesis_path, "search", "gaz",
                                      "faiss_config.json"))
+        document_store.faiss_indexes[
+            document_store.index] = faiss.index_cpu_to_all_gpus(
+                index=document_store.faiss_indexes[document_store.index])
         ann_retriever = EmbeddingRetriever(
             document_store=document_store,
             embedding_model=EMBEDDING_MODEL,
@@ -201,6 +205,11 @@ def prep_data(path, tokenizer, config: dict):
     augment_dataset(data_path, tokenizer, files, parts, search,
                     config["use_labels"], config["use_mentions"],
                     config["prepend_search_results"])
+
+    del search
+
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
     return files["tokenized_train"], files["tokenized_dev"], os.path.join(
         thesis_path, "data", "mlowner", "lowner_types.json")
