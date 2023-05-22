@@ -123,13 +123,14 @@ def get_gazetteers_from_documents(docs, name: str = ""):
             items[key]["type"] = entity["type"]
             items[key]["content"] = ne
     return [
-        Document(content=doc["content"],
-                 meta={
-                     "doc_id": doc["doc_id"],
-                     "dataset": doc["dataset"],
-                     "type": doc["type"],
-                     "data_type": "gazetteers"
-                 }) for doc in items.values()
+        Document(
+            content=doc["content"],
+            meta={
+                #"doc_id": doc["doc_id"],
+                #"dataset": doc["dataset"],
+                "type": doc["type"],
+                "data_type": "gazetteers"
+            }) for doc in items.values()
     ]
 
 
@@ -138,13 +139,14 @@ def get_sentences_from_documents(docs, name: str = ""):
     for doc in docs:
         dataset_part = name if len(name) > 0 else doc["doc_id"].split("_")[1]
         documents.append(
-            Document(content=" ".join(doc["tokens"]),
-                     meta={
-                         "entities": doc["entities"],
-                         "data_type": "sentences",
-                         "doc_id": [doc["doc_id"]],
-                         "dataset": [dataset_part],
-                     }))
+            Document(
+                content=" ".join(doc["tokens"]),
+                meta={
+                    "entities": doc["entities"],
+                    "data_type": "sentences",
+                    #"doc_id": [doc["doc_id"]],
+                    #"dataset": [dataset_part],
+                }))
     return documents
 
 

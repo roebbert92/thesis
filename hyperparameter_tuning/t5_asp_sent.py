@@ -87,18 +87,43 @@ def add_multiconer_sentences(doc_store: BaseDocumentStore):
         doc_store.write_documents(documents)
 
 
+def create_faiss_document_store():
+    document_store = FAISSDocumentStore(
+        sql_url="postgresql://postgres:thesis123.@localhost:5432/sent",
+        #faiss_index_factory_str="OPQ128_384,IVF20000,PQ128",
+        embedding_dim=EMBEDDING_DIM,
+        similarity="cosine")
+    return document_store
+
+
+def train_update_faiss_index(document_store: FAISSDocumentStore,
+                             retriever: EmbeddingRetriever):
+    # documents = document_store.get_all_documents()
+    # embeddings = retriever.embed_documents(documents)
+    # document_store.train_index(embeddings=embeddings)
+    document_store.update_embeddings(retriever)
+    document_store.save(index_path=os.path.join(thesis_path, "search", "sent",
+                                                "faiss_index.faiss"),
+                        config_path=os.path.join(thesis_path, "search", "sent",
+                                                 "faiss_config.json"))
+
+
 def setup_database(search_algorithm: str, search_topk: int):
     search = Pipeline()
-    document_store = ElasticsearchDocumentStore(index="sent",
-                                                embedding_dim=EMBEDDING_DIM,
-                                                similarity="cosine")
-    add_multiconer_sentences(document_store)
+
     if search_algorithm == "bm25":
+        document_store = ElasticsearchDocumentStore(
+            index="sent", embedding_dim=EMBEDDING_DIM, similarity="cosine")
         bm25_retriever = BM25Retriever(document_store, top_k=search_topk)
         search.add_node(component=bm25_retriever,
                         name="BM25Retriever",
                         inputs=["Query"])
     elif search_algorithm.startswith("ann"):
+        document_store = FAISSDocumentStore.load(
+            index_path=os.path.join(thesis_path, "search", "sent",
+                                    "faiss_index.faiss"),
+            config_path=os.path.join(thesis_path, "search", "sent",
+                                     "faiss_config.json"))
         ann_retriever = EmbeddingRetriever(
             document_store=document_store,
             embedding_model=EMBEDDING_MODEL,
@@ -107,8 +132,6 @@ def setup_database(search_algorithm: str, search_topk: int):
         search.add_node(component=ann_retriever,
                         name="ANNRetriever",
                         inputs=["Query"])
-        if document_store.get_embedding_count() == 0:
-            document_store.update_embeddings(ann_retriever)
 
     if len(search.components) == 0:
         raise Exception(

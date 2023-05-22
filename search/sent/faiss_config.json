@@ -1,0 +1,1 @@
+{"sql_url": "postgresql://postgres:thesis123.@localhost:5432/sent", "embedding_dim": 768, "similarity": "cosine"}

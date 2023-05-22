@@ -247,6 +247,7 @@ class ASPMetrics(Metric):
         return pd.DataFrame.from_records(self.metrics)
 
     def reset(self):
+        super().reset()
         self.metrics.clear()
 
 

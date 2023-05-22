@@ -508,8 +508,8 @@ class ASPT5Model(pl.LightningModule, gen.ASPGenerationMixin):
         return mapping
 
     def on_validation_epoch_start(self) -> None:
-        super().on_validation_epoch_start()
         self.val_metrics.reset()
+        super().on_validation_epoch_start()
 
     def validation_step(self, samples, batch_idx):
         """

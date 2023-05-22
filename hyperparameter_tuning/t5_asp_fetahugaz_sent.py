@@ -100,10 +100,10 @@ def setup_database(sent_search_algorithm: str, sent_search_topk: int,
     search = Pipeline()
     join_documents_input = []
     # sentences
-    sent_document_store = ElasticsearchDocumentStore(
-        index="sent", embedding_dim=EMBEDDING_DIM, similarity="cosine")
-    add_multiconer_sentences(sent_document_store)
     if sent_search_algorithm == "bm25":
+        sent_document_store = ElasticsearchDocumentStore(
+            index="sent", embedding_dim=EMBEDDING_DIM, similarity="cosine")
+
         bm25_retriever = BM25Retriever(sent_document_store,
                                        top_k=sent_search_topk)
         search.add_node(component=bm25_retriever,
@@ -111,8 +111,13 @@ def setup_database(sent_search_algorithm: str, sent_search_topk: int,
                         inputs=["Query"])
         join_documents_input.append("SentBM25Retriever")
     elif sent_search_algorithm.startswith("ann"):
+        document_store = FAISSDocumentStore.load(
+            index_path=os.path.join(thesis_path, "search", "sent",
+                                    "faiss_index.faiss"),
+            config_path=os.path.join(thesis_path, "search", "sent",
+                                     "faiss_config.json"))
         ann_retriever = EmbeddingRetriever(
-            document_store=sent_document_store,
+            document_store=document_store,
             embedding_model=EMBEDDING_MODEL,
             model_format="sentence_transformers",
             top_k=sent_search_topk)
@@ -120,8 +125,6 @@ def setup_database(sent_search_algorithm: str, sent_search_topk: int,
                         name="SentANNRetriever",
                         inputs=["Query"])
         join_documents_input.append("SentANNRetriever")
-        if sent_document_store.get_embedding_count() == 0:
-            sent_document_store.update_embeddings(ann_retriever)
 
     # fetahu gazetters
     if gaz_search_algorithm == "bm25":
