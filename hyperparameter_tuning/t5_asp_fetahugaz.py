@@ -95,7 +95,7 @@ def add_fetahugaz_documents(doc_store: BaseDocumentStore):
                   "r",
                   encoding="utf-8") as file:
             fetahu_gaz = json.load(file)
-        for gaz in tqdm(fetahu_gaz):
+        for idx, gaz in tqdm(enumerate(fetahu_gaz), total=len(fetahu_gaz)):
             documents.append(
                 Document(content=gaz["entity"],
                          meta={
@@ -103,6 +103,9 @@ def add_fetahugaz_documents(doc_store: BaseDocumentStore):
                              "type": gaz["type"],
                              "entity_id": gaz["entity_id"]
                          }))
+            if idx > 0 and idx % 1e4 == 0:
+                doc_store.write_documents(documents)
+                documents = []
         doc_store.write_documents(documents)
 
 
