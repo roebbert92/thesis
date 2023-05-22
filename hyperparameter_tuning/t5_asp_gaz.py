@@ -46,6 +46,7 @@ def t5_asp_gaz_configs():
         "asp_hidden_dim": 764,
         "plm_learning_rate": 0.0017761923667238327,
         "search_algorithm": "ann",
+        "use_mention": False,
         "search_topk": 23,
         "task_learning_rate": 0.002245444580169059,
         "train_search_dropout": 0.34795288270300007,
@@ -59,7 +60,7 @@ def t5_asp_gaz_configs():
     config["asp_activation"] = "relu"
     config["beam_size"] = 1
     config["use_labels"] = True
-    config["use_mentions"] = False
+    config["use_mentions"] = tune.choice([True, False])
     config["prepend_search_results"] = False
     config["filter_exact_match"] = False
     config["filter_same_document"] = False

@@ -71,11 +71,11 @@ def t5_asp_gaz_sent_configs():
     config["beam_size"] = 1
     config["sent_search_algorithm"] = tune.choice(["bm25", "ann"])
     config["sent_search_topk"] = tune.randint(1, 10)
-    config["sent_use_labels"] = tune.choice([True, False])
+    config["sent_use_labels"] = True
     config["sent_use_mentions"] = tune.choice([True, False])
     config["gaz_search_algorithm"] = tune.choice(["bm25", "ann"])
     config["gaz_search_topk"] = tune.randint(1, 15)
-    config["gaz_use_labels"] = tune.choice([True, False])
+    config["gaz_use_labels"] = True
     config["gaz_use_mentions"] = tune.choice([True, False])
     config["search_join_method"] = tune.choice(
         ["concatenate", "merge", "reciprocal_rank_fusion"])

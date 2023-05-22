@@ -45,6 +45,7 @@ def t5_asp_sent_configs():
         'task_learning_rate': 0.0013480523331922776,
         'adam_weight_decay': 0.49637507889057786,
         'warmup_ratio': 0.184451637360714,
+        "use_mentions": True,
         'search_algorithm': 'bm25',
         'search_topk': 8,
         'train_search_dropout': 0.21126587935893093,
@@ -58,7 +59,7 @@ def t5_asp_sent_configs():
     config["asp_activation"] = "relu"
     config["beam_size"] = 1
     config["use_labels"] = True
-    config["use_mentions"] = True
+    config["use_mentions"] = tune.choice([True, False])
     config["prepend_search_results"] = False
     config["filter_exact_match"] = False
     config["filter_same_document"] = False
