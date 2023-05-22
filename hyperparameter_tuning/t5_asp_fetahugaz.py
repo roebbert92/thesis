@@ -310,6 +310,7 @@ def run_t5_asp_fetahugaz_training(config: dict, fixed_params: dict):
             model = ASPT5Model(train_config, tokenizer)
 
             trainer.fit(model, train_loader, val_dataloaders=val_loader)
+            trainer.validate(model, val_loader)
             trained = True
         except Exception:
             train_config["gradient_accumulation_steps"] = grad_accum_steps[
