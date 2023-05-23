@@ -3,7 +3,7 @@ import os
 import json
 from transformers import PreTrainedTokenizer
 from haystack import Pipeline, Document
-from typing import List, Optional
+from typing import Dict, List, Optional
 from sentence_transformers import SentenceTransformer
 import numpy as np
 from numpy.linalg import norm
@@ -432,15 +432,18 @@ def get_input_sentence_database(tokenizer: PreTrainedTokenizer,
     return processed_doc
 
 
-def query_database(instances: List, search: Pipeline, name: str):
+def query_database(instances: List, search: Pipeline):
     chunk_size = 1000
-    for i in range(0, len(instances), chunk_size):
-        chunk = instances[i:i + chunk_size]
-        results = search.run_batch(
-            [" ".join(instance['extended']) for instance in chunk])
-        for j, res in zip(range(len(chunk)),
-                          results["documents"] if results is not None else []):
-            yield j + i, res
+    with tqdm(desc="Querying database", total=len(instances)) as pbar:
+        for i in range(0, len(instances), chunk_size):
+            chunk = instances[i:i + chunk_size]
+            results = search.run_batch(
+                [" ".join(instance['extended']) for instance in chunk])
+            for j, res in zip(
+                    range(len(chunk)),
+                    results["documents"] if results is not None else []):
+                pbar.update(1)
+                yield j + i, res
 
 
 def tokenize_database_json(tokenizer: PreTrainedTokenizer,
@@ -468,8 +471,7 @@ def tokenize_database_json(tokenizer: PreTrainedTokenizer,
         instances = json.load(file)
 
     name = os.path.basename(os.path.splitext(file_name)[0])
-    for instance_idx, search_result in tqdm(query_database(
-            instances, search, name),
+    for instance_idx, search_result in tqdm(query_database(instances, search),
                                             desc="Tokenization with DB",
                                             total=len(instances)):
         instance = instances[instance_idx]
@@ -488,6 +490,76 @@ def tokenize_database_json(tokenizer: PreTrainedTokenizer,
             tokenizer,
             extended,
             search_result,
+            sent_use_labels,
+            sent_use_mentions,
+            gaz_use_labels,
+            gaz_use_mentions,
+            prepend_examples=prepend_search_results,
+            insert_prefix=prepend_task_description)
+        tokenized_dataset.append({
+            "doc_id": doc_id,
+            "sentence": tokenized_sentence,
+            # sentence is for copy mechanism, might be different from
+            # input_sentence which is for encoding only
+            "input_sentence": input_sentence,
+            "target_sentence": target_sentence,
+            "subtoken_map": subtoken_map,
+            "ent_type_sequence": entity_type_sequence,
+            "ent_indices": entity_indices
+        })
+
+    output_file_name = os.path.join(
+        output_path,
+        f"{os.path.basename(os.path.splitext(file_name)[0])}.{os.path.basename(os.path.splitext(tokenizer.name_or_path)[0])}.jsonlines"
+    )
+    with open(output_file_name, "w", encoding="utf-8") as output_file:
+        json.dump(tokenized_dataset, output_file)
+    return output_file_name
+
+
+def tokenize_search_results_json(tokenizer: PreTrainedTokenizer,
+                                 file_name,
+                                 type_file,
+                                 search_results: Dict[int, List[Document]],
+                                 sent_use_labels: bool,
+                                 sent_use_mentions: bool,
+                                 gaz_use_labels: bool,
+                                 gaz_use_mentions: bool,
+                                 output_path,
+                                 prepend_task_description=True,
+                                 prepend_search_results=False):
+    if MENTION_START not in tokenizer.get_vocab():
+        tokenizer.add_tokens(MENTION_START)
+    if MENTION_END not in tokenizer.get_vocab():
+        tokenizer.add_tokens(MENTION_END)
+
+    with open(type_file, encoding="utf-8") as file:
+        labels = json.load(file)['entities']
+    label_to_id = {label: id for id, label in enumerate(labels)}
+
+    tokenized_dataset = []
+    with open(file_name, encoding="utf-8") as file:
+        instances = json.load(file)
+
+    name = os.path.basename(os.path.splitext(file_name)[0])
+    for instance_idx, instance in tqdm(enumerate(instances),
+                                       desc="Tokenization with DB",
+                                       total=len(instances)):
+        tokens = instance['tokens']
+        entities = instance['entities']
+        extended = instance['extended']
+        doc_id = instance[
+            'doc_id'] if "doc_id" in instance else name + "_" + str(
+                instance_idx)
+
+        tokenized_sentence, target_sentence, entity_type_sequence, entity_indices, subtoken_map = get_target_sentence(
+            tokenizer, label_to_id, tokens, entities)
+
+        # insert prefix (instruction for model) here
+        input_sentence = get_input_sentence_database(
+            tokenizer,
+            extended,
+            search_results[instance_idx],
             sent_use_labels,
             sent_use_mentions,
             gaz_use_labels,

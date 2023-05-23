@@ -8,5 +8,8 @@ run_*
 hyperparameter_tuning/tune
 data/mlowner/lowner_gazetteer.json
 search/fetahugaz/faiss_index.faiss
+search/fetahugaz/*.pkl
 search/gaz/faiss_index.faiss
+search/gaz/*.pkl
 search/sent/faiss_index.faiss
+search/sent/*.pkl

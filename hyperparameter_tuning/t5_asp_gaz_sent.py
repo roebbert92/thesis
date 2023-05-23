@@ -1,5 +1,6 @@
 import copy
 import json
+import pickle
 import sys
 import os
 
@@ -19,7 +20,7 @@ from ray import tune
 import torch
 from torch.utils.data import DataLoader
 from data_preprocessing.tensorize import NERCollator, NERDataProcessor, ner_collate_fn
-from data_preprocessing.tokenize import tokenize_database_json, tokenize_json
+from data_preprocessing.tokenize import tokenize_database_json, tokenize_json, tokenize_search_results_json
 from hyperparameter_tuning.training import factors, get_gazetteers_from_documents, get_sentences_from_documents
 from hyperparameter_tuning.ray_logging import TuneReportCallback
 from lightning.fabric.utilities.seed import seed_everything
@@ -62,6 +63,40 @@ def t5_asp_gaz_sent_configs():
         'asp_dropout_rate': 0.3,
         'plm_learning_rate': 5e-05,
         'num_epochs': 20
+    }, {
+        "adam_weight_decay": 0.009740749999999987,
+        "asp_dropout_rate": 0.39281249999999995,
+        "asp_hidden_dim": 733,
+        "gaz_search_algorithm": "bm25",
+        "gaz_search_topk": 10,
+        "gaz_use_mentions": True,
+        "num_epochs": 20,
+        "plm_learning_rate": 0.001090869565217391,
+        "search_join_method": "reciprocal_rank_fusion",
+        "search_topk": 8,
+        "sent_search_algorithm": "ann",
+        "sent_search_topk": 6,
+        "sent_use_mentions": True,
+        "task_learning_rate": 0.003063582089552239,
+        "train_search_dropout": 0.09154929577464786,
+        "warmup_ratio": 0.30534246575342466
+    }, {
+        "adam_weight_decay": 0.011738749999999989,
+        "asp_dropout_rate": 0.4540625,
+        "asp_hidden_dim": 633,
+        "gaz_search_algorithm": "bm25",
+        "gaz_search_topk": 6,
+        "gaz_use_mentions": False,
+        "num_epochs": 16,
+        "plm_learning_rate": 0.00017496219281663535,
+        "search_join_method": "reciprocal_rank_fusion",
+        "search_topk": 6,
+        "sent_search_algorithm": "ann",
+        "sent_search_topk": 6,
+        "sent_use_mentions": True,
+        "task_learning_rate": 0.0035849253731343286,
+        "train_search_dropout": 0.05492957746478871,
+        "warmup_ratio": 0.37917808219178084
     }]
 
     config["asp_hidden_dim"] = tune.randint(100, 1000)
@@ -170,31 +205,56 @@ def setup_database(sent_search_algorithm: str, sent_search_topk: int,
     return search
 
 
-def augment_dataset(
-    data_path,
-    tokenizer,
-    files,
-    parts,
-    database,
-    sent_use_labels,
-    sent_use_mentions,
-    gaz_use_labels,
-    gaz_use_mentions,
-    prepend_search_results,
-):
+def augment_dataset(config, data_path, tokenizer, files, parts):
+    join_documents = JoinDocuments(join_mode=config["search_join_method"],
+                                   top_k_join=config["search_topk"])
     for part in parts:
+        # load fetahu search results
+        with open(
+                os.path.join(
+                    thesis_path, "search", "gaz",
+                    f"mlowner_{part}_{config['gaz_search_algorithm']}.pkl"),
+                "rb") as file:
+            gaz_results: dict = pickle.load(file)
+        # process search results - top k
+        gaz_results = {
+            key: value[:config["gaz_search_topk"]]
+            for key, value in gaz_results.items()
+        }
+        # load fetahu search results
+        with open(
+                os.path.join(
+                    thesis_path, "search", "sent",
+                    f"mlowner_{part}_{config['sent_search_algorithm']}.pkl"),
+                "rb") as file:
+            sent_results: dict = pickle.load(file)
+        # process search results - top k
+        sent_results = {
+            key: value[:config["sent_search_topk"]]
+            for key, value in sent_results.items()
+        }
+
+        search_results = {
+            key: join_documents.run([{
+                "documents": gaz_results[key]
+            }, {
+                "documents": sent_results[key]
+            }])[0]["documents"]
+            for key in gaz_results
+        }
+
         tokenized_name = "tokenized_" + part
-        files[tokenized_name] = tokenize_database_json(
+        files[tokenized_name] = tokenize_search_results_json(
             tokenizer,
             files[part],
             files["types"],
-            database,
-            sent_use_labels,
-            sent_use_mentions,
-            gaz_use_labels,
-            gaz_use_mentions,
+            search_results,
+            config["sent_use_labels"],
+            config["sent_use_mentions"],
+            config["gaz_use_labels"],
+            config["gaz_use_mentions"],
             data_path,
-            prepend_search_results=prepend_search_results)
+            prepend_search_results=config["prepend_search_results"])
 
 
 def prep_data(path, tokenizer, config: dict):
@@ -230,24 +290,9 @@ def prep_data(path, tokenizer, config: dict):
         "dev": os.path.join(thesis_path, "data", "mlowner", "lowner_dev.json"),
     }
 
-    search = setup_database(config["sent_search_algorithm"],
-                            config["sent_search_topk"],
-                            config["gaz_search_algorithm"],
-                            config["gaz_search_topk"],
-                            config["search_join_method"],
-                            config["search_topk"])
-
     parts = ["train", "dev"]
 
-    augment_dataset(data_path, tokenizer, files, parts, search,
-                    config["sent_use_labels"], config["sent_use_mentions"],
-                    config["gaz_use_labels"], config["gaz_use_mentions"],
-                    config["prepend_search_results"])
-
-    del search
-
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    augment_dataset(config, data_path, tokenizer, files, parts)
 
     return files["tokenized_train"], files["tokenized_dev"], os.path.join(
         thesis_path, "data", "mlowner", "lowner_types.json")

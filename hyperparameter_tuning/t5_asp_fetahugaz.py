@@ -1,5 +1,6 @@
 import copy
 import json
+import pickle
 import sys
 import os
 
@@ -16,8 +17,8 @@ from ray import tune
 import torch
 from torch.utils.data import DataLoader
 from data_preprocessing.tensorize import NERCollator, NERDataProcessor, ner_collate_fn
-from data_preprocessing.tokenize import tokenize_database_json, tokenize_json
-from hyperparameter_tuning.training import factors
+from data_preprocessing.tokenize import tokenize_database_json, tokenize_json, tokenize_search_results_json
+from hyperparameter_tuning.training import factors, get_search_results
 from hyperparameter_tuning.ray_logging import TuneReportCallback
 from lightning.fabric.utilities.seed import seed_everything
 from lightning.pytorch.loggers import TensorBoardLogger
@@ -44,7 +45,7 @@ def t5_asp_fetahugaz_configs():
         "asp_dropout_rate": 0.255,
         "asp_hidden_dim": 764,
         "plm_learning_rate": 0.0017761923667238327,
-        "search_algorithm": "ann",
+        "search_algorithm": "bm25",
         "use_mentions": False,
         "search_topk": 23,
         "task_learning_rate": 0.002245444580169059,
@@ -134,9 +135,20 @@ def setup_database(search_algorithm: str, search_topk: int):
                         name="BM25Retriever",
                         inputs=["Query"])
     elif search_algorithm.startswith("ann"):
+        faiss_index_path = os.path.join(thesis_path, "search", "fetahugaz",
+                                        "faiss_index.faiss")
+        if not os.path.exists(faiss_index_path):
+            document_store = create_faiss_document_store()
+            ann_retriever = EmbeddingRetriever(
+                document_store=document_store,
+                embedding_model=EMBEDDING_MODEL,
+                model_format="sentence_transformers",
+                top_k=search_topk)
+            add_fetahugaz_documents(document_store)
+            train_update_faiss_index(document_store, ann_retriever)
+
         document_store = FAISSDocumentStore.load(
-            index_path=os.path.join(thesis_path, "search", "fetahugaz",
-                                    "faiss_index.faiss"),
+            index_path=faiss_index_path,
             config_path=os.path.join(thesis_path, "search", "fetahugaz",
                                      "faiss_config.json"))
         ann_retriever = EmbeddingRetriever(
@@ -156,29 +168,37 @@ def setup_database(search_algorithm: str, search_topk: int):
     return search
 
 
-def augment_dataset(
-    data_path,
-    tokenizer,
-    files,
-    parts,
-    database,
-    use_labels,
-    use_mentions,
-    prepend_search_results,
-):
+def augment_dataset(config, data_path, tokenizer, files, parts):
     for part in parts:
+        search_results_path = os.path.join(
+            thesis_path, "search", "fetahugaz",
+            f"mlowner_{part}_{config['search_algorithm']}.pkl")
+        if not os.path.exists(search_results_path):
+            search = setup_database(config["search_algorithm"], 50)
+            search_results = get_search_results(search, files[part])
+            with open(search_results_path, "wb") as file:
+                pickle.dump(search_results, file)
+        else:
+            # load search results
+            with open(search_results_path, "rb") as file:
+                search_results: dict = pickle.load(file)
+        # process search results - top k
+        search_results = {
+            key: value[:config["search_topk"]]
+            for key, value in search_results.items()
+        }
         tokenized_name = "tokenized_" + part
-        files[tokenized_name] = tokenize_database_json(
+        files[tokenized_name] = tokenize_search_results_json(
             tokenizer,
             files[part],
             files["types"],
-            database,
+            search_results,
             False,
             False,
-            use_labels,
-            use_mentions,
+            config["use_labels"],
+            config["use_mentions"],
             data_path,
-            prepend_search_results=prepend_search_results)
+            prepend_search_results=config["prepend_search_results"])
 
 
 def prep_data(path, tokenizer, config: dict):
@@ -208,18 +228,9 @@ def prep_data(path, tokenizer, config: dict):
         "dev": os.path.join(thesis_path, "data", "mlowner", "lowner_dev.json"),
     }
 
-    search = setup_database(config["search_algorithm"], config["search_topk"])
-
     parts = ["train", "dev"]
 
-    augment_dataset(data_path, tokenizer, files, parts, search,
-                    config["use_labels"], config["use_mentions"],
-                    config["prepend_search_results"])
-
-    del search
-
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    augment_dataset(config, data_path, tokenizer, files, parts)
 
     return files["tokenized_train"], files["tokenized_dev"], os.path.join(
         thesis_path, "data", "mlowner", "lowner_types.json")
