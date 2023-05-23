@@ -45,42 +45,6 @@ def t5_asp_gaz_sent_configs():
     config["batch_size"] = 40
 
     best_configs = [{
-        'asp_hidden_dim': 142,
-        'task_learning_rate': 0.0013480523331922776,
-        'adam_weight_decay': 0.49637507889057786,
-        'warmup_ratio': 0.184451637360714,
-        'sent_search_algorithm': 'bm25',
-        'sent_search_topk': 8,
-        'sent_use_labels': True,
-        'sent_use_mentions': True,
-        'gaz_search_algorithm': 'bm25',
-        'gaz_search_topk': 8,
-        'gaz_use_labels': True,
-        'gaz_use_mentions': True,
-        'search_join_method': 'concatenate',
-        'search_topk': 6,
-        'train_search_dropout': 0.21126587935893093,
-        'asp_dropout_rate': 0.3,
-        'plm_learning_rate': 5e-05,
-        'num_epochs': 20
-    }, {
-        "adam_weight_decay": 0.009740749999999987,
-        "asp_dropout_rate": 0.39281249999999995,
-        "asp_hidden_dim": 733,
-        "gaz_search_algorithm": "bm25",
-        "gaz_search_topk": 10,
-        "gaz_use_mentions": True,
-        "num_epochs": 20,
-        "plm_learning_rate": 0.001090869565217391,
-        "search_join_method": "reciprocal_rank_fusion",
-        "search_topk": 8,
-        "sent_search_algorithm": "ann",
-        "sent_search_topk": 6,
-        "sent_use_mentions": True,
-        "task_learning_rate": 0.003063582089552239,
-        "train_search_dropout": 0.09154929577464786,
-        "warmup_ratio": 0.30534246575342466
-    }, {
         "adam_weight_decay": 0.011738749999999989,
         "asp_dropout_rate": 0.4540625,
         "asp_hidden_dim": 633,
@@ -96,6 +60,23 @@ def t5_asp_gaz_sent_configs():
         "sent_use_mentions": True,
         "task_learning_rate": 0.0035849253731343286,
         "train_search_dropout": 0.05492957746478871,
+        "warmup_ratio": 0.37917808219178084
+    }, {
+        "adam_weight_decay": 0.011738749999999989,
+        "asp_dropout_rate": 0.4540625,
+        "asp_hidden_dim": 633,
+        "gaz_search_algorithm": "bm25",
+        "gaz_search_topk": 6,
+        "gaz_use_mentions": False,
+        "num_epochs": 24,
+        "plm_learning_rate": 0.00017496219281663535,
+        "search_join_method": "reciprocal_rank_fusion",
+        "search_topk": 8,
+        "sent_search_algorithm": "ann",
+        "sent_search_topk": 6,
+        "sent_use_mentions": True,
+        "task_learning_rate": 0.0035849253731343286,
+        "train_search_dropout": 0.10492957746478871,
         "warmup_ratio": 0.37917808219178084
     }]
 
