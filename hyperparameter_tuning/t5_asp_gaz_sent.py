@@ -51,23 +51,6 @@ def t5_asp_gaz_sent_configs():
         "gaz_search_algorithm": "bm25",
         "gaz_search_topk": 6,
         "gaz_use_mentions": False,
-        "num_epochs": 16,
-        "plm_learning_rate": 0.00017496219281663535,
-        "search_join_method": "reciprocal_rank_fusion",
-        "search_topk": 6,
-        "sent_search_algorithm": "ann",
-        "sent_search_topk": 6,
-        "sent_use_mentions": True,
-        "task_learning_rate": 0.0035849253731343286,
-        "train_search_dropout": 0.05492957746478871,
-        "warmup_ratio": 0.37917808219178084
-    }, {
-        "adam_weight_decay": 0.011738749999999989,
-        "asp_dropout_rate": 0.4540625,
-        "asp_hidden_dim": 633,
-        "gaz_search_algorithm": "bm25",
-        "gaz_search_topk": 6,
-        "gaz_use_mentions": False,
         "num_epochs": 24,
         "plm_learning_rate": 0.00017496219281663535,
         "search_join_method": "reciprocal_rank_fusion",
@@ -77,6 +60,23 @@ def t5_asp_gaz_sent_configs():
         "sent_use_mentions": True,
         "task_learning_rate": 0.0035849253731343286,
         "train_search_dropout": 0.10492957746478871,
+        "warmup_ratio": 0.37917808219178084
+    }, {
+        "adam_weight_decay": 0.011738749999999989,
+        "asp_dropout_rate": 0.4540625,
+        "asp_hidden_dim": 633,
+        "gaz_search_algorithm": "bm25",
+        "gaz_search_topk": 6,
+        "gaz_use_mentions": False,
+        "num_epochs": 16,
+        "plm_learning_rate": 0.00017496219281663535,
+        "search_join_method": "reciprocal_rank_fusion",
+        "search_topk": 6,
+        "sent_search_algorithm": "ann",
+        "sent_search_topk": 6,
+        "sent_use_mentions": True,
+        "task_learning_rate": 0.0035849253731343286,
+        "train_search_dropout": 0.05492957746478871,
         "warmup_ratio": 0.37917808219178084
     }]
 

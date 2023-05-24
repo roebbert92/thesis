@@ -42,17 +42,17 @@ def t5_asp_gaz_configs():
     config["batch_size"] = 40
 
     best_configs = [{
-        "adam_weight_decay": 0.16654221006912023,
-        "asp_dropout_rate": 0.255,
-        "asp_hidden_dim": 764,
-        "plm_learning_rate": 0.0017761923667238327,
-        "search_algorithm": "ann",
+        "adam_weight_decay": 0.011738749999999989,
+        "asp_dropout_rate": 0.4540625,
+        "asp_hidden_dim": 633,
+        "num_epochs": 16,
+        "search_algorithm": "bm25",
+        "plm_learning_rate": 0.00017496219281663535,
+        "search_topk": 8,
         "use_mentions": False,
-        "search_topk": 23,
-        "task_learning_rate": 0.002245444580169059,
-        "train_search_dropout": 0.34795288270300007,
-        "warmup_ratio": 0.40508103379041166,
-        "num_epochs": 10
+        "task_learning_rate": 0.0035849253731343286,
+        "train_search_dropout": 0.05492957746478871,
+        "warmup_ratio": 0.37917808219178084
     }]
 
     config["asp_hidden_dim"] = tune.randint(100, 1000)

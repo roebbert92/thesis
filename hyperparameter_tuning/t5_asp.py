@@ -62,6 +62,14 @@ def t5_asp_configs():
             "task_learning_rate": 0.002735443003884387,
             "warmup_ratio": 0.2850151436321613,
             "num_epochs": 10
+        }, {
+            "adam_weight_decay": 0.011738749999999989,
+            "asp_dropout_rate": 0.4540625,
+            "asp_hidden_dim": 633,
+            "num_epochs": 16,
+            "plm_learning_rate": 0.00017496219281663535,
+            "task_learning_rate": 0.0035849253731343286,
+            "warmup_ratio": 0.37917808219178084
         }
     ]
 

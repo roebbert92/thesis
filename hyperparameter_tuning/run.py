@@ -47,7 +47,7 @@ def tune_hyperparameters(name, config, best_configs, tune_training_method,
         metric_columns=["val_f1", "training_iteration"])
 
     ng_search = NevergradSearch(optimizer=ng.optimizers.ScrHammersleySearch,
-                                optimizer_kwargs={"budget": 1000},
+                                optimizer_kwargs={"budget": 60},
                                 metric="val_f1",
                                 mode="max",
                                 points_to_evaluate=best_configs)
@@ -64,9 +64,9 @@ def tune_hyperparameters(name, config, best_configs, tune_training_method,
         metric='val_f1',
         mode='max',
         max_t=100,
-        grace_period=1,
+        grace_period=2,
         reduction_factor=2,
-        brackets=3,
+        brackets=1,
     )
 
     tuner = tune.Tuner(method,
@@ -91,20 +91,20 @@ def tune_hyperparameters(name, config, best_configs, tune_training_method,
 
 training_budget = 10
 
-t5_asp_fetahugaz_sent_config = t5_asp_fetahugaz_sent_configs()
-tune_hyperparameters("t5_asp_fetahugaz_sent", t5_asp_fetahugaz_sent_config[0],
-                     t5_asp_fetahugaz_sent_config[1],
-                     run_t5_asp_fetahugaz_sent_training, training_budget)
+# t5_asp_fetahugaz_sent_config = t5_asp_fetahugaz_sent_configs()
+# tune_hyperparameters("t5_asp_fetahugaz_sent", t5_asp_fetahugaz_sent_config[0],
+#                      t5_asp_fetahugaz_sent_config[1],
+#                      run_t5_asp_fetahugaz_sent_training, training_budget)
 
-t5_asp_gaz_sent_config = t5_asp_gaz_sent_configs()
-tune_hyperparameters("t5_asp_gaz_sent", t5_asp_gaz_sent_config[0],
-                     t5_asp_gaz_sent_config[1], run_t5_asp_gaz_sent_training,
-                     training_budget)
-
-t5_asp_sent_config = t5_asp_sent_configs()
-tune_hyperparameters("t5_asp_sent", t5_asp_sent_config[0],
-                     t5_asp_sent_config[1], run_t5_asp_sent_training,
-                     training_budget)
+# t5_asp_gaz_sent_config = t5_asp_gaz_sent_configs()
+# tune_hyperparameters("t5_asp_gaz_sent", t5_asp_gaz_sent_config[0],
+#                      t5_asp_gaz_sent_config[1], run_t5_asp_gaz_sent_training,
+#                      training_budget)
+#
+# t5_asp_sent_config = t5_asp_sent_configs()
+# tune_hyperparameters("t5_asp_sent", t5_asp_sent_config[0],
+#                      t5_asp_sent_config[1], run_t5_asp_sent_training,
+#                      training_budget)
 
 t5_asp_gaz_config = t5_asp_gaz_configs()
 tune_hyperparameters("t5_asp_gaz", t5_asp_gaz_config[0], t5_asp_gaz_config[1],
