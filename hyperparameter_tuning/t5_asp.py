@@ -93,7 +93,7 @@ def t5_asp_configs():
     config["task_learning_rate"] = tune.uniform(1e-5, 5e-3)
     config["adam_weight_decay"] = tune.uniform(5e-4, 0.27)
     config["warmup_ratio"] = tune.uniform(0.01, 0.5)
-    config["num_epochs"] = tune.randint(10, 40)
+    config["num_epochs"] = tune.randint(10, 25)
 
     return config, best_configs
 

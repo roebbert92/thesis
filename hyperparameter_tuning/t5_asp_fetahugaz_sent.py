@@ -88,16 +88,16 @@ def t5_asp_fetahugaz_sent_configs():
     config["asp_activation"] = "relu"
     config["beam_size"] = 1
     config["sent_search_algorithm"] = tune.choice(["bm25", "ann"])
-    config["sent_search_topk"] = tune.randint(1, 10)
+    config["sent_search_topk"] = tune.randint(4, 12)
     config["sent_use_labels"] = True
     config["sent_use_mentions"] = tune.choice([True, False])
     config["gaz_search_algorithm"] = tune.choice(["bm25", "ann"])
-    config["gaz_search_topk"] = tune.randint(1, 15)
+    config["gaz_search_topk"] = tune.randint(4, 12)
     config["gaz_use_labels"] = True
     config["gaz_use_mentions"] = tune.choice([True, False])
     config["search_join_method"] = tune.choice(
         ["concatenate", "merge", "reciprocal_rank_fusion"])
-    config["search_topk"] = tune.randint(5, 20)
+    config["search_topk"] = tune.randint(4, 12)
     config["prepend_search_results"] = False
     config["filter_exact_match"] = False
     config["filter_same_document"] = False
@@ -108,7 +108,7 @@ def t5_asp_fetahugaz_sent_configs():
     config["task_learning_rate"] = tune.uniform(1e-5, 5e-3)
     config["adam_weight_decay"] = tune.uniform(5e-4, 0.5)
     config["warmup_ratio"] = tune.uniform(0.01, 0.5)
-    config["num_epochs"] = tune.randint(10, 40)
+    config["num_epochs"] = tune.randint(10, 25)
 
     return config, best_configs
 
