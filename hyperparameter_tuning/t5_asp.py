@@ -46,23 +46,7 @@ def t5_asp_configs():
     config["name"] = "t5_asp"
 
     best_configs = [
-        T5_BASE.copy(), {
-            "adam_weight_decay": 0.23588487514616147,
-            "asp_dropout_rate": 0.24422749793507542,
-            "asp_hidden_dim": 323,
-            "plm_learning_rate": 5e-5,
-            "task_learning_rate": 0.0013567436131267515,
-            "warmup_ratio": 0.3147284381262512,
-            "num_epochs": 10
-        }, {
-            "adam_weight_decay": 0.2637723452107371,
-            "asp_dropout_rate": 0.27548604937281485,
-            "asp_hidden_dim": 689,
-            "plm_learning_rate": 5e-05,
-            "task_learning_rate": 0.002735443003884387,
-            "warmup_ratio": 0.2850151436321613,
-            "num_epochs": 10
-        }, {
+        {
             "adam_weight_decay": 0.011738749999999989,
             "asp_dropout_rate": 0.4540625,
             "asp_hidden_dim": 633,
@@ -70,7 +54,25 @@ def t5_asp_configs():
             "plm_learning_rate": 0.00017496219281663535,
             "task_learning_rate": 0.0035849253731343286,
             "warmup_ratio": 0.37917808219178084
-        }
+        },
+        {
+            "adam_weight_decay": 0.029695833333333334,
+            "asp_dropout_rate": 0.43875,
+            "asp_hidden_dim": 644,
+            "num_epochs": 15,
+            "plm_learning_rate": 0.00020887755102040807,
+            "task_learning_rate": 0.0018245454545454548,
+            "warmup_ratio": 0.16076923076923078
+        },
+        {
+            "adam_weight_decay": 0.1554625,
+            "asp_dropout_rate": 0.38515625,
+            "asp_hidden_dim": 428,
+            "num_epochs": 11,
+            "plm_learning_rate": 0.00010693877551020426,
+            "task_learning_rate": 0.0027730578512396692,
+            "warmup_ratio": 0.06798816568047338
+        },
     ]
 
     config["asp_hidden_dim"] = tune.randint(100, 800)
