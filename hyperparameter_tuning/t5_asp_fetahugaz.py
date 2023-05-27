@@ -10,7 +10,7 @@ thesis_path = "/" + os.path.join(
     *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-1])
 sys.path.append(thesis_path)
 
-from configs.asp_t5 import T5_BASE
+from configs.asp_t5 import FLAN_T5_BASE, T5_BASE
 from models.asp_t5 import ASPT5Model, get_tokenizer
 
 from ray import tune
@@ -53,6 +53,91 @@ def t5_asp_fetahugaz_configs():
         "train_search_dropout": 0.05492957746478871,
         "warmup_ratio": 0.37917808219178084
     }]
+
+    config["asp_hidden_dim"] = tune.randint(100, 1000)
+    config["asp_dropout_rate"] = tune.uniform(0.01, 0.5)
+    config["asp_init_std"] = 0.02
+    config["asp_activation"] = "relu"
+    config["beam_size"] = 1
+    config["use_labels"] = True
+    config["use_mentions"] = tune.choice([True, False])
+    config["prepend_search_results"] = False
+    config["filter_exact_match"] = False
+    config["filter_same_document"] = False
+    config["search_data_type"] = "gazetteers"
+    config["search_algorithm"] = tune.choice(["bm25", "ann"])
+    config["search_topk"] = tune.randint(4, 12)
+    config["seed"] = 42
+    config["train_search_dropout"] = tune.uniform(0.0, 0.65)
+    config["train_search_shuffle"] = False
+    config["plm_learning_rate"] = tune.uniform(5e-6, 5e-3)
+    config["task_learning_rate"] = tune.uniform(1e-5, 5e-3)
+    config["adam_weight_decay"] = tune.uniform(5e-4, 0.17)
+    config["warmup_ratio"] = tune.uniform(0.01, 0.5)
+    config["num_epochs"] = tune.randint(10, 25)
+
+    return config, best_configs
+
+
+def flan_t5_asp_fetahugaz_configs():
+    config = FLAN_T5_BASE.copy()
+
+    config["data_path"] = os.path.join(thesis_path, "hyperparameter_tuning",
+                                       "tune")
+    config["name"] = "flan-t5_asp_fetahugaz"
+    config["batch_size"] = 40
+
+    best_configs = [
+        {
+            "adam_weight_decay": 0.011738749999999989,
+            "asp_dropout_rate": 0.4540625,
+            "asp_hidden_dim": 633,
+            #"gaz_search_algorithm": "bm25",
+            #"gaz_search_topk": 6,
+            #"gaz_use_mentions": False,
+            "num_epochs": 16,
+            "plm_learning_rate": 0.00017496219281663535,
+            #"search_join_method": "reciprocal_rank_fusion",
+            "search_topk": 8,
+            "search_algorithm": "bm25",
+            #"sent_search_topk": 6,
+            "use_mentions": False,
+            "task_learning_rate": 0.0035849253731343286,
+            "train_search_dropout": 0.05492957746478871,
+            "warmup_ratio": 0.37917808219178084
+        },
+        {
+            "adam_weight_decay": 0.12402083333333332,
+            "asp_dropout_rate": 0.11718749999999999,
+            "asp_hidden_dim": 342,
+            "num_epochs": 21,
+            "plm_learning_rate": 0.00010693877551020426,
+            "task_learning_rate": 0.00413396694214876,
+            "warmup_ratio": 0.29414201183431954,
+            #"gaz_search_algorithm": "bm25",
+            #"gaz_search_topk": 6,
+            #"gaz_use_mentions": False,
+            #"search_join_method": "reciprocal_rank_fusion",
+            "search_topk": 8,
+            "search_algorithm": "ann",
+            #"sent_search_topk": 6,
+            "use_mentions": True,
+            "train_search_dropout": 0.05492957746478871,
+        },
+        {
+            "adam_weight_decay": 0.11773750000000002,
+            "asp_dropout_rate": 0.17078125000000002,
+            "asp_hidden_dim": 344,
+            "num_epochs": 19,
+            "plm_learning_rate": 0.00041275510204081606,
+            "search_algorithm": "bm25",
+            "search_topk": 6,
+            "task_learning_rate": 0.004018587257617729,
+            "train_search_dropout": 0.04054820415879017,
+            "use_mentions": False,
+            "warmup_ratio": 0.2952666179693207
+        }
+    ]
 
     config["asp_hidden_dim"] = tune.randint(100, 1000)
     config["asp_dropout_rate"] = tune.uniform(0.01, 0.5)

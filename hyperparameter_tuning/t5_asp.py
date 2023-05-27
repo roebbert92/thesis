@@ -6,7 +6,7 @@ thesis_path = "/" + os.path.join(
     *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-1])
 sys.path.append(thesis_path)
 
-from configs.asp_t5 import T5_BASE
+from configs.asp_t5 import FLAN_T5_BASE, T5_BASE
 from models.asp_t5 import ASPT5Model, get_tokenizer
 
 from ray import tune
@@ -72,6 +72,61 @@ def t5_asp_configs():
             "plm_learning_rate": 0.00010693877551020426,
             "task_learning_rate": 0.0027730578512396692,
             "warmup_ratio": 0.06798816568047338
+        },
+    ]
+
+    config["asp_hidden_dim"] = tune.randint(100, 800)
+    config["asp_dropout_rate"] = tune.uniform(0.01, 0.5)
+    config["asp_init_std"] = 0.02
+    config["asp_activation"] = "relu"
+    config["beam_size"] = 1
+    config["use_labels"] = None
+    config["use_mentions"] = None
+    config["prepend_search_results"] = None
+    config["filter_exact_match"] = None
+    config["filter_same_document"] = None
+    config["search_data_type"] = None
+    config["search_algorithm"] = None
+    config["search_topk"] = None
+    config["seed"] = 42
+    config["train_search_dropout"] = None
+    config["train_search_shuffle"] = None
+    config["plm_learning_rate"] = tune.uniform(5e-6, 5e-3)
+    config["task_learning_rate"] = tune.uniform(1e-5, 5e-3)
+    config["adam_weight_decay"] = tune.uniform(5e-4, 0.27)
+    config["warmup_ratio"] = tune.uniform(0.01, 0.5)
+    config["num_epochs"] = tune.randint(10, 25)
+
+    return config, best_configs
+
+
+def flan_t5_asp_configs():
+    config = FLAN_T5_BASE.copy()
+    config["seed"] = 42
+
+    config["data_path"] = os.path.join(thesis_path, "hyperparameter_tuning",
+                                       "tune")
+    config["name"] = "flan-t5_asp"
+
+    best_configs = [
+        {
+            "adam_weight_decay": 0.011738749999999989,
+            "asp_dropout_rate": 0.4540625,
+            "asp_hidden_dim": 633,
+            "num_epochs": 16,
+            "plm_learning_rate": 0.00017496219281663535,
+            "task_learning_rate": 0.0035849253731343286,
+            "train_search_dropout": 0.05492957746478871,
+            "warmup_ratio": 0.37917808219178084
+        },
+        {
+            "adam_weight_decay": 0.12402083333333332,
+            "asp_dropout_rate": 0.11718749999999999,
+            "asp_hidden_dim": 342,
+            "num_epochs": 21,
+            "plm_learning_rate": 0.00010693877551020426,
+            "task_learning_rate": 0.00413396694214876,
+            "warmup_ratio": 0.29414201183431954,
         },
     ]
 
