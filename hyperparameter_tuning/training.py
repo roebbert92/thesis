@@ -3,6 +3,7 @@ from functools import reduce
 import json
 import sys
 import os
+from typing import List
 
 thesis_path = "/" + os.path.join(
     *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-1])
@@ -76,11 +77,15 @@ def factors(n):
                                        int(n**0.5) + 1) if not n % i)))))
 
 
-def get_search_results(search: Pipeline, file_name: str):
+def get_search_results_for_file(search: Pipeline, file_name: str):
     with open(file_name, encoding="utf-8") as file:
         instances = json.load(file)
+    return get_search_results(search, instances)
+
+
+def get_search_results(search: Pipeline, dataset: List[dict]):
     results = {
         instance_idx: result
-        for instance_idx, result in query_database(instances, search)
+        for instance_idx, result in query_database(dataset, search)
     }
     return results

@@ -27,6 +27,26 @@ def count_entities(items: List[dict]):
             entity_type_count.append((entity_text, item["type"]))
             entity_count.append(entity_text)
             types.add(item["type"])
+        elif "meta" in item:
+            # search result
+            if item["meta"]["data_type"] == "gazetteers":
+                # gazetteer
+                entity_text = item["content"].lower()
+                entity_type = item["meta"]["type"]
+                entity_type_count.append((entity_text, entity_type))
+                entity_count.append(entity_text)
+                types.add(entity_type)
+            elif item["meta"]["data_type"] == "sentences":
+                # sentence
+                for entity in item["meta"]["entities"]:
+                    if entity["end"] - entity["start"] == 0:
+                        entity["end"] += 1
+                    entity_text = " ".join(
+                        item["content"].split()
+                        [entity["start"]:entity["end"]]).lower()
+                    entity_type_count.append((entity_text, entity["type"]))
+                    entity_count.append(entity_text)
+                    types.add(entity["type"])
 
     return Counter(entity_count), Counter(entity_type_count), types
 
@@ -42,9 +62,7 @@ def entity_coverage_ratio(first: List[dict], second: List[dict]):
     c = {}
     expected = 0.0
     total_second_entity_count = 0
-    for entity, second_total_count in tqdm(second_entity_count.items(),
-                                           total=len(second_entity_count),
-                                           desc="Entity Coverage Ratio"):
+    for entity, second_total_count in second_entity_count.items():
         total_second_entity_count += second_total_count
         if entity not in first_entity_count:
             ratio[entity] = 0.0
@@ -61,7 +79,10 @@ def entity_coverage_ratio(first: List[dict], second: List[dict]):
                                   ) * second_entity_type_count[(entity, t)]
             ratio[entity] /= second_total_count
             expected += ratio[entity] * second_total_count
-    expected /= total_second_entity_count
+    if total_second_entity_count > 0:
+        expected /= total_second_entity_count
+    else:
+        assert expected == 0.0
     return ratio, c, expected
 
 
