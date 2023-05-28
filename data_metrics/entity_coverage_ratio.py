@@ -4,61 +4,47 @@ from typing import List, Optional
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
+import multiprocessing as mp
 
 
-def count_entities_dataset(dataset: List[dict]):
+def count_entities(items: List[dict]):
     entity_type_count = []
     entity_count = []
     types = set()
-    for item in dataset:
-        for entity in item["entities"]:
-            if entity["end"] - entity["start"] == 0:
-                entity["end"] += 1
-            entity_text = " ".join(
-                item["tokens"][entity["start"]:entity["end"]]).lower()
-            entity_type_count.append((entity_text, entity["type"]))
+    for item in items:
+        if "entities" in item:
+            for entity in item["entities"]:
+                if entity["end"] - entity["start"] == 0:
+                    entity["end"] += 1
+                entity_text = " ".join(
+                    item["tokens"][entity["start"]:entity["end"]]).lower()
+                entity_type_count.append((entity_text, entity["type"]))
+                entity_count.append(entity_text)
+                types.add(entity["type"])
+        elif "entity" in item:
+            entity_text = item["entity"].lower()
+            entity_type_count.append((entity_text, item["type"]))
             entity_count.append(entity_text)
-            types.add(entity["type"])
+            types.add(item["type"])
 
     return Counter(entity_count), Counter(entity_type_count), types
 
 
-def count_entities_gazetteer(gazetteer: List[dict]):
-    entity_type_count = []
-    entity_count = []
-    types = set()
-    for item in gazetteer:
-        entity_text = item["entity"].lower()
-        entity_type_count.append((entity_text, item["type"]))
-        entity_count.append(entity_text)
-        types.add(item["type"])
-
-    return Counter(entity_count), Counter(entity_type_count), types
-
-
-def entity_coverage_ratio(first: List[dict],
-                          second: List[dict],
-                          first_is_dataset=True,
-                          second_is_dataset=True):
-    if first_is_dataset:
-        first_entity_count, first_entity_type_count, first_types = count_entities_dataset(
-            first)
-    else:
-        first_entity_count, first_entity_type_count, first_types = count_entities_gazetteer(
-            first)
-    if second_is_dataset:
-        second_entity_count, second_entity_type_count, second_types = count_entities_dataset(
-            second)
-    else:
-        second_entity_count, second_entity_type_count, second_types = count_entities_gazetteer(
-            second)
+def entity_coverage_ratio(first: List[dict], second: List[dict]):
+    first_entity_count, first_entity_type_count, first_types = count_entities(
+        first)
+    second_entity_count, second_entity_type_count, second_types = count_entities(
+        second)
 
     types = first_types.union(second_types)
     ratio = {}
     c = {}
     expected = 0.0
     total_second_entity_count = 0
-    for entity, second_total_count in second_entity_count.items():
+    for entity, second_total_count in tqdm(second_entity_count.items(),
+                                           total=len(second_entity_count),
+                                           desc="Entity Coverage Ratio"):
         total_second_entity_count += second_total_count
         if entity not in first_entity_count:
             ratio[entity] = 0.0
@@ -109,17 +95,26 @@ def display_cases_entity_coverage_ratio(ratio: dict,
     return plt.figure() if ax is None else ax.figure
 
 
+def __mp_exp_entity_coverage_ratio(first, second, first_idx, second_idx):
+    _, _, expected = entity_coverage_ratio(first, second)
+    return first_idx, second_idx, expected
+
+
 def confusion_matrix_expected_entity_coverage_ratio(datasets: List[List[dict]],
-                                                    names: List[str],
-                                                    are_datasets: List[bool]):
-    assert len(datasets) == len(names) == len(are_datasets)
+                                                    names: List[str]):
+    assert len(datasets) == len(names)
     results = []
-    for first_idx, second_idx in product(range(len(datasets)),
-                                         range(len(datasets))):
-        _, _, expected = entity_coverage_ratio(datasets[first_idx],
-                                               datasets[second_idx],
-                                               are_datasets[first_idx],
-                                               are_datasets[second_idx])
+    pool = mp.Pool(processes=mp.cpu_count() - 1)
+
+    product_list = list(product(range(len(datasets)), range(len(datasets))))
+
+    for first_idx, second_idx, expected in tqdm(
+            pool.starmap(__mp_exp_entity_coverage_ratio,
+                         [(datasets[first].copy(), datasets[second].copy(),
+                           first, second) for first, second in product_list],
+                         chunksize=10),
+            desc="Expected Entity Coverage Ratio",
+            total=len(product_list)):
         results.append({
             "first": names[first_idx],
             "second": names[second_idx],
