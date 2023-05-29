@@ -1,6 +1,8 @@
 import sys
 import os
 
+import torch
+
 thesis_path = '/home/loebbert/projects/thesis'
 sys.path.append(thesis_path)
 
@@ -15,6 +17,7 @@ from hyperparameter_tuning.training import get_search_results
 from lightning.fabric.utilities.seed import seed_everything
 import pickle
 from data_metrics.entity_coverage_ratio import entity_coverage_ratio
+from data_metrics.sample_similarity import get_search_sample_similarity
 import pandas as pd
 from tqdm import tqdm
 
@@ -122,6 +125,7 @@ with open("/home/loebbert/projects/thesis/data/mlowner/lowner_test.json",
 
 seeds = [1, 2, 3]
 search_result_eecr = []
+search_result_ccr = []
 
 for seed in seeds:
     # seed
@@ -166,21 +170,24 @@ for seed in seeds:
                                       (lowner_dev, "lowner_dev"),
                                       (lowner_test, "lowner_test")]:
 
-            search_results = get_search_results(search, dataset)
-
             # save search results for augmentation
             file_name = os.path.join(
                 "/home/loebbert/projects/thesis", "experiments",
                 "01_performance", "search_results",
                 f"{str(seed)}_{config['name']}_{dataset_name}.pkl")
 
-            with open(file_name, "wb") as file:
-                pickle.dump(search_results, file)
+            if not os.path.exists(file_name):
+                search_results = get_search_results(search, dataset)
+                with open(file_name, "wb") as file:
+                    pickle.dump(search_results, file)
+            else:
+                with open(file_name, "rb") as file:
+                    search_results = pickle.load(file)
 
             # calculate the expected entity coverage ratio for each sample
             for idx, item in tqdm(enumerate(dataset),
                                   total=len(dataset),
-                                  desc="Dataset search results"):
+                                  desc="EECR"):
                 results = [doc.to_dict() for doc in search_results[idx]]
                 _, _, eecr = entity_coverage_ratio(results, [item])
                 search_result_eecr.append({
@@ -191,7 +198,31 @@ for seed in seeds:
                     "eecr": eecr
                 })
 
+            # calculate the context coverage ratio for each sample
+            for result in tqdm(get_search_sample_similarity(
+                    dataset, search_results),
+                               total=len(dataset),
+                               desc="CCR"):
+                res = {
+                    "dataset": dataset_name,
+                    "model": config["name"],
+                    "seed": seed,
+                }
+                for key, value in result.items():
+                    if isinstance(value, torch.Tensor):
+                        res[key] = float(value.cpu().numpy())
+                    else:
+                        res[key] = value
+                search_result_ccr.append(res)
+
 df = pd.DataFrame.from_records(search_result_eecr)
 file_name = os.path.join("/home/loebbert/projects/thesis", "experiments",
                          "01_performance", "search_result_eecr_df.pkl")
+df.to_pickle(file_name)
+
+file_name = os.path.join("/home/loebbert/projects/thesis", "experiments",
+                         "01_performance", "search_result_ccr_df.pkl")
+with open(file_name, "wb") as file:
+    pickle.dump(search_result_ccr, file)
+df = pd.DataFrame.from_records(search_result_ccr)
 df.to_pickle(file_name)

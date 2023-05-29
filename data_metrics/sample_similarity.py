@@ -1,6 +1,7 @@
 from typing import Dict, Optional, List
 from sentence_transformers import SentenceTransformer
 import torch
+from torch.utils.data import Dataset, DataLoader
 from torch import Tensor
 from tqdm import tqdm
 from itertools import combinations_with_replacement
@@ -8,6 +9,157 @@ import pandas as pd
 import copy
 import matplotlib.pyplot as plt
 import numpy as np
+from transformers import AutoTokenizer, AutoModel
+
+
+class SearchSampleSimilarity(torch.nn.Module):
+    def __init__(self,
+                 sbert_model_name: str,
+                 inner_batch_size: int = 1000) -> None:
+        super().__init__()
+        self.inner_batch_size = inner_batch_size
+        self.tokenizer = AutoTokenizer.from_pretrained(sbert_model_name)
+        self.model = AutoModel.from_pretrained(sbert_model_name)
+        self.cosine = torch.nn.CosineSimilarity(dim=-1)
+
+    #Mean Pooling - Take attention mask into account for correct averaging
+    @staticmethod
+    def mean_pooling(model_output, attention_mask):
+        token_embeddings = model_output[
+            0]  #First element of model_output contains all token embeddings
+        input_mask_expanded = attention_mask.unsqueeze(-1).expand(
+            token_embeddings.size()).float()
+        sum_embeddings = torch.sum(token_embeddings * input_mask_expanded, 1)
+        sum_mask = torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+        return sum_embeddings / sum_mask
+
+    def forward(self, query_id, query, full_contexts, windowed_contexts,
+                encoded_inputs):
+        result = []
+        encoded_inputs = encoded_inputs.to(self.model.device)
+        with torch.no_grad():
+            model_output = self.model(**encoded_inputs)
+        embeds = SearchSampleSimilarity.mean_pooling(
+            model_output, encoded_inputs["attention_mask"])
+
+        for idx, q_id in enumerate(query_id):
+            res = {"doc_id": q_id}
+            query_embed = embeds[query[idx]].unsqueeze(0)
+            try:
+                full_start = full_contexts[idx][0]
+                full_end = full_contexts[idx][1]
+                full_size = full_end - full_start
+                if full_size > 0:
+                    full_contexts_embed = embeds[full_start:full_end]
+                    full_contexts_cosine = self.cosine(
+                        query_embed.repeat((full_size, 1)),
+                        full_contexts_embed)
+                    res.update({
+                        "cosine_full_max":
+                        torch.max(full_contexts_cosine),
+                        "cosine_full_mean":
+                        torch.mean(full_contexts_cosine),
+                        "cosine_full_min":
+                        torch.min(full_contexts_cosine),
+                    })
+                else:
+                    res.update({
+                        "cosine_full_max": torch.nan,
+                        "cosine_full_mean": torch.nan,
+                        "cosine_full_min": torch.nan,
+                    })
+
+                windowed_start = windowed_contexts[idx][0]
+                windowed_end = windowed_contexts[idx][1]
+                windowed_size = windowed_end - windowed_start
+                if windowed_size > 0:
+                    windowed_contexts_embed = embeds[
+                        windowed_start:windowed_end]
+                    windowed_contexts_cosine = self.cosine(
+                        query_embed.repeat((windowed_size, 1)),
+                        windowed_contexts_embed)
+                    res.update({
+                        "cosine_windowed_max":
+                        torch.max(windowed_contexts_cosine),
+                        "cosine_windowed_mean":
+                        torch.mean(windowed_contexts_cosine),
+                        "cosine_windowed_min":
+                        torch.min(windowed_contexts_cosine)
+                    })
+                else:
+                    res.update({
+                        "cosine_windowed_max": torch.nan,
+                        "cosine_windowed_mean": torch.nan,
+                        "cosine_windowed_min": torch.nan
+                    })
+            except:
+                print(query, full_contexts, windowed_contexts, sep="\n")
+            result.append(res)
+
+        return result
+
+
+class SearchSampleDataset(Dataset):
+    def __init__(self, dataset: List[dict], search_results: dict):
+        self.search_results = search_results
+        self.dataset = dataset
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, index):
+        sample = self.dataset[index]
+        results = [doc.to_dict() for doc in self.search_results[index]]
+        _, full_contexts = get_full_context(results)
+        _, windowed_contexts = get_windowed_context(results)
+        return (sample["doc_id"], " ".join(sample["tokens"]), full_contexts,
+                windowed_contexts)
+
+
+class SearchSampleSimilarityCollator(object):
+    def __init__(self, sbert_model_name: str) -> None:
+        self.tokenizer = AutoTokenizer.from_pretrained(sbert_model_name)
+
+    def __call__(self, collator_input):
+        query_ids = []
+        queries = []
+        full_contexts = []
+        windowed_contexts = []
+        sentences = []
+        for query_id, query, full, windowed in collator_input:
+            query_ids.append(query_id)
+            queries.append(len(sentences))
+            sentences.append(query)
+            full_start = len(sentences)
+            sentences.extend(full)
+            full_end = len(sentences)
+            full_contexts.append((full_start, full_end))
+            windowed_start = len(sentences)
+            sentences.extend(windowed)
+            windowed_end = len(sentences)
+            windowed_contexts.append((windowed_start, windowed_end))
+
+        encoded_sentences = self.tokenizer(sentences,
+                                           padding=True,
+                                           truncation=True,
+                                           max_length=128,
+                                           return_tensors='pt')
+
+        return query_ids, queries, full_contexts, windowed_contexts, encoded_sentences
+
+
+def get_search_sample_similarity(dataset: List[dict], search_results: dict):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model_name = "sentence-transformers/all-mpnet-base-v2" if device == "cuda" else "sentence-transformers/all-MiniLM-L6-v2"
+    model = SearchSampleSimilarity(model_name).to(device)
+    collator = SearchSampleSimilarityCollator(model_name)
+    data = SearchSampleDataset(dataset, search_results)
+    loader = DataLoader(data, batch_size=20, collate_fn=collator)
+
+    for query_id, query, full_contexts, windowed_contexts, encoded_inputs in loader:
+        for item in model(query_id, query, full_contexts, windowed_contexts,
+                          encoded_inputs):
+            yield item
 
 
 def batched_similarity(fn: torch.nn.Module, x_tensors: Tensor,
@@ -35,7 +187,6 @@ def compute_similarity(fn: torch.nn.Module,
                        device: str,
                        batch_size: int = 20,
                        max_set_size: int = 1000):
-
     def compute(first_name: str, first: Tensor, second_name: str,
                 second: Tensor, device: str, batch_size: int,
                 max_set_size: int):
@@ -101,35 +252,54 @@ def get_embeddings(cache: Dict[str, Tensor], model: SentenceTransformer,
     return first_embed, second_embed
 
 
-def get_gazetteers(dataset: List[dict], window_size=3):
-    entities = set()
-    for item in dataset:
-        ents = copy.deepcopy(item["entities"])
-        for entity in ents:
+def get_windowed_context(dataset: List[dict], window_size=3):
+    contexts = set()
+
+    def windowed_context(tokens: List[str], entities):
+        for entity in entities:
             if entity["end"] - entity["start"] == 0:
                 entity["end"] += 1
-            entity_text = " ".join(
-                item["tokens"][entity["start"]:entity["end"]])
+            entity_text = " ".join(tokens[entity["start"]:entity["end"]])
             if entity["start"] < window_size:
                 entity["start"] = 0
             else:
                 entity["start"] -= window_size
-            if entity["end"] > len(item["tokens"]) - 1 - window_size:
-                entity["end"] = len(item["tokens"]) - 1
+            if entity["end"] > len(tokens) - 1 - window_size:
+                entity["end"] = len(tokens) - 1
             else:
                 entity["end"] += window_size
-            entity_context = " ".join(
-                item["tokens"][entity["start"]:entity["end"]])
-            entities.add((entity_context, entity_text, entity["type"]))
-    return ["_".join(e[1:]) for e in entities], [e[0] for e in entities]
+            entity_context = " ".join(tokens[entity["start"]:entity["end"]])
+            contexts.add((entity_context, entity_text, entity["type"]))
+
+    for item in dataset:
+        if "entities" in item:
+            ents = copy.deepcopy(item["entities"])
+            windowed_context(item["tokens"], ents)
+        elif "meta" in item:
+            # search result
+            if item["meta"]["data_type"] == "gazetteers":
+                # gazetteer - take full context
+                contexts.add(
+                    (item["content"], item["content"], item["meta"]["type"]))
+            elif item["meta"]["data_type"] == "sentences":
+                # sentence
+                ents = copy.deepcopy(item["meta"]["entities"])
+                windowed_context(item["content"].split(" "), ents)
+
+    return ["_".join(e[1:]) for e in contexts], [e[0] for e in contexts]
 
 
-def get_sentences(dataset: List[dict]):
+def get_full_context(dataset: List[dict]):
     sentences = []
     sentence_ids = []
     for item in dataset:
-        sentence_ids.append(item["doc_id"])
-        sentences.append(" ".join(item["tokens"]))
+        if "tokens" in item:
+            sentence_ids.append(item["doc_id"])
+            sentences.append(" ".join(item["tokens"]))
+        elif "content" in item:
+            # search result
+            sentence_ids.append(item["id"])
+            sentences.append(item["content"])
     return sentence_ids, sentences
 
 
@@ -147,10 +317,10 @@ def sample_similarity(first_name: str,
     cosine = torch.nn.CosineSimilarity(dim=-1)
 
     # build database (gazetteers (entities), sentences) if not exists for each path
-    first_gaz_ids, first_gazetteers = get_gazetteers(first)
-    first_sent_ids, first_sentences = get_sentences(first)
-    second_gaz_ids, second_gazetteers = get_gazetteers(second)
-    second_sent_ids, second_sentences = get_sentences(second)
+    first_gaz_ids, first_gazetteers = get_windowed_context(first)
+    first_sent_ids, first_sentences = get_full_context(first)
+    second_gaz_ids, second_gazetteers = get_windowed_context(second)
+    second_sent_ids, second_sentences = get_full_context(second)
 
     with torch.no_grad():
         first_gaz_embed, second_gaz_embed = get_embeddings(
