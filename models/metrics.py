@@ -97,6 +97,9 @@ class ASPMetrics(Metric):
         self.metrics.append({
             "doc_id": id,
             "targets": len(targets_set),
+            "tp": tp.item(),
+            "fn": fn.item(),
+            "fp": fp.item(),
             "precision": precision.item(),
             "recall": recall.item(),
             "f1": f1.item(),
