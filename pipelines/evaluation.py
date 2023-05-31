@@ -211,7 +211,7 @@ def get_documents_from_sentences(docs):
     return documents
 
 
-def factors(n):
+def factors(n: int) -> List[int]:
     return sorted(
         list(
             set(

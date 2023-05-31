@@ -81,9 +81,7 @@ def entity_coverage_ratio(first: List[dict], second: List[dict]):
             expected += ratio[entity] * second_total_count
     if total_second_entity_count > 0:
         expected /= total_second_entity_count
-    else:
-        assert expected == 0.0
-    return ratio, c, expected
+    return ratio, c, expected, total_second_entity_count
 
 
 def display_cases_entity_coverage_ratio(ratio: dict,
@@ -117,7 +115,7 @@ def display_cases_entity_coverage_ratio(ratio: dict,
 
 
 def __mp_exp_entity_coverage_ratio(first, second, first_idx, second_idx):
-    _, _, expected = entity_coverage_ratio(first, second)
+    _, _, expected, _ = entity_coverage_ratio(first, second)
     return first_idx, second_idx, expected
 
 

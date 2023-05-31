@@ -95,7 +95,7 @@ class ASPMetrics(Metric):
                                    dtype=torch.int)
 
         self.metrics.append({
-            "sample_id": id,
+            "doc_id": id,
             "targets": len(targets_set),
             "precision": precision.item(),
             "recall": recall.item(),

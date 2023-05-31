@@ -518,16 +518,38 @@ def tokenize_database_json(tokenizer: PreTrainedTokenizer,
 
 
 def tokenize_search_results_json(tokenizer: PreTrainedTokenizer,
-                                 file_name,
-                                 type_file,
+                                 file_name: str,
+                                 type_file: str,
                                  search_results: Dict[int, List[Document]],
-                                 sent_use_labels: bool,
-                                 sent_use_mentions: bool,
-                                 gaz_use_labels: bool,
-                                 gaz_use_mentions: bool,
-                                 output_path,
+                                 output_path: str,
+                                 use_labels: Optional[bool] = None,
+                                 use_mentions: Optional[bool] = None,
+                                 sent_use_labels: Optional[bool] = None,
+                                 sent_use_mentions: Optional[bool] = None,
+                                 gaz_use_labels: Optional[bool] = None,
+                                 gaz_use_mentions: Optional[bool] = None,
                                  prepend_task_description=True,
                                  prepend_search_results=False):
+    if use_labels is not None and use_mentions is not None:
+        assert sent_use_labels is sent_use_mentions is gaz_use_labels is gaz_use_mentions is None
+        sent_use_labels = use_labels
+        gaz_use_labels = use_labels
+        sent_use_mentions = use_mentions
+        gaz_use_mentions = use_mentions
+    elif sent_use_labels is not None and sent_use_mentions is not None:
+        assert use_labels is use_mentions is None
+        if gaz_use_labels is None:
+            gaz_use_labels = False
+            gaz_use_mentions = False
+    elif gaz_use_labels is not None and gaz_use_mentions is not None:
+        assert use_labels is use_mentions is None
+        if sent_use_labels is None:
+            sent_use_labels = False
+            sent_use_mentions = False
+    else:
+        use_labels = False
+        use_mentions = False
+
     if MENTION_START not in tokenizer.get_vocab():
         tokenizer.add_tokens(MENTION_START)
     if MENTION_END not in tokenizer.get_vocab():
@@ -560,10 +582,10 @@ def tokenize_search_results_json(tokenizer: PreTrainedTokenizer,
             tokenizer,
             extended,
             search_results[instance_idx],
-            sent_use_labels,
-            sent_use_mentions,
-            gaz_use_labels,
-            gaz_use_mentions,
+            sent_use_labels,  # type: ignore
+            sent_use_mentions,  # type: ignore
+            gaz_use_labels,  # type: ignore
+            gaz_use_mentions,  # type: ignore
             prepend_examples=prepend_search_results,
             insert_prefix=prepend_task_description)
         tokenized_dataset.append({

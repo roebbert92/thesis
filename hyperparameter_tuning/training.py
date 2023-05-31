@@ -67,7 +67,7 @@ def get_sentences_from_documents(docs, name: str = ""):
     return documents
 
 
-def factors(n):
+def factors(n: int) -> List[int]:
     return sorted(
         list(
             set(

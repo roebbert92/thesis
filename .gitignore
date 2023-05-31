@@ -3,6 +3,8 @@ wikigaz.tsv
 *.pyc
 *.bin
 lightning_logs
+tokenized_files
+checkpoints
 frameworks/apex
 run_*
 hyperparameter_tuning/tune
