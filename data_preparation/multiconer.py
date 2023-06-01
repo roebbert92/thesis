@@ -3,6 +3,8 @@ import os
 import json
 from typing import Optional
 
+from data_preparation import checks
+
 
 @dataclass()
 class Entity():
@@ -11,8 +13,7 @@ class Entity():
     end: int
 
 
-def multiconer_to_json(file_name: str,
-                   dir_path: Optional[str] = None):
+def multiconer_to_json(file_name: str, dir_path: Optional[str] = None):
     if dir_path is None:
         dir_path = os.path.dirname(file_name)
 
@@ -48,13 +49,20 @@ def multiconer_to_json(file_name: str,
                         doc["entities"].append(asdict(current_type))
                     except AssertionError:
                         print("Annotation error: ", file_name, line_nr,
-                                current_type)
+                              current_type)
                 current_types = {}
 
                 if doc is not None and len(doc["tokens"]) > 0:
-                    doc["extended"] = doc["tokens"]
-                    dataset.append(doc)
-                doc = {"tokens": [], "extended": [], "entities": [],  "doc_id": "", "domain": ""}
+                    if checks.is_supported_doc(doc["tokens"]):
+                        doc["extended"] = doc["tokens"]
+                        dataset.append(doc)
+                doc = {
+                    "tokens": [],
+                    "extended": [],
+                    "entities": [],
+                    "doc_id": "",
+                    "domain": ""
+                }
                 idx = -1
                 continue
             elif line.startswith("# id"):
@@ -81,10 +89,9 @@ def multiconer_to_json(file_name: str,
                         # check if same type is already begun before
                         if type in current_types:
                             current_types[type].end = idx
-                            assert current_types[
-                                type].start < current_types[type].end
-                            doc["entities"].append(
-                                asdict(current_types[type]))
+                            assert current_types[type].start < current_types[
+                                type].end
+                            doc["entities"].append(asdict(current_types[type]))
                         # B = start entity + recognize type
                         current_types[type] = Entity(type, idx, idx)
                     elif bio_label == "I":
@@ -100,15 +107,13 @@ def multiconer_to_json(file_name: str,
                             try:
                                 current_type.end = idx
                                 assert current_type.start < current_type.end
-                                doc["entities"].append(
-                                    asdict(current_type))
+                                doc["entities"].append(asdict(current_type))
                             except AssertionError:
-                                print("Annotation error: ", file_name,
-                                        line_nr, current_type, items)
+                                print("Annotation error: ", file_name, line_nr,
+                                      current_type, items)
                         current_types = {}
                 # if types are not in tags -> entity ended
-                types_not_in_tags = set(current_types).difference(
-                    set(types))
+                types_not_in_tags = set(current_types).difference(set(types))
                 for type in types_not_in_tags:
                     current_type = current_types[type]
                     try:
@@ -118,7 +123,7 @@ def multiconer_to_json(file_name: str,
                         del current_types[type]
                     except AssertionError:
                         print("Annotation error: ", file_name, line_nr,
-                                current_type, items)
+                              current_type, items)
     if doc is not None and len(doc["tokens"]) > 0:
         doc["extended"] = doc["tokens"]
         dataset.append(doc)
@@ -127,11 +132,11 @@ def multiconer_to_json(file_name: str,
     #    doc["doc_id"] = "multiconer_" + name + "_" + str(doc_id)
 
     with open(f"{dir_path}/multiconer_{name}.json", "w",
-                encoding="utf-8") as json_file:
+              encoding="utf-8") as json_file:
         json.dump(dataset, json_file)
 
     with open(f"{dir_path}/multiconer_types.json", "w",
-                encoding="utf-8") as json_file:
+              encoding="utf-8") as json_file:
         json.dump(
             {
                 "entities": {
