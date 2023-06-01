@@ -1,13 +1,7 @@
 import copy
-import json
 import pickle
 import sys
 import os
-
-from tqdm import tqdm
-from hyperparameter_tuning.t5_asp_gaz import add_multiconer_gazetteers
-
-from hyperparameter_tuning.t5_asp_sent import add_multiconer_sentences
 
 thesis_path = "/" + os.path.join(
     *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-1])
@@ -20,28 +14,24 @@ from ray import tune
 import torch
 from torch.utils.data import DataLoader
 from data_preprocessing.tensorize import NERCollator, NERDataProcessor, ner_collate_fn
-from data_preprocessing.tokenize import tokenize_database_json, tokenize_json, tokenize_search_results_json
-from hyperparameter_tuning.training import factors, get_gazetteers_from_documents, get_sentences_from_documents
+from data_preprocessing.tokenize import tokenize_search_results_json
+from hyperparameter_tuning.utils import factors
 from hyperparameter_tuning.ray_logging import TuneReportCallback
 from lightning.fabric.utilities.seed import seed_everything
 from lightning.pytorch.loggers import TensorBoardLogger
 import lightning.pytorch as pl
-
-from haystack import Pipeline, Document
-from haystack.document_stores import ElasticsearchDocumentStore, FAISSDocumentStore, BaseDocumentStore
-from haystack.nodes import EmbeddingRetriever, BM25Retriever, JoinDocuments
-import faiss
-
-EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"  # "sentence-transformers/all-MiniLM-L6-v2"
-EMBEDDING_DIM = 768  #  384
+from search.lownergaz.setup import add_lownergaz_search_components
+from search.sent.setup import add_sent_search_components
+from haystack import Pipeline
+from haystack.nodes import JoinDocuments
 
 
-def t5_asp_fetahugaz_sent_configs():
+def t5_asp_lownergaz_sent_configs():
     config = T5_BASE.copy()
 
     config["data_path"] = os.path.join(thesis_path, "hyperparameter_tuning",
                                        "tune")
-    config["name"] = "t5_asp_fetahugaz_sent"
+    config["name"] = "t5_asp_lownergaz_sent"
     config["batch_size"] = 40
 
     best_configs = [{
@@ -94,12 +84,12 @@ def t5_asp_fetahugaz_sent_configs():
     return config, best_configs
 
 
-def flan_t5_asp_fetahugaz_sent_configs():
+def flan_t5_asp_lownergaz_sent_configs():
     config = FLAN_T5_BASE.copy()
 
     config["data_path"] = os.path.join(thesis_path, "hyperparameter_tuning",
                                        "tune")
-    config["name"] = "flan-t5_asp_fetahugaz_sent"
+    config["name"] = "flan-t5_asp_lownergaz_sent"
     config["batch_size"] = 40
 
     best_configs = [{
@@ -163,75 +153,28 @@ def flan_t5_asp_fetahugaz_sent_configs():
     return config, best_configs
 
 
-def setup_database(sent_search_algorithm: str, sent_search_topk: int,
-                   gaz_search_algorithm: str, gaz_search_topk: int,
-                   join_method: str, join_topk: int):
+def setup_database(sent_search_algorithm: str,
+                   sent_search_topk: int,
+                   gaz_search_algorithm: str,
+                   gaz_search_topk: int,
+                   join_method: str,
+                   join_topk: int,
+                   reset=False):
     search = Pipeline()
     join_documents_input = []
     # sentences
-    if sent_search_algorithm == "bm25":
-        sent_document_store = ElasticsearchDocumentStore(
-            index="sent", embedding_dim=EMBEDDING_DIM, similarity="cosine")
+    add_sent_search_components(search, sent_search_algorithm, sent_search_topk,
+                               join_documents_input, reset)
 
-        bm25_retriever = BM25Retriever(sent_document_store,
-                                       top_k=sent_search_topk)
-        search.add_node(component=bm25_retriever,
-                        name="SentBM25Retriever",
-                        inputs=["Query"])
-        join_documents_input.append("SentBM25Retriever")
-    elif sent_search_algorithm.startswith("ann"):
-        document_store = FAISSDocumentStore.load(
-            index_path=os.path.join(thesis_path, "search", "sent",
-                                    "faiss_index.faiss"),
-            config_path=os.path.join(thesis_path, "search", "sent",
-                                     "faiss_config.json"))
-        document_store.faiss_indexes[
-            document_store.index] = faiss.index_cpu_to_all_gpus(
-                index=document_store.faiss_indexes[document_store.index])
-        ann_retriever = EmbeddingRetriever(
-            document_store=document_store,
-            embedding_model=EMBEDDING_MODEL,
-            model_format="sentence_transformers",
-            top_k=sent_search_topk)
-        search.add_node(component=ann_retriever,
-                        name="SentANNRetriever",
-                        inputs=["Query"])
-        join_documents_input.append("SentANNRetriever")
-
-    # fetahu gazetters
-    if gaz_search_algorithm == "bm25":
-        document_store = ElasticsearchDocumentStore(
-            index="fetahugaz", embedding_dim=EMBEDDING_DIM)
-        bm25_retriever = BM25Retriever(document_store, top_k=gaz_search_topk)
-        search.add_node(component=bm25_retriever,
-                        name="GazBM25Retriever",
-                        inputs=["Query"])
-        join_documents_input.append("GazBM25Retriever")
-    elif gaz_search_algorithm.startswith("ann"):
-        document_store = FAISSDocumentStore.load(
-            index_path=os.path.join(thesis_path, "search", "fetahugaz",
-                                    "faiss_index.faiss"),
-            config_path=os.path.join(thesis_path, "search", "fetahugaz",
-                                     "faiss_config.json"))
-        ann_retriever = EmbeddingRetriever(
-            document_store=document_store,
-            embedding_model=EMBEDDING_MODEL,
-            model_format="sentence_transformers",
-            top_k=gaz_search_topk)
-        search.add_node(component=ann_retriever,
-                        name="GazANNRetriever",
-                        inputs=["Query"])
-        join_documents_input.append("GazANNRetriever")
+    # lowner gazetteers
+    add_lownergaz_search_components(search, gaz_search_algorithm,
+                                    gaz_search_topk, join_documents_input,
+                                    reset)
 
     # join documents
 
     join_documents = JoinDocuments(join_mode=join_method, top_k_join=join_topk)
     search.add_node(join_documents, "DocumentJoin", join_documents_input)
-
-    if len(search.components) == 0:
-        raise Exception(
-            "Argument error: search_algorithm - must be: bm25 | ann , but is: "
-            + sent_search_algorithm)
 
     return search
 
@@ -240,19 +183,19 @@ def augment_dataset(config, data_path, tokenizer, files, parts):
     join_documents = JoinDocuments(join_mode=config["search_join_method"],
                                    top_k_join=config["search_topk"])
     for part in parts:
-        # load fetahu search results
+        # load lowner search results
         with open(
                 os.path.join(
-                    thesis_path, "search", "fetahugaz",
+                    thesis_path, "search", "lownergaz",
                     f"mlowner_{part}_{config['gaz_search_algorithm']}.pkl"),
                 "rb") as file:
-            fetahu_results: dict = pickle.load(file)
+            lowner_results: dict = pickle.load(file)
         # process search results - top k
-        fetahu_results = {
+        lowner_results = {
             key: value[:config["gaz_search_topk"]]
-            for key, value in fetahu_results.items()
+            for key, value in lowner_results.items()
         }
-        # load fetahu search results
+        # load lowner search results
         with open(
                 os.path.join(
                     thesis_path, "search", "sent",
@@ -267,11 +210,11 @@ def augment_dataset(config, data_path, tokenizer, files, parts):
 
         search_results = {
             key: join_documents.run([{
-                "documents": fetahu_results[key]
+                "documents": lowner_results[key]
             }, {
                 "documents": sent_results[key]
             }])[0]["documents"]
-            for key in fetahu_results
+            for key in lowner_results
         }
 
         tokenized_name = "tokenized_" + part
@@ -329,7 +272,7 @@ def prep_data(path, tokenizer, config: dict):
         thesis_path, "data", "mlowner", "lowner_types.json")
 
 
-def run_t5_asp_fetahugaz_sent_training(config: dict, fixed_params: dict):
+def run_t5_asp_lownergaz_sent_training(config: dict, fixed_params: dict):
     config.update(fixed_params)
 
     if "PL_GLOBAL_SEED" in os.environ:
@@ -362,8 +305,8 @@ def run_t5_asp_fetahugaz_sent_training(config: dict, fixed_params: dict):
     config["fused"] = True
     config["precision"] = "bf16-mixed"
     torch.set_float32_matmul_precision("medium")
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.allow_tf32 = True
+    torch.backends.cuda.matmul.allow_tf32 = True # type: ignore
+    torch.backends.cudnn.allow_tf32 = True # type: ignore
 
     tb_logger = TensorBoardLogger(save_dir=os.getcwd(), name="", version=".")
 

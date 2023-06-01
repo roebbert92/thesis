@@ -3,7 +3,7 @@ import os
 import json
 import regex
 from typing import Optional
-from data_preparation import checks
+from data_preparation import utils
 
 
 @dataclass()
@@ -102,7 +102,7 @@ def lowner_to_json(train_file: str,
                     current_types = {}
 
                     if doc is not None and len(doc["tokens"]) > 0:
-                        if checks.is_supported_doc(doc["tokens"]):
+                        if utils.is_supported_doc(doc["tokens"]):
                             doc["extended"] = doc["tokens"]
                             dataset.append(doc)
                     doc = {"tokens": [], "extended": [], "entities": []}

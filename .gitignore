@@ -16,3 +16,5 @@ search/gaz/*.pkl
 search/sent/faiss_index.faiss
 search/sent/*.pkl
 experiments/01_performance/search_results/*.pkl
+*.db
+*.db-journal

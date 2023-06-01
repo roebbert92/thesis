@@ -8,6 +8,8 @@ from tqdm import tqdm
 from hyperparameter_tuning.t5_asp_gaz import add_multiconer_gazetteers
 
 from hyperparameter_tuning.t5_asp_sent import add_multiconer_sentences
+from search.gaz.setup import add_gaz_search_components
+from search.sent.setup import add_sent_search_components, create_sent_faiss_document_store, train_update_sent_faiss_index
 
 thesis_path = "/" + os.path.join(
     *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-1])
@@ -21,19 +23,14 @@ import torch
 from torch.utils.data import DataLoader
 from data_preprocessing.tensorize import NERCollator, NERDataProcessor, ner_collate_fn
 from data_preprocessing.tokenize import tokenize_database_json, tokenize_json, tokenize_search_results_json
-from hyperparameter_tuning.training import factors, get_gazetteers_from_documents, get_sentences_from_documents
+from hyperparameter_tuning.utils import factors, get_gazetteers_from_documents, get_sentences_from_documents
 from hyperparameter_tuning.ray_logging import TuneReportCallback
 from lightning.fabric.utilities.seed import seed_everything
 from lightning.pytorch.loggers import TensorBoardLogger
 import lightning.pytorch as pl
 
-from haystack import Pipeline, Document
-from haystack.document_stores import ElasticsearchDocumentStore, FAISSDocumentStore, BaseDocumentStore
-from haystack.nodes import EmbeddingRetriever, BM25Retriever, JoinDocuments
-import faiss
-
-EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"  # "sentence-transformers/all-MiniLM-L6-v2"
-EMBEDDING_DIM = 768  #  384
+from haystack import Pipeline
+from haystack.nodes import JoinDocuments
 
 
 def t5_asp_gaz_sent_configs():
@@ -189,77 +186,26 @@ def flan_t5_asp_gaz_sent_configs():
     return config, best_configs
 
 
-def setup_database(sent_search_algorithm: str, sent_search_topk: int,
-                   gaz_search_algorithm: str, gaz_search_topk: int,
-                   join_method: str, join_topk: int):
+def setup_database(sent_search_algorithm: str,
+                   sent_search_topk: int,
+                   gaz_search_algorithm: str,
+                   gaz_search_topk: int,
+                   join_method: str,
+                   join_topk: int,
+                   reset=False):
     search = Pipeline()
     join_documents_input = []
     # sentences
-    if sent_search_algorithm == "bm25":
-        sent_document_store = ElasticsearchDocumentStore(
-            index="sent", embedding_dim=EMBEDDING_DIM, similarity="cosine")
-        bm25_retriever = BM25Retriever(sent_document_store,
-                                       top_k=sent_search_topk)
-        search.add_node(component=bm25_retriever,
-                        name="SentBM25Retriever",
-                        inputs=["Query"])
-        join_documents_input.append("SentBM25Retriever")
-    elif sent_search_algorithm.startswith("ann"):
-        document_store = FAISSDocumentStore.load(
-            index_path=os.path.join(thesis_path, "search", "sent",
-                                    "faiss_index.faiss"),
-            config_path=os.path.join(thesis_path, "search", "sent",
-                                     "faiss_config.json"))
-        document_store.faiss_indexes[
-            document_store.index] = faiss.index_cpu_to_all_gpus(
-                index=document_store.faiss_indexes[document_store.index])
-        ann_retriever = EmbeddingRetriever(
-            document_store=document_store,
-            embedding_model=EMBEDDING_MODEL,
-            model_format="sentence_transformers",
-            top_k=sent_search_topk)
-        search.add_node(component=ann_retriever,
-                        name="SentANNRetriever",
-                        inputs=["Query"])
-        join_documents_input.append("SentANNRetriever")
+    add_sent_search_components(search, sent_search_algorithm, sent_search_topk,
+                               join_documents_input, reset)
 
     # gazetters
-    if gaz_search_algorithm == "bm25":
-        document_store = ElasticsearchDocumentStore(
-            index="gaz", embedding_dim=EMBEDDING_DIM, similarity="cosine")
-        bm25_retriever = BM25Retriever(document_store, top_k=gaz_search_topk)
-        search.add_node(component=bm25_retriever,
-                        name="GazBM25Retriever",
-                        inputs=["Query"])
-        join_documents_input.append("GazBM25Retriever")
-    elif gaz_search_algorithm.startswith("ann"):
-        document_store = FAISSDocumentStore.load(
-            index_path=os.path.join(thesis_path, "search", "gaz",
-                                    "faiss_index.faiss"),
-            config_path=os.path.join(thesis_path, "search", "gaz",
-                                     "faiss_config.json"))
-        document_store.faiss_indexes[
-            document_store.index] = faiss.index_cpu_to_all_gpus(
-                index=document_store.faiss_indexes[document_store.index])
-        ann_retriever = EmbeddingRetriever(
-            document_store=document_store,
-            embedding_model=EMBEDDING_MODEL,
-            model_format="sentence_transformers",
-            top_k=gaz_search_topk)
-        search.add_node(component=ann_retriever,
-                        name="GazANNRetriever",
-                        inputs=["Query"])
-        join_documents_input.append("GazANNRetriever")
+    add_gaz_search_components(search, gaz_search_algorithm, gaz_search_topk,
+                              join_documents_input, reset)
 
     # join documents
-
     join_documents = JoinDocuments(join_mode=join_method, top_k_join=join_topk)
     search.add_node(join_documents, "DocumentJoin", join_documents_input)
-
-    if len(search.components) == 0:
-        raise Exception(
-            "Argument error: search_algorithm - must be: bm25 | ann , but is: "
-            + sent_search_algorithm)
 
     return search
 
@@ -390,8 +336,8 @@ def run_t5_asp_gaz_sent_training(config: dict, fixed_params: dict):
     config["fused"] = True
     config["precision"] = "bf16-mixed"
     torch.set_float32_matmul_precision("medium")
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.allow_tf32 = True
+    torch.backends.cuda.matmul.allow_tf32 = True  # type: ignore
+    torch.backends.cudnn.allow_tf32 = True  # type: ignore
 
     tb_logger = TensorBoardLogger(save_dir=os.getcwd(), name="", version=".")
 

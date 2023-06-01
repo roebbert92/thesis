@@ -15,12 +15,12 @@ from models.asp_t5 import ASPT5Model, get_tokenizer
 from pipelines.evaluation import factors
 from configs.asp_t5 import T5_BASE, FLAN_T5_BASE
 import json
-from hyperparameter_tuning.t5_asp_fetahugaz_sent import setup_database as setup_database_fetahugaz_sent
+from hyperparameter_tuning.t5_asp_lownergaz_sent import setup_database as setup_database_lownergaz_sent
 from hyperparameter_tuning.t5_asp_gaz_sent import setup_database as setup_database_gaz_sent
-from hyperparameter_tuning.t5_asp_fetahugaz import setup_database as setup_database_fetahugaz
+from hyperparameter_tuning.t5_asp_lownergaz import setup_database as setup_database_lownergaz
 from hyperparameter_tuning.t5_asp_gaz import setup_database as setup_database_gaz
 from hyperparameter_tuning.t5_asp_sent import setup_database as setup_database_sent
-from hyperparameter_tuning.training import get_search_results
+from hyperparameter_tuning.utils import get_search_results
 from lightning.fabric.utilities.seed import seed_everything
 from haystack import Document
 import pickle
@@ -32,8 +32,8 @@ import lightning.pytorch as pl
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger
 
-t5_asp_fetahugaz_sent = T5_BASE.copy()
-t5_asp_fetahugaz_sent.update({
+t5_asp_lownergaz_sent = T5_BASE.copy()
+t5_asp_lownergaz_sent.update({
     "adam_weight_decay": 0.011738749999999989,
     "asp_dropout_rate": 0.4540625,
     "asp_hidden_dim": 633,
@@ -52,11 +52,11 @@ t5_asp_fetahugaz_sent.update({
     "task_learning_rate": 0.0035849253731343286,
     "train_search_dropout": 0.05492957746478871,
     "warmup_ratio": 0.37917808219178084,
-    "name": "t5_asp_fetahugaz_sent"
+    "name": "t5_asp_lownergaz_sent"
 })
 
-t5_asp_fetahugaz = FLAN_T5_BASE.copy()
-t5_asp_fetahugaz.update({
+t5_asp_lownergaz = FLAN_T5_BASE.copy()
+t5_asp_lownergaz.update({
     "adam_weight_decay": 0.011738749999999989,
     "asp_dropout_rate": 0.4540625,
     "asp_hidden_dim": 633,
@@ -69,7 +69,7 @@ t5_asp_fetahugaz.update({
     "use_labels": True,
     "use_mentions": False,
     "warmup_ratio": 0.37917808219178084,
-    "name": "t5_asp_fetahugaz"
+    "name": "t5_asp_lownergaz"
 })
 
 t5_asp_gaz = FLAN_T5_BASE.copy()
@@ -163,7 +163,7 @@ files = {
 seeds = [1, 2, 3]
 datasets = {"train": lowner_train, "dev": lowner_dev, "test": lowner_test}
 configs = [
-    t5_asp_fetahugaz_sent, t5_asp_fetahugaz, t5_asp_gaz, t5_asp_gaz_sent,
+    t5_asp_lownergaz_sent, t5_asp_lownergaz, t5_asp_gaz, t5_asp_gaz_sent,
     t5_asp_sent, t5_asp
 ]
 for config in configs:
@@ -245,8 +245,8 @@ def get_model_performance(seed: int, config,
     config["fused"] = True
     config["precision"] = "bf16-mixed"
     torch.set_float32_matmul_precision("medium")
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.allow_tf32 = True
+    torch.backends.cuda.matmul.allow_tf32 = True  # type: ignore
+    torch.backends.cudnn.allow_tf32 = True  # type: ignore
     train_config = copy.deepcopy(config)
     trained = False
 
@@ -380,8 +380,8 @@ for seed in seeds:
     for config in configs:
         # setup database
         search = None
-        if config["name"] == "t5_asp_fetahugaz_sent":
-            search = setup_database_fetahugaz_sent(
+        if config["name"] == "t5_asp_lownergaz_sent":
+            search = setup_database_lownergaz_sent(
                 config["sent_search_algorithm"],
                 config["sent_search_topk"],
                 config["gaz_search_algorithm"],
@@ -398,8 +398,8 @@ for seed in seeds:
                 config["search_join_method"],
                 config["search_topk"],
             )
-        if config["name"] == "t5_asp_fetahugaz":
-            search = setup_database_fetahugaz(config["search_algorithm"],
+        if config["name"] == "t5_asp_lownergaz":
+            search = setup_database_lownergaz(config["search_algorithm"],
                                               config["search_topk"])
         if config["name"] == "t5_asp_gaz":
             search = setup_database_gaz(config["search_algorithm"],
@@ -462,8 +462,8 @@ for seed in seeds:
                     search_result_ccr.append(res)
 
         # train model and get results
-        # model_metrics.append(
-        #     get_model_performance(seed, config, search_results))
+        model_metrics.append(
+            get_model_performance(seed, config, search_results))
 
 df = pd.DataFrame.from_records(search_result_eecr)
 file_name = os.path.join("/home/loebbert/projects/thesis", "experiments",
@@ -475,7 +475,7 @@ file_name = os.path.join("/home/loebbert/projects/thesis", "experiments",
 df = pd.DataFrame.from_records(search_result_ccr)
 df.to_pickle(file_name)
 
-# model_metrics_df = pd.concat(model_metrics)
-# file_name = os.path.join("/home/loebbert/projects/thesis", "experiments",
-#                          "01_performance", "model_metrics_df.pkl")
-# model_metrics_df.to_pickle(file_name)
+model_metrics_df = pd.concat(model_metrics)
+file_name = os.path.join("/home/loebbert/projects/thesis", "experiments",
+                         "01_performance", "model_metrics_df.pkl")
+model_metrics_df.to_pickle(file_name)

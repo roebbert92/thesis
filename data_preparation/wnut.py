@@ -2,7 +2,7 @@ from dataclasses import dataclass, asdict
 import os
 import json
 from typing import Optional
-from data_preparation import checks
+from data_preparation import utils
 
 
 @dataclass()
@@ -48,7 +48,7 @@ def bio_to_json(dataset_name: str,
                     current_types = {}
 
                     if doc is not None and len(doc["tokens"]) > 0:
-                        if checks.is_supported_doc(doc["tokens"]):
+                        if utils.is_supported_doc(doc["tokens"]):
                             doc["extended"] = doc["tokens"]
                             dataset.append(doc)
                     doc = {"tokens": [], "extended": [], "entities": []}

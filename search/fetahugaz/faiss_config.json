@@ -1,1 +1,0 @@
-{"sql_url": "postgresql://postgres:thesis123.@localhost:5432/fetahugaz", "index": "fetahugaz", "faiss_index_factory_str": "OPQ128_384,IVF20000,PQ128", "embedding_dim": 768, "similarity": "cosine"}

@@ -6,6 +6,8 @@ import os
 
 from tqdm import tqdm
 
+from search.lownergaz.setup import add_lownergaz_search_components
+
 thesis_path = "/" + os.path.join(
     *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-1])
 sys.path.append(thesis_path)
@@ -18,7 +20,7 @@ import torch
 from torch.utils.data import DataLoader
 from data_preprocessing.tensorize import NERCollator, NERDataProcessor, ner_collate_fn
 from data_preprocessing.tokenize import tokenize_database_json, tokenize_json, tokenize_search_results_json
-from hyperparameter_tuning.training import factors, get_search_results
+from hyperparameter_tuning.utils import factors, get_search_results
 from hyperparameter_tuning.ray_logging import TuneReportCallback
 from lightning.fabric.utilities.seed import seed_everything
 from lightning.pytorch.loggers import TensorBoardLogger
@@ -32,12 +34,12 @@ EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"  # "sentence-transfo
 EMBEDDING_DIM = 768  #  384
 
 
-def t5_asp_fetahugaz_configs():
+def t5_asp_lownergaz_configs():
     config = T5_BASE.copy()
 
     config["data_path"] = os.path.join(thesis_path, "hyperparameter_tuning",
                                        "tune")
-    config["name"] = "t5_asp_fetahugaz"
+    config["name"] = "t5_asp_lownergaz"
     config["batch_size"] = 40
 
     best_configs = [{
@@ -79,12 +81,12 @@ def t5_asp_fetahugaz_configs():
     return config, best_configs
 
 
-def flan_t5_asp_fetahugaz_configs():
+def flan_t5_asp_lownergaz_configs():
     config = FLAN_T5_BASE.copy()
 
     config["data_path"] = os.path.join(thesis_path, "hyperparameter_tuning",
                                        "tune")
-    config["name"] = "flan-t5_asp_fetahugaz"
+    config["name"] = "flan-t5_asp_lownergaz"
     config["batch_size"] = 40
 
     best_configs = [
@@ -164,91 +166,13 @@ def flan_t5_asp_fetahugaz_configs():
     return config, best_configs
 
 
-def create_faiss_document_store():
-    document_store = FAISSDocumentStore(
-        sql_url="postgresql://postgres:thesis123.@localhost:5432/fetahugaz",
-        index="fetahugaz",
-        faiss_index_factory_str="OPQ128_384,IVF20000,PQ128",
-        embedding_dim=768,
-        similarity="cosine")
-    return document_store
-
-
-def add_fetahugaz_documents(doc_store: BaseDocumentStore):
-    if doc_store.get_document_count() == 0:
-        documents = []
-        with open(os.path.join(thesis_path, "data", "mlowner",
-                               "lowner_gazetteer.json"),
-                  "r",
-                  encoding="utf-8") as file:
-            fetahu_gaz = json.load(file)
-        for idx, gaz in tqdm(enumerate(fetahu_gaz), total=len(fetahu_gaz)):
-            documents.append(
-                Document(content=gaz["entity"],
-                         meta={
-                             "data_type": "gazetteers",
-                             "type": gaz["type"],
-                             "entity_id": gaz["entity_id"]
-                         }))
-            if idx > 0 and idx % 1e4 == 0:
-                doc_store.write_documents(documents)
-                documents = []
-        doc_store.write_documents(documents)
-
-
-def train_update_faiss_index(document_store: FAISSDocumentStore,
-                             retriever: EmbeddingRetriever):
-    documents = document_store.get_all_documents()
-    embeddings = retriever.embed_documents(documents)
-    document_store.train_index(embeddings=embeddings)
-    document_store.update_embeddings(retriever)
-    document_store.save(index_path=os.path.join(thesis_path, "search",
-                                                "fetahugaz",
-                                                "faiss_index.faiss"),
-                        config_path=os.path.join(thesis_path, "search",
-                                                 "fetahugaz",
-                                                 "faiss_config.json"))
-
-
-def setup_database(search_algorithm: str, search_topk: int):
+def setup_database(search_algorithm: str, search_topk: int, reset=False):
     search = Pipeline()
-    if search_algorithm == "bm25":
-        document_store = ElasticsearchDocumentStore(
-            index="fetahugaz", embedding_dim=EMBEDDING_DIM)
-        bm25_retriever = BM25Retriever(document_store, top_k=search_topk)
-        search.add_node(component=bm25_retriever,
-                        name="BM25Retriever",
-                        inputs=["Query"])
-    elif search_algorithm.startswith("ann"):
-        faiss_index_path = os.path.join(thesis_path, "search", "fetahugaz",
-                                        "faiss_index.faiss")
-        if not os.path.exists(faiss_index_path):
-            document_store = create_faiss_document_store()
-            ann_retriever = EmbeddingRetriever(
-                document_store=document_store,
-                embedding_model=EMBEDDING_MODEL,
-                model_format="sentence_transformers",
-                top_k=search_topk)
-            add_fetahugaz_documents(document_store)
-            train_update_faiss_index(document_store, ann_retriever)
 
-        document_store = FAISSDocumentStore.load(
-            index_path=faiss_index_path,
-            config_path=os.path.join(thesis_path, "search", "fetahugaz",
-                                     "faiss_config.json"))
-        ann_retriever = EmbeddingRetriever(
-            document_store=document_store,
-            embedding_model=EMBEDDING_MODEL,
-            model_format="sentence_transformers",
-            top_k=search_topk)
-        search.add_node(component=ann_retriever,
-                        name="ANNRetriever",
-                        inputs=["Query"])
-
-    if len(search.components) == 0:
-        raise Exception(
-            "Argument error: search_algorithm - must be: bm25 | ann , but is: "
-            + search_algorithm)
+    add_lownergaz_search_components(search,
+                                    search_algorithm,
+                                    search_topk,
+                                    reset=reset)
 
     return search
 
@@ -256,7 +180,7 @@ def setup_database(search_algorithm: str, search_topk: int):
 def augment_dataset(config, data_path, tokenizer, files, parts):
     for part in parts:
         search_results_path = os.path.join(
-            thesis_path, "search", "fetahugaz",
+            thesis_path, "search", "lownergaz",
             f"mlowner_{part}_{config['search_algorithm']}.pkl")
         if not os.path.exists(search_results_path):
             search = setup_database(config["search_algorithm"], 50)
@@ -278,11 +202,11 @@ def augment_dataset(config, data_path, tokenizer, files, parts):
             files[part],
             files["types"],
             search_results,
+            data_path,
             False,
             False,
             config["use_labels"],
             config["use_mentions"],
-            data_path,
             prepend_search_results=config["prepend_search_results"])
 
 
@@ -321,7 +245,7 @@ def prep_data(path, tokenizer, config: dict):
         thesis_path, "data", "mlowner", "lowner_types.json")
 
 
-def run_t5_asp_fetahugaz_training(config: dict, fixed_params: dict):
+def run_t5_asp_lownergaz_training(config: dict, fixed_params: dict):
     config.update(fixed_params)
 
     if "PL_GLOBAL_SEED" in os.environ:
@@ -354,8 +278,8 @@ def run_t5_asp_fetahugaz_training(config: dict, fixed_params: dict):
     config["fused"] = True
     config["precision"] = "bf16-mixed"
     torch.set_float32_matmul_precision("medium")
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.allow_tf32 = True
+    torch.backends.cuda.matmul.allow_tf32 = True # type: ignore
+    torch.backends.cudnn.allow_tf32 = True  # type: ignore
 
     tb_logger = TensorBoardLogger(save_dir=os.getcwd(), name="", version=".")
 

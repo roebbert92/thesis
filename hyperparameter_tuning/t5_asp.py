@@ -14,7 +14,7 @@ import torch
 from torch.utils.data import DataLoader
 from data_preprocessing.tensorize import NERDataProcessor, ner_collate_fn
 from data_preprocessing.tokenize import tokenize_json
-from hyperparameter_tuning.training import factors
+from hyperparameter_tuning.utils import factors
 from hyperparameter_tuning.ray_logging import TuneReportCallback
 from lightning.fabric.utilities.seed import seed_everything
 from lightning.pytorch.loggers import TensorBoardLogger
@@ -214,8 +214,8 @@ def run_t5_asp_training(config: dict, fixed_params: dict):
     config["fused"] = True
     config["precision"] = "bf16-mixed"
     torch.set_float32_matmul_precision("medium")
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.allow_tf32 = True
+    torch.backends.cuda.matmul.allow_tf32 = True  # type: ignore
+    torch.backends.cudnn.allow_tf32 = True  # type: ignore
 
     tb_logger = TensorBoardLogger(save_dir=os.getcwd(), name="", version=".")
 

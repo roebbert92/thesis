@@ -13,9 +13,6 @@ from data_preprocessing.tokenize import query_database
 
 from haystack import Pipeline, Document
 
-EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"  # "sentence-transformers/all-MiniLM-L6-v2"
-EMBEDDING_DIM = 768  #  384
-
 
 def get_or_filter_from_list(key_name, values):
     return {"$or": [{key_name: value} for value in values]}
@@ -54,16 +51,13 @@ def get_gazetteers_from_documents(docs, name: str = ""):
 def get_sentences_from_documents(docs, name: str = ""):
     documents = []
     for doc in docs:
-        #dataset_part = name if len(name) > 0 else doc["doc_id"].split("_")[1]
-        documents.append(
-            Document(
-                content=" ".join(doc["tokens"]),
-                meta={
-                    "entities": doc["entities"],
-                    "data_type": "sentences",
-                    #"doc_id": [doc["doc_id"]],
-                    #"dataset": [dataset_part],
-                }))
+        if len(doc["entities"]) > 0:
+            documents.append(
+                Document(content=" ".join(doc["tokens"]),
+                         meta={
+                             "entities": doc["entities"],
+                             "data_type": "sentences",
+                         }))
     return documents
 
 
