@@ -18,3 +18,4 @@ search/sent/*.pkl
 experiments/01_performance/search_results/*.pkl
 *.db
 *.db-journal
+search/lownergaz/faiss_index.faiss

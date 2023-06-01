@@ -1,0 +1,1 @@
+{"sql_url": "sqlite:////home/loebbert/projects/thesis/search/lownergaz/faiss_document_store.db", "faiss_index_factory_str": "OPQ128_384,IVF20000,PQ128", "embedding_dim": 768, "similarity": "cosine"}
