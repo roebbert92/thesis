@@ -12,8 +12,18 @@ def compare_dataset_names(a, b):
     if len(levels_a) == len(levels_b):
         dataset_eq = 0
         for l in range(len(levels_a)):
-            a1, a2 = levels_a[l].split("_")
-            b1, b2 = levels_b[l].split("_")
+            items_a = levels_a[l].split("_")
+            items_b = levels_b[l].split("_")
+            if len(items_a) == 1:
+                a1 = items_a[0]
+                a2 = "train"
+            else:
+                a1, a2 = items_a
+            if len(items_b) == 1:
+                b1 = items_b[0]
+                b2 = "train"
+            else:
+                b1, b2 = levels_b[l].split("_")
             level_dataset_eq = strcoll(a1, b1)
             if level_dataset_eq != 0:
                 dataset_eq += level_dataset_eq

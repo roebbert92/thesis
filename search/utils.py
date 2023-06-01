@@ -2,8 +2,6 @@ from collections import defaultdict
 from haystack import Document
 import uuid
 
-from data_preparation.utils import is_supported_doc
-
 EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"  # "sentence-transformers/all-MiniLM-L6-v2"
 EMBEDDING_DIM = 768  #  384
 
