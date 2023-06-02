@@ -2,7 +2,8 @@ import os
 import sys
 from typing import List
 
-thesis_path = "/home/loebbert/projects/thesis"
+thesis_path = "/" + os.path.join(
+    *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-2])
 sys.path.append(thesis_path)
 
 from search.utils import EMBEDDING_DIM, EMBEDDING_MODEL

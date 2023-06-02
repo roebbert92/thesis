@@ -193,7 +193,7 @@ class ASPMetrics(Metric):
 
     @staticmethod
     def get_error_type5(preds: set, targets: set):
-        # wrong label, overlapping span
+        # right label, overlapping span
         type5s = set()
         sorted_targets = sorted(targets)
         for pred in sorted(preds):
@@ -255,6 +255,7 @@ class ASPMetrics(Metric):
 
 
 class FalsePositivesASP():
+
     def __init__(self) -> None:
         self.false_positives = defaultdict(list)
 
