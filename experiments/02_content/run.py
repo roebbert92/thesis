@@ -154,99 +154,71 @@ def measure_model_performance(seed: int, config,
     metrics_base_path = os.path.join(config["data_path"], f"seed_{str(seed)}",
                                      "04_metrics", config["name"])
 
-    while not trained:
-        try:
-            # Train loader
-            train_loader = DataLoader(train,
-                                      batch_size=train_config["batch_size"],
-                                      collate_fn=collator,
+    def get_model_trainer():
+        model = ASPT5Model(train_config, tokenizer)
+        trainer = pl.Trainer(accelerator="gpu",
+                             logger=tb_logger,
+                             devices=1,
+                             log_every_n_steps=train_config["batch_size"] *
+                             train_config["gradient_accumulation_steps"],
+                             accumulate_grad_batches=train_config[
+                                 "gradient_accumulation_steps"],
+                             precision=train_config["precision"],
+                             max_epochs=train_config["num_epochs"],
+                             check_val_every_n_epoch=1,
+                             num_sanity_val_steps=0,
+                             enable_checkpointing=True,
+                             enable_progress_bar=True,
+                             callbacks=[checkpoint_best])
+        # Train loader
+        train_loader = DataLoader(train,
+                                  batch_size=train_config["batch_size"],
+                                  collate_fn=collator,
+                                  num_workers=3,
+                                  persistent_workers=False,
+                                  pin_memory=True,
+                                  shuffle=True,
+                                  prefetch_factor=20)
+        # Validation loaders
+        train_val_loader = DataLoader(train,
+                                      batch_size=int(
+                                          train_config["batch_size"] * 4),
+                                      collate_fn=ner_collate_fn,
                                       num_workers=3,
                                       persistent_workers=False,
                                       pin_memory=True,
-                                      shuffle=True,
+                                      shuffle=False,
                                       prefetch_factor=20)
-            # Validation loaders
-            train_val_loader = DataLoader(train,
-                                          batch_size=int(
-                                              train_config["batch_size"] * 4),
-                                          collate_fn=ner_collate_fn,
-                                          num_workers=3,
-                                          persistent_workers=False,
-                                          pin_memory=True,
-                                          shuffle=False,
-                                          prefetch_factor=20)
-            dev_val_loader = DataLoader(val,
-                                        batch_size=int(
-                                            train_config["batch_size"] * 4),
-                                        collate_fn=ner_collate_fn,
-                                        num_workers=3,
-                                        persistent_workers=False,
-                                        pin_memory=True,
-                                        shuffle=False,
-                                        prefetch_factor=20)
-            test_val_loader = None
-            if test is not None:
-                test_val_loader = DataLoader(
-                    val,
-                    batch_size=int(train_config["batch_size"] * 4),
-                    collate_fn=ner_collate_fn,
-                    num_workers=3,
-                    persistent_workers=False,
-                    pin_memory=True,
-                    shuffle=False,
-                    prefetch_factor=20)
+        dev_val_loader = DataLoader(val,
+                                    batch_size=int(train_config["batch_size"] *
+                                                   4),
+                                    collate_fn=ner_collate_fn,
+                                    num_workers=3,
+                                    persistent_workers=False,
+                                    pin_memory=True,
+                                    shuffle=False,
+                                    prefetch_factor=20)
+        test_val_loader = None
+        if test is not None:
+            test_val_loader = DataLoader(val,
+                                         batch_size=int(
+                                             train_config["batch_size"] * 4),
+                                         collate_fn=ner_collate_fn,
+                                         num_workers=3,
+                                         persistent_workers=False,
+                                         pin_memory=True,
+                                         shuffle=False,
+                                         prefetch_factor=20)
+        return model, trainer, train_loader, train_val_loader, dev_val_loader, test_val_loader
 
-            trainer = pl.Trainer(accelerator="gpu",
-                                 logger=tb_logger,
-                                 devices=1,
-                                 log_every_n_steps=train_config["batch_size"] *
-                                 train_config["gradient_accumulation_steps"],
-                                 accumulate_grad_batches=train_config[
-                                     "gradient_accumulation_steps"],
-                                 precision=train_config["precision"],
-                                 max_epochs=train_config["num_epochs"],
-                                 check_val_every_n_epoch=1,
-                                 num_sanity_val_steps=0,
-                                 enable_checkpointing=True,
-                                 enable_progress_bar=True,
-                                 callbacks=[checkpoint_best])
-
-            model = ASPT5Model(train_config, tokenizer)
-
+    model, trainer, train_loader, train_val_loader, dev_val_loader, test_val_loader = get_model_trainer(
+    )
+    while not trained:
+        try:
             trainer.fit(model, train_loader, val_dataloaders=dev_val_loader)
             # save last model
             trainer.save_checkpoint(
                 os.path.join(checkpoint_base_path, "last.ckpt"))
-
-            def save_metrics(dataset, checkpoint):
-                with open(
-                        os.path.join(metrics_base_path,
-                                     f"{checkpoint}_{dataset}.pkl"),
-                        "wb") as file:
-                    pickle.dump(model.test_metrics, file)
-
-            # test last model
-            trainer.test(model, train_val_loader)
-            save_metrics("lowner_train", "last")
-            trainer.test(model, dev_val_loader)
-            save_metrics("lowner_dev", "last")
-            if test_val_loader is not None:
-                trainer.test(model, test_val_loader)
-                save_metrics("lowner_test", "last")
-            # test best model
-            trainer.test(model,
-                         train_val_loader,
-                         ckpt_path=checkpoint_best.best_model_path)
-            save_metrics("lowner_train", "best")
-            trainer.test(model,
-                         dev_val_loader,
-                         ckpt_path=checkpoint_best.best_model_path)
-            save_metrics("lowner_dev", "best")
-            if test_val_loader is not None:
-                trainer.test(model,
-                             test_val_loader,
-                             ckpt_path=checkpoint_best.best_model_path)
-                save_metrics("lowner_test", "best")
             trained = True
         except Exception as e:
             print(e)
@@ -255,6 +227,37 @@ def measure_model_performance(seed: int, config,
                     train_config["gradient_accumulation_steps"]) + 1]
             train_config["batch_size"] = train_config[
                 "batch_size"] // train_config["gradient_accumulation_steps"]
+            model, trainer, train_loader, train_val_loader, dev_val_loader, test_val_loader = get_model_trainer(
+            )
+
+    def save_metrics(dataset, checkpoint):
+        with open(
+                os.path.join(metrics_base_path, f"{checkpoint}_{dataset}.pkl"),
+                "wb") as file:
+            pickle.dump(model.test_metrics, file)
+
+    # test last model
+    trainer.test(model, train_val_loader)
+    save_metrics("lowner_train", "last")
+    trainer.test(model, dev_val_loader)
+    save_metrics("lowner_dev", "last")
+    if test_val_loader is not None:
+        trainer.test(model, test_val_loader)
+        save_metrics("lowner_test", "last")
+    # test best model
+    trainer.test(model,
+                 train_val_loader,
+                 ckpt_path=checkpoint_best.best_model_path)
+    save_metrics("lowner_train", "best")
+    trainer.test(model,
+                 dev_val_loader,
+                 ckpt_path=checkpoint_best.best_model_path)
+    save_metrics("lowner_dev", "best")
+    if test_val_loader is not None:
+        trainer.test(model,
+                     test_val_loader,
+                     ckpt_path=checkpoint_best.best_model_path)
+        save_metrics("lowner_test", "best")
 
 
 # Datapoints
