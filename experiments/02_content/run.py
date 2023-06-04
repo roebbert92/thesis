@@ -36,16 +36,13 @@ files = {
     "test": os.path.join(thesis_path, "data", "mlowner", "lowner_test.json"),
 }
 
-with open(files["train"],
-          encoding="utf-8") as file:
+with open(files["train"], encoding="utf-8") as file:
     lowner_train = json.load(file)
 
-with open(files["dev"],
-          encoding="utf-8") as file:
+with open(files["dev"], encoding="utf-8") as file:
     lowner_dev = json.load(file)
 
-with open(files["test"],
-          encoding="utf-8") as file:
+with open(files["test"], encoding="utf-8") as file:
     lowner_test = json.load(file)
 
 seeds = [1, 2, 3]
