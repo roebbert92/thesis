@@ -71,7 +71,7 @@ def measure_model_performance(seed: int, config,
 
     tokenized_data_path = os.path.join(config["data_path"],
                                        f"seed_{str(seed)}",
-                                       "02_tokenized_dataset", config["name"])
+                                       "02_tokenized_datasets", config["name"])
     if not os.path.exists(tokenized_data_path):
         os.makedirs(tokenized_data_path)
 

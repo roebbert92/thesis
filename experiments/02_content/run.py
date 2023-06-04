@@ -21,19 +21,23 @@ from data_preprocessing.tensorize import NERCollator, NERDataProcessor, ner_coll
 from data_preprocessing.tokenize import tokenize_json, tokenize_search_results_json
 from models.asp_t5 import ASPT5Model, get_tokenizer
 from pipelines.evaluation import factors
-from configs.asp_t5 import T5_ASP_LOWNERGAZ_SENT, T5_ASP_LOWNERGAZ, T5_ASP_GAZ_SENT, T5_ASP_GAZ, T5_ASP_SENT, T5_ASP
+from configs.asp_t5 import T5_ASP_LOWNERGAZ_SENT
 from hyperparameter_tuning.t5_asp_lownergaz_sent import setup_database as setup_database_lownergaz_sent
-from hyperparameter_tuning.t5_asp_gaz_sent import setup_database as setup_database_gaz_sent
-from hyperparameter_tuning.t5_asp_lownergaz import setup_database as setup_database_lownergaz
-from hyperparameter_tuning.t5_asp_gaz import setup_database as setup_database_gaz
-from hyperparameter_tuning.t5_asp_sent import setup_database as setup_database_sent
 from hyperparameter_tuning.utils import get_search_results
 
 files = {
-    "types": os.path.join(thesis_path, "data", "mlowner", "lowner_types.json"),
-    "train": os.path.join(thesis_path, "data", "mlowner", "lowner_train.json"),
-    "dev": os.path.join(thesis_path, "data", "mlowner", "lowner_dev.json"),
-    "test": os.path.join(thesis_path, "data", "mlowner", "lowner_test.json"),
+    "types":
+    os.path.join(thesis_path, "data", "mlowner", "lowner_types.json"),
+    "train":
+    os.path.join(thesis_path, "data", "mlowner", "lowner_train.json"),
+    "dev":
+    os.path.join(thesis_path, "data", "mlowner", "lowner_dev.json"),
+    "test":
+    os.path.join(thesis_path, "data", "mlowner", "lowner_test.json"),
+    "multiconer":
+    os.path.join(thesis_path, "data", "multiconer", "multiconer_test.json"),
+    "lownergaz":
+    os.path.join(thesis_path, "data", "mlowner", "lowner_gazetteer.json"),
 }
 
 with open(files["train"], encoding="utf-8") as file:
@@ -47,15 +51,14 @@ with open(files["test"], encoding="utf-8") as file:
 
 seeds = [1, 2, 3]
 datasets = {"train": lowner_train, "dev": lowner_dev, "test": lowner_test}
-configs = [
-    T5_ASP_LOWNERGAZ_SENT, T5_ASP_LOWNERGAZ, T5_ASP_GAZ_SENT, T5_ASP_GAZ,
-    T5_ASP_SENT, T5_ASP
-]
-for config in configs:
-    config.update({
-        "data_path":
-        os.path.join(thesis_path, "experiments", "01_performance", "data")
-    })
+gazetteer_sizes = [2000, 4000, 8000]
+error_percent_ratios = [5, 10, 15]
+
+config = T5_ASP_LOWNERGAZ_SENT
+config.update({
+    "data_path":
+    os.path.join(thesis_path, "experiments", "02_content", "data")
+})
 parts = ["train", "dev"]
 
 
@@ -254,42 +257,60 @@ def measure_model_performance(seed: int, config,
                 "batch_size"] // train_config["gradient_accumulation_steps"]
 
 
+# Datapoints
+## 00_datasets
+## 01_search_results
+## 02_tokenized_datasets
+## 03_checkpoints
+## 04_metrics
+
 for seed in seeds:
     # seed
     seed_everything(seed)
+    for gazetteer_size in gazetteer_sizes:
+        for error_percent_ratio in error_percent_ratios:
+            error_ratio = error_percent_ratio / 100
 
-    for config in configs:
+            # create gazetteer split of multiconer + get top-5 similar gazetteers of lownergaz --> save in 00_datasets
+
+            # create augmented lowner train, dev, + gazetteer split
+
+            # setup database with augmented gazetteer split
+
+            # get search results for augmented lowner train + dev, clean lowner test
+
+            # prep augmented lowner train + dev, clean lowner test
+
+            # train model on augmented lowner train + validate on augmented lowner dev
+
+            # test model on augmented lowner train, dev + clean lowner test
+
+            # setup database with gazetteer split
+
+            # get search results for clean lowner train, dev, test
+
+            # prep clean lowner train, dev, test
+
+            # test model on clean train, dev, test
+
+            # setup database with full gazetteer
+
+            # get search results for clean lowner train, dev, test
+
+            # prep clean lowner train, dev, test
+
+            # test model on clean train, dev, test
+
         # setup database
-        search = None
-        if config["name"] == "t5_asp_lownergaz_sent":
-            search = setup_database_lownergaz_sent(
-                config["sent_search_algorithm"],
-                config["sent_search_topk"],
-                config["gaz_search_algorithm"],
-                config["gaz_search_topk"],
-                config["search_join_method"],
-                config["search_topk"],
-            )
-        if config["name"] == "t5_asp_gaz_sent":
-            search = setup_database_gaz_sent(
-                config["sent_search_algorithm"],
-                config["sent_search_topk"],
-                config["gaz_search_algorithm"],
-                config["gaz_search_topk"],
-                config["search_join_method"],
-                config["search_topk"],
-            )
-        if config["name"] == "t5_asp_lownergaz":
-            search = setup_database_lownergaz(config["search_algorithm"],
-                                              config["search_topk"])
-        if config["name"] == "t5_asp_gaz":
-            search = setup_database_gaz(config["search_algorithm"],
-                                        config["search_topk"])
-        if config["name"] == "t5_asp_sent":
-            search = setup_database_sent(config["search_algorithm"],
-                                         config["search_topk"])
+        search = setup_database_lownergaz_sent(
+            config["sent_search_algorithm"],
+            config["sent_search_topk"],
+            config["gaz_search_algorithm"],
+            config["gaz_search_topk"],
+            config["search_join_method"],
+            config["search_topk"],
+        )
 
-        # go through all datasets
         search_results = {}
         for part in parts:
             dataset = datasets[part]
