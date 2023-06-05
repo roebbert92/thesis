@@ -84,92 +84,24 @@ def t5_asp_lownergaz_sent_configs():
     return config, best_configs
 
 
-def flan_t5_asp_lownergaz_sent_configs():
-    config = FLAN_T5_BASE.copy()
-
-    config["data_path"] = os.path.join(thesis_path, "hyperparameter_tuning",
-                                       "tune")
-    config["name"] = "flan-t5_asp_lownergaz_sent"
-    config["batch_size"] = 40
-
-    best_configs = [{
-        "adam_weight_decay": 0.011738749999999989,
-        "asp_dropout_rate": 0.4540625,
-        "asp_hidden_dim": 633,
-        "gaz_search_algorithm": "bm25",
-        "gaz_use_mentions": False,
-        "num_epochs": 16,
-        "plm_learning_rate": 0.00017496219281663535,
-        "search_topk": 8,
-        "sent_search_algorithm": "ann",
-        "sent_use_mentions": True,
-        "task_learning_rate": 0.0035849253731343286,
-        "train_search_dropout": 0.05492957746478871,
-        "warmup_ratio": 0.37917808219178084
-    }, {
-        "adam_weight_decay": 0.12402083333333332,
-        "asp_dropout_rate": 0.11718749999999999,
-        "asp_hidden_dim": 342,
-        "num_epochs": 21,
-        "plm_learning_rate": 0.00010693877551020426,
-        "task_learning_rate": 0.00413396694214876,
-        "warmup_ratio": 0.29414201183431954,
-        "gaz_search_algorithm": "bm25",
-        "gaz_use_mentions": False,
-        "search_topk": 8,
-        "sent_search_algorithm": "ann",
-        "sent_use_mentions": True,
-        "train_search_dropout": 0.05492957746478871,
-    }]
-
-    config["asp_hidden_dim"] = tune.randint(100, 1000)
-    config["asp_dropout_rate"] = tune.uniform(0.01, 0.5)
-    config["asp_init_std"] = 0.02
-    config["asp_activation"] = "relu"
-    config["beam_size"] = 1
-    config["sent_search_algorithm"] = tune.choice(["bm25", "ann"])
-    config["sent_search_topk"] = 5
-    config["sent_use_labels"] = True
-    config["sent_use_mentions"] = tune.choice([True, False])
-    config["gaz_search_algorithm"] = tune.choice(["bm25", "ann"])
-    config["gaz_search_topk"] = 5
-    config["gaz_use_labels"] = True
-    config["gaz_use_mentions"] = tune.choice([True, False])
-    config[
-        "search_join_method"] = "reciprocal_rank_fusion"  #tune.choice(["concatenate", "merge", "reciprocal_rank_fusion"])
-    config["search_topk"] = tune.randint(6, 10)
-    config["prepend_search_results"] = False
-    config["filter_exact_match"] = False
-    config["filter_same_document"] = False
-    config["seed"] = 42
-    config["train_search_dropout"] = tune.uniform(0.0, 0.65)
-    config["train_search_shuffle"] = False
-    config["plm_learning_rate"] = tune.uniform(5e-6, 5e-3)
-    config["task_learning_rate"] = tune.uniform(1e-5, 5e-3)
-    config["adam_weight_decay"] = tune.uniform(5e-4, 0.5)
-    config["warmup_ratio"] = tune.uniform(0.01, 0.5)
-    config["num_epochs"] = tune.randint(10, 25)
-
-    return config, best_configs
-
-
 def setup_database(sent_search_algorithm: str,
                    sent_search_topk: int,
                    gaz_search_algorithm: str,
                    gaz_search_topk: int,
                    join_method: str,
                    join_topk: int,
-                   reset=False):
+                   reset=False,
+                   name: str = "lownergaz"):
     search = Pipeline()
     join_documents_input = []
     # sentences
     add_sent_search_components(search, sent_search_algorithm, sent_search_topk,
-                               join_documents_input, reset)
+                               join_documents_input, reset, name)
 
     # lowner gazetteers
     add_lownergaz_search_components(search, gaz_search_algorithm,
                                     gaz_search_topk, join_documents_input,
-                                    reset)
+                                    reset, name)
 
     # join documents
 
@@ -305,8 +237,8 @@ def run_t5_asp_lownergaz_sent_training(config: dict, fixed_params: dict):
     config["fused"] = True
     config["precision"] = "bf16-mixed"
     torch.set_float32_matmul_precision("medium")
-    torch.backends.cuda.matmul.allow_tf32 = True # type: ignore
-    torch.backends.cudnn.allow_tf32 = True # type: ignore
+    torch.backends.cuda.matmul.allow_tf32 = True  # type: ignore
+    torch.backends.cudnn.allow_tf32 = True  # type: ignore
 
     tb_logger = TensorBoardLogger(save_dir=os.getcwd(), name="", version=".")
 

@@ -106,7 +106,7 @@ def error_type4_augmentation(sample: dict,
                 left_space = ent["start"] - ents[ent_idx - 1]["end"]
             else:
                 left_space = ent["start"]
-            left_space = left_space if left_space <= avg_entity_length else avg_entity_length
+            left_space = min(left_space, avg_entity_length)
             ent["start"] -= random.randint(1,
                                            left_space) if left_space > 0 else 0
         elif action == "decrease":
@@ -124,7 +124,7 @@ def error_type4_augmentation(sample: dict,
                 right_space = ents[ent_idx + 1]["start"] - ent["end"]
             else:
                 right_space = max_end - ent["end"]
-            right_space = right_space if right_space <= avg_entity_length else avg_entity_length
+            right_space = min(right_space, avg_entity_length)
             ent["end"] += random.randint(1,
                                          right_space) if right_space > 0 else 0
         elif action == "decrease":
@@ -205,7 +205,7 @@ def error_type5_augmentation(sample: dict,
                 left_space = ent["start"] - ents[ent_idx - 1]["end"]
             else:
                 left_space = ent["start"]
-            left_space = left_space if left_space <= avg_entity_length else avg_entity_length
+            left_space = min(left_space, avg_entity_length)
             ent["start"] -= random.randint(1,
                                            left_space) if left_space > 0 else 0
         elif action == "decrease":
@@ -223,7 +223,7 @@ def error_type5_augmentation(sample: dict,
                 right_space = ents[ent_idx + 1]["start"] - ent["end"]
             else:
                 right_space = max_end - ent["end"]
-            right_space = right_space if right_space <= avg_entity_length else avg_entity_length
+            right_space = min(right_space, avg_entity_length)
             ent["end"] += random.randint(1,
                                          right_space) if right_space > 0 else 0
         elif action == "decrease":
@@ -304,7 +304,6 @@ def make_erroneous_dataset(dataset: List[dict], types: List[str],
     for valid, sample_idx, sample in zip(mask, range(len(dataset)), dataset):
         if valid:
             mask_augmentations = get_random_mask(len(augmentations))
-            random.shuffle(augmentations)
             augmented_sample = copy.deepcopy(sample)
             for valid_aug, aug in zip(mask_augmentations, augmentations):
                 if valid_aug:

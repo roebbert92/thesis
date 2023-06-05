@@ -54,30 +54,6 @@ T5_BASE = asdict(
                 batch_size=40,
                 gradient_accumulation_steps=1))
 
-FLAN_T5_BASE = asdict(
-    ASPT5Config(plm_pretrained_name_or_path="google/flan-t5-base",
-                plm_tokenizer_name="google/flan-t5-base",
-                model_max_length=4096,
-                mention_start_token="<m>",
-                mention_end_token="</m>",
-                asp_hidden_dim=150,
-                asp_dropout_rate=0.3,
-                asp_init_std=0.02,
-                asp_activation="relu",
-                num_labels=6,
-                max_nest_depth=1,
-                beam_size=1,
-                plm_learning_rate=5e-5,
-                plm_scheduler="linear_with_warmup",
-                task_learning_rate=3e-4,
-                task_scheduler="linear_with_warmup",
-                adam_eps=1e-8,
-                adam_weight_decay=0.1,
-                warmup_ratio=0.05,
-                num_epochs=20,
-                batch_size=40,
-                gradient_accumulation_steps=1))
-
 T5_ASP_LOWNERGAZ_SENT = T5_BASE.copy()
 T5_ASP_LOWNERGAZ_SENT.update({
     "adam_weight_decay": 0.011738749999999989,
@@ -101,7 +77,7 @@ T5_ASP_LOWNERGAZ_SENT.update({
     "name": "t5_asp_lownergaz_sent"
 })
 
-T5_ASP_LOWNERGAZ = FLAN_T5_BASE.copy()
+T5_ASP_LOWNERGAZ = T5_BASE.copy()
 T5_ASP_LOWNERGAZ.update({
     "adam_weight_decay": 0.011738749999999989,
     "asp_dropout_rate": 0.4540625,
@@ -118,7 +94,7 @@ T5_ASP_LOWNERGAZ.update({
     "name": "t5_asp_lownergaz"
 })
 
-T5_ASP_GAZ = FLAN_T5_BASE.copy()
+T5_ASP_GAZ = T5_BASE.copy()
 T5_ASP_GAZ.update({
     "adam_weight_decay": 0.018862500000000015,
     "asp_dropout_rate": 0.43875,
