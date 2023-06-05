@@ -30,22 +30,28 @@ from hyperparameter_tuning.t5_asp_sent import setup_database as setup_database_s
 from hyperparameter_tuning.utils import get_search_results
 
 files = {
-    "types": os.path.join(thesis_path, "data", "mlowner", "lowner_types.json"),
-    "train": os.path.join(thesis_path, "data", "mlowner", "lowner_train.json"),
-    "dev": os.path.join(thesis_path, "data", "mlowner", "lowner_dev.json"),
-    "test": os.path.join(thesis_path, "data", "mlowner", "lowner_test.json"),
+    "types":
+    os.path.join(thesis_path, "data", "mlowner", "lowner_types.json"),
+    "train":
+    os.path.join(thesis_path, "data", "mlowner", "lowner_train.json"),
+    "dev":
+    os.path.join(thesis_path, "data", "mlowner", "lowner_dev.json"),
+    "test":
+    os.path.join(
+        thesis_path,
+        "data",
+        "mlowner",
+        #"lowner_test.json"
+        "lowner_dev.json"),
 }
 
-with open(files["train"],
-          encoding="utf-8") as file:
+with open(files["train"], encoding="utf-8") as file:
     lowner_train = json.load(file)
 
-with open(files["dev"],
-          encoding="utf-8") as file:
+with open(files["dev"], encoding="utf-8") as file:
     lowner_dev = json.load(file)
 
-with open(files["test"],
-          encoding="utf-8") as file:
+with open(files["test"], encoding="utf-8") as file:
     lowner_test = json.load(file)
 
 seeds = [1, 2, 3]
@@ -59,7 +65,7 @@ for config in configs:
         "data_path":
         os.path.join(thesis_path, "experiments", "01_performance", "data")
     })
-parts = ["train", "dev"]
+parts = ["train", "dev", "test"]
 
 
 def measure_model_performance(seed: int, config,
