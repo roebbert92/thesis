@@ -217,10 +217,11 @@ def handle_results(tokenizer: PreTrainedTokenizer, processed_doc: list,
         content = str(result.content)
         if meta["data_type"] == "gazetteers":
             text = tokenizer.tokenize(content)
-            if gaz_use_labels:
-                text.extend(tokenizer.tokenize(":" + meta["type"]))
             if gaz_use_mentions:
                 text = [MENTION_START, *text, MENTION_END]
+            if gaz_use_labels:
+                tokenized_type = tokenizer.tokenize(":" + meta["type"])
+                text.extend(tokenized_type[1:] if gaz_use_mentions else tokenized_type)
             processed_doc.extend(text)
             processed_doc.append(tokenizer.eos_token)
         elif meta["data_type"] == "sentences":
@@ -232,12 +233,12 @@ def handle_results(tokenizer: PreTrainedTokenizer, processed_doc: list,
             for word_idx, word in enumerate(content.split()):
                 # entity end
                 if word_idx in entity_ends:
-                    if sent_use_labels:
-                        processed_doc.extend(
-                            tokenizer.tokenize(":" +
-                                               entity_ends[word_idx]["type"]))
                     if sent_use_mentions:
                         processed_doc.append(MENTION_END)
+                    if sent_use_labels:
+                        tokenized_type = tokenizer.tokenize(
+                                ":" + entity_ends[word_idx]["type"])
+                        processed_doc.extend(tokenized_type[1:] if sent_use_mentions else tokenized_type)
                 # entity start
                 if word_idx in entity_starts:
                     if sent_use_mentions:
@@ -311,6 +312,7 @@ def get_input_sentence_database_with_filter(
     processed_doc = []
     if prepend_examples:
         handle_results(tokenizer, processed_doc, results, use_labels,
+                       use_mentions, use_labels,
                        use_mentions)
         #processed_doc.append(tokenizer.sep_token)
 
@@ -319,6 +321,7 @@ def get_input_sentence_database_with_filter(
     if not prepend_examples:
         #processed_doc.append(tokenizer.sep_token)
         handle_results(tokenizer, processed_doc, results, use_labels,
+                       use_mentions, use_labels,
                        use_mentions)
 
     return processed_doc, [result.score for result in results], similarities
