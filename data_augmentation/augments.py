@@ -49,50 +49,62 @@ def error_type1_augmentation(sample: dict, types: List[str]):
         phrases.add((current_phrase["start"], current_phrase["end"]))
 
     valid_spans = list(phrases.difference(entity_spans))
-    mask = get_random_mask(len(valid_spans))
-    for span, valid in zip(valid_spans, mask):  # type: ignore
-        if valid:
-            augmented_sample["entities"].append({
-                "start": span[0],
-                "end": span[1],
-                "type": random.choice(types)
-            })
+    # make sure: no overlaps:
+    for span in valid_spans:
+        for ent_span in entity_spans:
+            if span[0] <= ent_span[0] <= span[1] or span[1] >= ent_span[1] >= span[0]:
+                valid_spans.remove(span)
+                break
+    
+    if len(valid_spans) > 0:
+        span = random.choice(valid_spans)
+        augmented_sample["entities"].append({
+            "start": span[0],
+            "end": span[1],
+            "type": random.choice(types)
+        })
+        return augmented_sample, True
 
-    return augmented_sample
+    return augmented_sample, False
 
 
-def error_type2_augmentation(sample: dict, types: List[str]):
+def error_type2_augmentation(sample: dict,
+                             types: List[str],
+                             entity_idx: int = 0):
     augmented_sample = copy.deepcopy(sample)
     # not labeled (false negative): remove label
-    mask = get_random_mask(len(augmented_sample["entities"]))
-    augmented_sample["entities"] = [
-        ent for valid, ent in zip(mask, augmented_sample["entities"])
-        if not valid
-    ]
-    return augmented_sample
+    if len(sample["entities"]) == 0:
+        return augmented_sample, False
+    if len(sample["entities"]) <= entity_idx:
+        entity_idx = -1
+    del augmented_sample["entities"][entity_idx]
+    return augmented_sample, True
 
 
-def error_type3_augmentation(sample: dict, types: List[str]):
+def error_type3_augmentation(sample: dict,
+                             types: List[str],
+                             entity_idx: int = 0):
     # wrong labels, correct span: randomize label
     augmented_sample = copy.deepcopy(sample)
-    mask = get_random_mask(len(augmented_sample["entities"]))
     type_set = set(types)
-    for valid, entity in zip(mask, augmented_sample["entities"]):
-        if valid:
-            valid_types = list(type_set.difference([entity["type"]]))
-            entity["type"] = random.choice(valid_types)
-    return augmented_sample
+    if len(sample["entities"]) == 0:
+        return augmented_sample, False
+    if len(sample["entities"]) <= entity_idx:
+        entity_idx = -1
+    entity = augmented_sample["entities"][entity_idx]
+    valid_types = list(type_set.difference([entity["type"]]))
+    augmented_sample["entities"][entity_idx]["type"] = random.choice(
+        valid_types)
+    return augmented_sample, True
 
 
 def error_type4_augmentation(sample: dict,
                              types: List[str],
-                             avg_entity_length: int = 3):
+                             avg_entity_length: int = 3,
+                             entity_idx: int = 0):
     augmented_sample = copy.deepcopy(sample)
     max_end = len(augmented_sample["tokens"])
     min_start = 0
-    mask = get_random_mask(len(augmented_sample["entities"]))
-    augmented_sample["entities"] = sorted(augmented_sample["entities"],
-                                          key=lambda x: x["start"])
     type_set = set(types)
     action = {"increase", "decrease"}
     direction = {"left", "right", "both"}
@@ -103,7 +115,7 @@ def error_type4_augmentation(sample: dict,
             # get left border
             left_space = 0
             if ent_idx > 0:
-                left_space = ent["start"] - ents[ent_idx - 1]["end"]
+                left_space = ent["start"] - ents[ent_idx - 1]["end"] - 1
             else:
                 left_space = ent["start"]
             left_space = min(left_space, avg_entity_length)
@@ -121,7 +133,7 @@ def error_type4_augmentation(sample: dict,
             # get right border
             right_space = 0
             if ent_idx < len(ents) - 1:
-                right_space = ents[ent_idx + 1]["start"] - ent["end"]
+                right_space = ents[ent_idx + 1]["start"] - ent["end"] - 1
             else:
                 right_space = max_end - ent["end"]
             right_space = min(right_space, avg_entity_length)
@@ -133,66 +145,59 @@ def error_type4_augmentation(sample: dict,
             ent["end"] -= random.randint(1,
                                          left_space) if left_space > 0 else 0
 
-    for valid, entity_idx, entity in zip(
-            mask,
-            range(len(augmented_sample["entities"])),  # type: ignore
-            augmented_sample["entities"]):
-        if valid:
-            entity_length = entity["end"] - entity["start"]
-            valid_actions = copy.deepcopy(action)
-            valid_directions = copy.deepcopy(direction)
-            if entity_length == 1:
-                # increase only
-                valid_actions.remove("decrease")
-            if (entity_idx > 0
-                    and augmented_sample["entities"][entity_idx - 1]["end"]
-                    == entity["start"] - 1) or entity["start"] == min_start:
-                # right only
-                valid_directions.remove("left")
-                valid_directions.remove("both")
-            if (entity_idx < len(augmented_sample["entities"]) - 1
-                    and augmented_sample["entities"][entity_idx + 1]["start"]
-                    == entity["end"] + 1) or entity["end"] == max_end:
-                # left only
-                valid_directions.remove("right")
-                if "both" in valid_directions:
-                    valid_directions.remove("both")
+    if len(sample["entities"]) == 0:
+        return augmented_sample, False
+    if len(sample["entities"]) <= entity_idx:
+        entity_idx = -1
+    entity = augmented_sample["entities"][entity_idx]
+    entity_length = entity["end"] - entity["start"]
+    valid_actions = copy.deepcopy(action)
+    valid_directions = copy.deepcopy(direction)
+    if entity_length == 1:
+        # increase only
+        valid_actions.remove("decrease")
+    if (entity_idx > 0 and augmented_sample["entities"][entity_idx - 1]["end"]
+            == entity["start"] - 1) or entity["start"] == min_start:
+        # right only
+        valid_directions.remove("left")
+        valid_directions.remove("both")
+    if (entity_idx < len(augmented_sample["entities"]) - 1
+            and augmented_sample["entities"][entity_idx + 1]["start"]
+            == entity["end"] + 1) or entity["end"] == max_end:
+        # left only
+        valid_directions.remove("right")
+        if "both" in valid_directions:
+            valid_directions.remove("both")
 
-            if len(valid_actions) > 0 and len(valid_directions) > 0:
-                direction_chosen = random.choice(list(valid_directions))
-                if direction_chosen == "both":
-                    apply_left_action(augmented_sample["entities"],
-                                      entity_idx, entity,
-                                      random.choice(list(valid_actions)))
-                    apply_right_action(augmented_sample["entities"],
-                                       entity_idx, entity,
-                                       random.choice(list(valid_actions)))
-                elif direction_chosen == "left":
-                    apply_left_action(augmented_sample["entities"],
-                                      entity_idx, entity,
-                                      random.choice(list(valid_actions)))
-                elif direction_chosen == "right":
-                    apply_right_action(augmented_sample["entities"],
-                                       entity_idx, entity,
-                                       random.choice(list(valid_actions)))
+    if len(valid_actions) > 0 and len(valid_directions) > 0:
+        direction_chosen = random.choice(list(valid_directions))
+        if direction_chosen == "both":
+            apply_left_action(augmented_sample["entities"], entity_idx, entity,
+                              random.choice(list(valid_actions)))
+            apply_right_action(augmented_sample["entities"], entity_idx,
+                               entity, random.choice(list(valid_actions)))
+        elif direction_chosen == "left":
+            apply_left_action(augmented_sample["entities"], entity_idx, entity,
+                              random.choice(list(valid_actions)))
+        elif direction_chosen == "right":
+            apply_right_action(augmented_sample["entities"], entity_idx,
+                               entity, random.choice(list(valid_actions)))
 
-            # randomize label
-            valid_types = list(type_set.difference([entity["type"]]))
-            entity["type"] = random.choice(valid_types)
+    # randomize label
+    valid_types = list(type_set.difference([entity["type"]]))
+    entity["type"] = random.choice(valid_types)
 
-    return augmented_sample
+    return augmented_sample, True
 
 
 def error_type5_augmentation(sample: dict,
                              types: List[str],
-                             avg_entity_length: int = 3):
+                             avg_entity_length: int = 3,
+                             entity_idx: int = 0):
     augmented_sample = copy.deepcopy(sample)
     # Overlapping span, correct label: if len == 1, increase left or right, else increase/decrease left or right (depending on sentence length)
     max_end = len(augmented_sample["tokens"])
     min_start = 0
-    mask = get_random_mask(len(augmented_sample["entities"]))
-    augmented_sample["entities"] = sorted(augmented_sample["entities"],
-                                          key=lambda x: x["start"])
     action = {"increase", "decrease"}
     direction = {"left", "right", "both"}
 
@@ -202,7 +207,7 @@ def error_type5_augmentation(sample: dict,
             # get left border
             left_space = 0
             if ent_idx > 0:
-                left_space = ent["start"] - ents[ent_idx - 1]["end"]
+                left_space = ent["start"] - ents[ent_idx - 1]["end"] - 1
             else:
                 left_space = ent["start"]
             left_space = min(left_space, avg_entity_length)
@@ -220,7 +225,7 @@ def error_type5_augmentation(sample: dict,
             # get right border
             right_space = 0
             if ent_idx < len(ents) - 1:
-                right_space = ents[ent_idx + 1]["start"] - ent["end"]
+                right_space = ents[ent_idx + 1]["start"] - ent["end"] - 1
             else:
                 right_space = max_end - ent["end"]
             right_space = min(right_space, avg_entity_length)
@@ -232,82 +237,153 @@ def error_type5_augmentation(sample: dict,
             ent["end"] -= random.randint(1,
                                          left_space) if left_space > 0 else 0
 
-    for valid, entity_idx, entity in zip(
-            mask,
-            range(len(augmented_sample["entities"])),  # type: ignore
-            augmented_sample["entities"]):
-        if valid:
-            entity_length = entity["end"] - entity["start"]
-            valid_actions = copy.deepcopy(action)
-            valid_directions = copy.deepcopy(direction)
-            if entity_length == 1:
-                # increase only
-                valid_actions.remove("decrease")
-            if (entity_idx > 0
-                    and augmented_sample["entities"][entity_idx - 1]["end"]
-                    == entity["start"] - 1) or entity["start"] == min_start:
-                # right only
-                valid_directions.remove("left")
-                valid_directions.remove("both")
-            if (entity_idx < len(augmented_sample["entities"]) - 1
-                    and augmented_sample["entities"][entity_idx + 1]["start"]
-                    == entity["end"] + 1) or entity["end"] == max_end:
-                # left only
-                valid_directions.remove("right")
-                if "both" in valid_directions:
-                    valid_directions.remove("both")
+    if len(sample["entities"]) == 0:
+        return augmented_sample, False
+    if len(sample["entities"]) <= entity_idx:
+        entity_idx = -1
+    entity = augmented_sample["entities"][entity_idx]
+    entity_length = entity["end"] - entity["start"]
+    entity["augmented"] = True
+    valid_actions = copy.deepcopy(action)
+    valid_directions = copy.deepcopy(direction)
+    if entity_length == 1:
+        # increase only
+        valid_actions.remove("decrease")
+    if (entity_idx > 0 and augmented_sample["entities"][entity_idx - 1]["end"]
+            == entity["start"] - 1) or entity["start"] == min_start:
+        # right only
+        valid_directions.remove("left")
+        valid_directions.remove("both")
+    if (entity_idx < len(augmented_sample["entities"]) - 1
+            and augmented_sample["entities"][entity_idx + 1]["start"]
+            == entity["end"] + 1) or entity["end"] == max_end:
+        # left only
+        valid_directions.remove("right")
+        if "both" in valid_directions:
+            valid_directions.remove("both")
 
-            if len(valid_actions) > 0 and len(valid_directions) > 0:
-                direction_chosen = random.choice(list(valid_directions))
-                if direction_chosen == "both":
-                    apply_left_action(augmented_sample["entities"],
-                                      entity_idx, entity,
-                                      random.choice(list(valid_actions)))
-                    apply_right_action(augmented_sample["entities"],
-                                       entity_idx, entity,
-                                       random.choice(list(valid_actions)))
-                elif direction_chosen == "left":
-                    apply_left_action(augmented_sample["entities"],
-                                      entity_idx, entity,
-                                      random.choice(list(valid_actions)))
-                elif direction_chosen == "right":
-                    apply_right_action(augmented_sample["entities"],
-                                       entity_idx, entity,
-                                       random.choice(list(valid_actions)))
-    return augmented_sample
+    if len(valid_actions) > 0 and len(valid_directions) > 0:
+        direction_chosen = random.choice(list(valid_directions))
+        if direction_chosen == "both":
+            apply_left_action(augmented_sample["entities"], entity_idx, entity,
+                              random.choice(list(valid_actions)))
+            apply_right_action(augmented_sample["entities"], entity_idx,
+                               entity, random.choice(list(valid_actions)))
+        elif direction_chosen == "left":
+            apply_left_action(augmented_sample["entities"], entity_idx, entity,
+                              random.choice(list(valid_actions)))
+        elif direction_chosen == "right":
+            apply_right_action(augmented_sample["entities"], entity_idx,
+                               entity, random.choice(list(valid_actions)))
+    return augmented_sample, True
 
 
 def spelling_error_augmentation(sample: dict, types: List[str]):
     augmented_sample = copy.deepcopy(sample)
     augmented_sample["tokens"] = keyboard_aug.augment(" ".join(
         augmented_sample["tokens"]))[0].split(" ")
-    return augmented_sample
+    return augmented_sample, True
 
 
-def make_erroneous_dataset(dataset: List[dict], types: List[str],
-                           ratio: float):
+def spelling_no_augmentation(sample: dict, types: List[str]):
+    return sample, True
+
+
+def make_erroneous_dataset(
+        dataset: List[dict],
+        types: List[str],
+        ratio: float,
+        error_dist: List[float] = [0.36, 0.5, 0.04, 0.01, 0.09],
+        spelling_dist: List[float] = [0.3]):
     result_dataset = copy.deepcopy(dataset)
-    mask = np.zeros(len(dataset))
-    error_size = round(len(dataset) * ratio) + 1
-    mask[:error_size] = 1
+    error_size_sent = round(len(dataset) * ratio) + 1
+    samples_with_entities = [(sample_idx, entity_idx)
+                             for sample_idx, sample in enumerate(dataset)
+                             for entity_idx, _ in enumerate(sample["entities"])
+                             ]
+    samples = [sample_idx for sample_idx, sample in enumerate(dataset)]
+    error_size_entities = round(len(samples_with_entities) * ratio) + 1
+    mask = np.zeros(len(samples_with_entities))
+    mask[:error_size_sent] = 1
     np.random.shuffle(mask)
-
-    type_list = list(types)
-
-    # augmentations
-    augmentations = [
-        error_type1_augmentation, error_type2_augmentation,
-        error_type3_augmentation, error_type4_augmentation,
-        error_type5_augmentation, spelling_error_augmentation
+    error_entity_samples = [
+        idxs for valid, idxs in zip(mask, samples_with_entities) if valid
     ]
 
-    for valid, sample_idx, sample in zip(mask, range(len(dataset)), dataset):
-        if valid:
-            mask_augmentations = get_random_mask(len(augmentations))
-            augmented_sample = copy.deepcopy(sample)
-            for valid_aug, aug in zip(mask_augmentations, augmentations):
-                if valid_aug:
-                    augmented_sample = aug(augmented_sample, type_list)
-            result_dataset[sample_idx] = augmented_sample
+    type_list = list(types)
+    print("adding error_type1")
+    error_type1_size = round(error_size_entities * error_dist[0]) + 1
+    error_type1_samples = []
+    while len(error_type1_samples) < error_type1_size:
+        sample_idx = random.choice(samples)
+        aug_sample, augmented = error_type1_augmentation(
+            result_dataset[sample_idx], type_list)
+        if augmented:
+            result_dataset[sample_idx] = aug_sample
+            error_type1_samples.append(sample_idx)
 
+    print("adding error_type2")
+    error_entity_samples = [
+        x for x in error_entity_samples if x[0] not in error_type1_samples
+    ]
+    error_type2_size = round(error_size_entities * error_dist[1]) + 1
+    error_type2_samples = []
+    while len(error_type2_samples) < error_type2_size:
+        sample_idx, entity_idx = random.choice(error_entity_samples)
+        aug_sample, augmented = error_type2_augmentation(
+            result_dataset[sample_idx], type_list, entity_idx=entity_idx)
+        if augmented:
+            result_dataset[sample_idx] = aug_sample
+            error_type2_samples.append((sample_idx, entity_idx))
+
+    print("adding error_type3")
+    error_entity_samples = [(sample_idx, entity_idx)
+                            for sample_idx, sample in enumerate(result_dataset)
+                            for entity_idx, _ in enumerate(sample["entities"])
+                            if sample_idx not in error_type1_samples]
+    error_type3_size = round(error_size_entities * error_dist[2]) + 1
+    error_type3_samples = []
+    while len(error_type3_samples) < error_type3_size:
+        sample_idx, entity_idx = random.choice(error_entity_samples)
+        aug_sample, augmented = error_type3_augmentation(
+            result_dataset[sample_idx], type_list, entity_idx=entity_idx)
+        if augmented:
+            result_dataset[sample_idx] = aug_sample
+            error_type3_samples.append((sample_idx, entity_idx))
+
+    print("adding error_type4")
+    error_entity_samples = [
+        x for x in error_entity_samples if x not in error_type3_samples
+    ]
+    error_type4_size = round(error_size_entities * error_dist[3]) + 1
+    error_type4_samples = []
+    while len(error_type4_samples) < error_type4_size:
+        sample_idx, entity_idx = random.choice(error_entity_samples)
+        aug_sample, augmented = error_type4_augmentation(
+            result_dataset[sample_idx], type_list, entity_idx=entity_idx)
+        if augmented:
+            result_dataset[sample_idx] = aug_sample
+            error_type4_samples.append((sample_idx, entity_idx))
+
+    print("adding error_type5")
+    error_entity_samples = [
+        x for x in error_entity_samples if x not in error_type4_samples
+    ]
+    error_type5_size = round(error_size_entities * error_dist[4]) + 1
+    error_type5_samples = []
+    while len(error_type5_samples) < error_type5_size:
+        sample_idx, entity_idx = random.choice(error_entity_samples)
+        aug_sample, augmented = error_type5_augmentation(
+            result_dataset[sample_idx], type_list, entity_idx=entity_idx)
+        if augmented:
+            result_dataset[sample_idx] = aug_sample
+            error_type5_samples.append((sample_idx, entity_idx))
+
+    print("adding spelling error")
+    spelling_error_samples = np.random.choice(
+        [idx for idx, _ in enumerate(result_dataset)],
+        size=round(error_size_sent * spelling_dist[0]) + 1).tolist()
+    for idx in spelling_error_samples:
+        result_dataset[idx], _ = spelling_error_augmentation(
+            result_dataset[idx], type_list)
     return result_dataset
