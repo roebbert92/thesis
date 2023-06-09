@@ -105,6 +105,8 @@ def lowner_to_json(train_file: str,
                         if utils.is_supported_doc(doc["tokens"]):
                             doc["extended"] = doc["tokens"]
                             dataset.append(doc)
+                        else:
+                            print(file_name, line_nr, doc)
                     doc = {"tokens": [], "extended": [], "entities": []}
                     idx = -1
                     continue

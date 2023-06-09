@@ -37,12 +37,9 @@ files = {
     "dev":
     os.path.join(thesis_path, "data", "mlowner", "lowner_dev.json"),
     "test":
-    os.path.join(
-        thesis_path,
-        "data",
-        "mlowner",
-        #"lowner_test.json"
-        "lowner_dev.json"),
+    os.path.join(thesis_path, "data", "mlowner", "lowner_test.json"
+                 #"lowner_dev.json"
+                 ),
 }
 
 with open(files["train"], encoding="utf-8") as file:
@@ -159,6 +156,7 @@ def measure_model_performance(seed: int, config,
     # Metrics
     metrics_base_path = os.path.join(config["data_path"], f"seed_{str(seed)}",
                                      "04_metrics", config["name"])
+    os.makedirs(metrics_base_path, exist_ok=True)
 
     while not trained:
         try:
@@ -193,7 +191,7 @@ def measure_model_performance(seed: int, config,
             test_val_loader = None
             if test is not None:
                 test_val_loader = DataLoader(
-                    val,
+                    test,
                     batch_size=int(train_config["batch_size"] * 4),
                     collate_fn=ner_collate_fn,
                     num_workers=3,

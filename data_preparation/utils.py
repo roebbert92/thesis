@@ -17,10 +17,12 @@ def is_supported_doc(tokens: List[str]):
     no_punct_text = text.translate(punct_removal)
     if len(no_punct_text.split()) > 0:
         # check supported language
-        pred, _ = fmodel.predict(text)
-        pred = str(pred[0]).removeprefix("__label__") # type: ignore
-        if pred in supported_lang:
-            return True
+        # pred, _ = fmodel.predict(text, k=3)
+        # pred = [str(p).removeprefix("__label__") for p in pred]  # type: ignore
+        # for p in pred:
+        #     if p in supported_lang:
+        #         return True
+        return True
     return False
 
 

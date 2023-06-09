@@ -51,6 +51,8 @@ def bio_to_json(dataset_name: str,
                         if utils.is_supported_doc(doc["tokens"]):
                             doc["extended"] = doc["tokens"]
                             dataset.append(doc)
+                        else:
+                            print(file_name, line_nr, doc)
                     doc = {"tokens": [], "extended": [], "entities": []}
                     idx = -1
                     continue

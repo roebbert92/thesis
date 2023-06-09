@@ -7,7 +7,7 @@ thesis_path = "/" + os.path.join(
     *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-1])
 sys.path.append(thesis_path)
 
-from configs.asp_t5 import FLAN_T5_BASE, T5_BASE
+from configs.asp_t5 import T5_BASE
 from models.asp_t5 import ASPT5Model, get_tokenizer
 
 from ray import tune
@@ -95,13 +95,15 @@ def setup_database(sent_search_algorithm: str,
     search = Pipeline()
     join_documents_input = []
     # sentences
+    sent_name = "sent" if name == "lownergaz" else name + "_sent"
     add_sent_search_components(search, sent_search_algorithm, sent_search_topk,
-                               join_documents_input, reset, name)
+                               join_documents_input, reset, sent_name)
 
     # lowner gazetteers
+    lownergaz_name = name if name == "lownergaz" else name + "_lownergaz"
     add_lownergaz_search_components(search, gaz_search_algorithm,
                                     gaz_search_topk, join_documents_input,
-                                    reset, name)
+                                    reset, lownergaz_name)
 
     # join documents
 

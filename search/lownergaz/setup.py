@@ -7,7 +7,7 @@ thesis_path = "/" + os.path.join(
 sys.path.append(thesis_path)
 
 from search.utils import EMBEDDING_DIM, EMBEDDING_MODEL, get_gazetteers_from_documents
-from haystack.document_stores import FAISSDocumentStore, BaseDocumentStore, ElasticsearchDocumentStore
+from haystack.document_stores import FAISSDocumentStore, BaseDocumentStore, ElasticsearchDocumentStore, SQLDocumentStore
 from haystack.nodes import EmbeddingRetriever, BM25Retriever
 from haystack import Pipeline, Document
 import json
@@ -16,25 +16,26 @@ from data_preparation.utils import is_supported_doc
 import uuid
 
 
-def add_lownergaz_gazetteers(doc_store: BaseDocumentStore, items: List[dict] = []):
+def add_lownergaz_gazetteers(doc_store: BaseDocumentStore,
+                             items: List[dict] = []):
     if doc_store.get_document_count() == 0:
         documents = []
         if len(items) == 0:
             with open(os.path.join(thesis_path, "data", "mlowner",
-                                    "lowner_gazetteer.json"),
-                        "r",
-                        encoding="utf-8") as file:
+                                   "lowner_gazetteer.json"),
+                      "r",
+                      encoding="utf-8") as file:
                 lowner_gaz = json.load(file)
             for gaz in tqdm(lowner_gaz):
                 if is_supported_doc(gaz["entity"].split()):
                     documents.append(
                         Document(id=str(uuid.uuid4()),
-                                    content=gaz["entity"],
-                                    meta={
-                                        "data_type": "gazetteers",
-                                        "type": gaz["type"],
-                                        "entity_id": gaz["entity_id"]
-                                    }))
+                                 content=gaz["entity"],
+                                 meta={
+                                     "data_type": "gazetteers",
+                                     "type": gaz["type"],
+                                     "entity_id": gaz["entity_id"]
+                                 }))
                 if len(documents) > 0 and len(documents) % 1e4 == 0:
                     doc_store.write_documents(documents)
                     documents.clear()
@@ -81,7 +82,8 @@ def add_lownergaz_search_components(search: Pipeline,
                                     search_topk: int,
                                     join_documents_input: List[str] = [],
                                     reset=False,
-                                    name: str = "lownergaz", items: List[dict] = []):
+                                    name: str = "lownergaz",
+                                    items: List[dict] = []):
     if search_algorithm == "bm25":
         document_store = ElasticsearchDocumentStore(
             index=name, embedding_dim=EMBEDDING_DIM, recreate_index=reset)

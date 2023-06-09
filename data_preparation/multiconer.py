@@ -55,6 +55,8 @@ def multiconer_to_json(file_name: str, dir_path: Optional[str] = None):
                     if utils.is_supported_doc(doc["tokens"]):
                         doc["extended"] = doc["tokens"]
                         dataset.append(doc)
+                    else:
+                        print(file_name, line_nr, doc)
                 doc = {
                     "tokens": [],
                     "extended": [],
