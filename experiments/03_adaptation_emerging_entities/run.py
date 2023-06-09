@@ -185,7 +185,8 @@ def train_model(seed: int, config, train: Dataset, val: Dataset,
 def test_model(config, best_ckpt_path, last_ckpt_path, dataset: Dataset, name):
     metrics_base_path = os.path.join(config["data_path"], f"seed_{str(seed)}",
                                      "04_metrics",
-                                     f"{finetuning}_{pretrained}")
+                                     f"{finetuning}_{pretrained}",
+                                     "_".join(database_comb))
     os.makedirs(metrics_base_path, exist_ok=True)
     tokenizer = get_tokenizer(config)
     model = ASPT5Model(config, tokenizer)
@@ -268,40 +269,44 @@ def get_tokenized_filepath(config, file_path, search_results, data_path):
                                         prepend_search_results=False)
 
 
+# prepare databases
+for database_comb in database_combinations:
+    if len(database_comb) > 1:
+        dataset = []
+        for dataset_name in database_comb[1:]:
+            dataset.extend(datasets[dataset_name])
+
+        # copy lownergaz database
+        name = "_".join(database_comb)
+        elasticsearch_client.indices.clone(index="lownergaz",
+                                           target=name + "_lownergaz")
+
+        # copy sent database
+        elasticsearch_client.indices.clone(index="sent", target=name + "_sent")
+        # populate database
+        search = setup_database(config["sent_search_algorithm"],
+                                config["sent_search_topk"],
+                                config["gaz_search_algorithm"],
+                                config["gaz_search_topk"],
+                                config["search_join_method"],
+                                config["search_topk"],
+                                name="_".join(name),
+                                gazs=dataset,
+                                sents=dataset)
+
 for seed in seeds:
-    # prepare databases
     tokenized_files = {}
     for database_comb in database_combinations:
         if len(database_comb) > 1:
-            dataset = []
-            for dataset_name in database_comb[1:]:
-                dataset.extend(datasets[dataset_name])
-
-            # copy lownergaz database
-            name = ["seed", str(seed), "wnut"]
-            for n in database_comb[1:]:
-                name.append(n.split("_")[1])
-            name.append("lownergaz")
-            elasticsearch_client.indices.clone(index="lownergaz",
-                                               target="_".join(name))
-
-            # copy sent database
-            del name[-1]
-            name.append("sent")
-            elasticsearch_client.indices.clone(index="sent",
-                                               target="_".join(name))
-            del name[-1]
+            name = "_".join(database_comb)
             search = setup_database(config["sent_search_algorithm"],
                                     config["sent_search_topk"],
                                     config["gaz_search_algorithm"],
                                     config["gaz_search_topk"],
                                     config["search_join_method"],
                                     config["search_topk"],
-                                    name="_".join(name),
-                                    gazs=dataset,
-                                    sents=dataset)
+                                    name=name)
         else:
-            name = ["seed", str(seed), "lownergaz", "sent"]
             search = setup_database(config["sent_search_algorithm"],
                                     config["sent_search_topk"],
                                     config["gaz_search_algorithm"],
@@ -312,18 +317,27 @@ for seed in seeds:
         search_base_path = os.path.join(config["data_path"],
                                         f"seed_{str(seed)}",
                                         "01_search_results",
-                                        "_".join(name[2:]))
+                                        "_".join(database_comb))
         os.makedirs(search_base_path, exist_ok=True)
         search_results_train = get_search_results(search,
                                                   datasets["wnut_train"])
+        with open(os.path.join(search_base_path, "wnut_train.pkl"),
+                  "wb") as file:
+            pickle.dump(search_results_train, file)
         search_results_dev = get_search_results(search, datasets["wnut_dev"])
+        with open(os.path.join(search_base_path, "wnut_dev.pkl"),
+                  "wb") as file:
+            pickle.dump(search_results_dev, file)
         search_results_test = get_search_results(search, datasets["wnut_test"])
+        with open(os.path.join(search_base_path, "wnut_test.pkl"),
+                  "wb") as file:
+            pickle.dump(search_results_test, file)
 
         # prep data
         tokenized_data_path = os.path.join(config["data_path"],
                                            f"seed_{str(seed)}",
                                            "02_tokenized_dataset",
-                                           "_".join(name[2:]))
+                                           "_".join(database_comb))
         os.makedirs(tokenized_data_path, exist_ok=True)
         tokenized_files[database_comb] = {}
         tokenized_files[database_comb]["train"] = get_tokenized_filepath(
@@ -391,12 +405,12 @@ for seed in seeds:
             train_dataset, dev_dataset, test_dataset = processor.get_tensor_samples(
             )
             test_model(config, best_ckpt_path, last_ckpt_path, train_dataset,
-                       "_".join(database_comb) + "_train")
+                       "train")
             test_model(config, best_ckpt_path, last_ckpt_path, dev_dataset,
-                       "_".join(database_comb) + "_dev")
+                       "dev")
             test_model(
                 config,
                 best_ckpt_path,
                 last_ckpt_path,
                 test_dataset,  # type: ignore
-                "_".join(database_comb) + "_test")
+                "test")
