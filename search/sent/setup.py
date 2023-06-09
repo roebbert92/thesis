@@ -34,30 +34,31 @@ def create_sent_faiss_document_store(name: str = "sent"):
 
 def add_multiconer_sentences(doc_store: BaseDocumentStore,
                              items: List[dict] = []):
-    if doc_store.get_document_count() == 0:
-        if len(items) == 0:
-            with open(os.path.join(thesis_path, "data", "multiconer",
-                                   "multiconer_test.json"),
-                      "r",
+    if len(items) == 0 and doc_store.get_document_count() == 0:
+        with open(os.path.join(thesis_path, "data", "multiconer",
+                               "multiconer_test.json"),
+                  "r",
+                  encoding="utf-8") as file:
+            multiconer = json.load(file)
+            with open(os.path.join(thesis_path,
+                                   "data/mlowner/lowner_train.json"),
                       encoding="utf-8") as file:
-                multiconer = json.load(file)
-        else:
-            multiconer = items
+                lowner_train = json.load(file)
+            with open(os.path.join(thesis_path,
+                                   "data/mlowner/lowner_dev.json"),
+                      encoding="utf-8") as file:
+                lowner_dev = json.load(file)
+            with open(os.path.join(thesis_path,
+                                   "data/mlowner/lowner_test.json"),
+                      encoding="utf-8") as file:
+                lowner_test = json.load(file)
 
-        with open(os.path.join(thesis_path, "data/mlowner/lowner_train.json"),
-                  encoding="utf-8") as file:
-            lowner_train = json.load(file)
-        with open(os.path.join(thesis_path, "data/mlowner/lowner_dev.json"),
-                  encoding="utf-8") as file:
-            lowner_dev = json.load(file)
-        with open(os.path.join(thesis_path, "data/mlowner/lowner_test.json"),
-                  encoding="utf-8") as file:
-            lowner_test = json.load(file)
-
-        filtered_multiconer = remove_exact_matches(
-            multiconer, lowner_train + lowner_dev + lowner_test)
-        documents = get_sentences_from_documents(filtered_multiconer)
-        doc_store.write_documents(documents)
+            filtered_multiconer = remove_exact_matches(
+                multiconer, lowner_train + lowner_dev + lowner_test)
+            documents = get_sentences_from_documents(filtered_multiconer)
+    else:
+        documents = get_sentences_from_documents(items)
+    doc_store.write_documents(documents)
 
 
 def train_update_sent_faiss_index(

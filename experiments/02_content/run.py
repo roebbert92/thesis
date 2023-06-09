@@ -6,12 +6,12 @@ thesis_path = "/" + os.path.join(
     *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-2])
 sys.path.append(thesis_path)
 
-from typing import Dict, List
+from typing import List
 import torch
 from torch.utils.data import DataLoader, Dataset
 import json
 from lightning.fabric.utilities.seed import seed_everything
-from haystack import Document, Pipeline
+from haystack import Pipeline
 from haystack.nodes import JoinDocuments
 import pickle
 import lightning.pytorch as pl
@@ -19,7 +19,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger
 
 from data_preprocessing.tensorize import NERCollator, NERDataProcessor, ner_collate_fn
-from data_preprocessing.tokenize import tokenize_json, tokenize_search_results_json, query_database
+from data_preprocessing.tokenize import tokenize_search_results_json, query_database
 from models.asp_t5 import ASPT5Model, get_tokenizer
 from pipelines.evaluation import factors
 from configs.asp_t5 import T5_ASP_LOWNERGAZ_SENT
@@ -38,10 +38,12 @@ files = {
     "dev":
     os.path.join(thesis_path, "data", "mlowner", "lowner_dev.json"),
     "test":
-    os.path.join(thesis_path, "data", "mlowner", 
-                 #"lowner_test.json"
-                 "lowner_dev.json"
-                 ),
+    os.path.join(
+        thesis_path,
+        "data",
+        "mlowner",
+        #"lowner_test.json"
+        "lowner_dev.json"),
     "multiconer":
     os.path.join(thesis_path, "data", "multiconer", "multiconer_test.json"),
     "lownergaz":
@@ -387,7 +389,7 @@ for seed in seeds:
             search_base_path = os.path.join(
                 config["data_path"], f"seed_{str(seed)}", "01_search_results",
                 f"size_{gazetteer_size}", f"error_ratio_{error_percent_ratio}")
-            os.makedirs(dataset_base_path, exist_ok=True)
+            os.makedirs(search_base_path, exist_ok=True)
             with open(
                     os.path.join(search_base_path,
                                  "aug_search_results_aug_train.pkl"),
@@ -408,7 +410,7 @@ for seed in seeds:
                 config["data_path"], f"seed_{str(seed)}",
                 "02_tokenized_dataset", f"size_{gazetteer_size}",
                 f"error_ratio_{error_percent_ratio}")
-            os.makedirs(tokenized_data_path, exists_ok=True)
+            os.makedirs(tokenized_data_path, exist_ok=True)
 
             tokenized_files = {}
             tokenized_files["aug_search_aug_train"] = get_tokenized_filepath(
@@ -528,30 +530,26 @@ for seed in seeds:
                                          config["search_topk"])
 
             # get search results for clean lowner train, dev, test
-            search_results_train = get_search_results(
-                full_search, datasets["train"])
-            search_results_dev = get_search_results(
-                full_search, datasets["dev"])
-            search_results_test = get_search_results(
-                full_search, datasets["test"])
+            search_results_train = get_search_results(full_search,
+                                                      datasets["train"])
+            search_results_dev = get_search_results(full_search,
+                                                    datasets["dev"])
+            search_results_test = get_search_results(full_search,
+                                                     datasets["test"])
 
             # save split search results
             with open(
-                    os.path.join(search_base_path,
-                                 "search_results_train.pkl"),
+                    os.path.join(search_base_path, "search_results_train.pkl"),
                     "wb") as file:
                 pickle.dump(search_results_train, file)
-            with open(
-                    os.path.join(search_base_path,
-                                 "search_results_dev.pkl"),
-                    "wb") as file:
+            with open(os.path.join(search_base_path, "search_results_dev.pkl"),
+                      "wb") as file:
                 pickle.dump(search_results_dev, file)
             with open(
-                    os.path.join(search_base_path,
-                                 "search_results_test.pkl"),
+                    os.path.join(search_base_path, "search_results_test.pkl"),
                     "wb") as file:
                 pickle.dump(search_results_test, file)
-                
+
             # prep clean lowner train, dev, test
             tokenized_files["search_train"] = get_tokenized_filepath(
                 config, files["train"], search_results_train,

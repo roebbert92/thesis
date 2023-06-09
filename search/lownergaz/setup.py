@@ -18,30 +18,29 @@ import uuid
 
 def add_lownergaz_gazetteers(doc_store: BaseDocumentStore,
                              items: List[dict] = []):
-    if doc_store.get_document_count() == 0:
-        documents = []
-        if len(items) == 0:
-            with open(os.path.join(thesis_path, "data", "mlowner",
-                                   "lowner_gazetteer.json"),
-                      "r",
-                      encoding="utf-8") as file:
-                lowner_gaz = json.load(file)
-            for gaz in tqdm(lowner_gaz):
-                if is_supported_doc(gaz["entity"].split()):
-                    documents.append(
-                        Document(id=str(uuid.uuid4()),
-                                 content=gaz["entity"],
-                                 meta={
-                                     "data_type": "gazetteers",
-                                     "type": gaz["type"],
-                                     "entity_id": gaz["entity_id"]
-                                 }))
-                if len(documents) > 0 and len(documents) % 1e4 == 0:
-                    doc_store.write_documents(documents)
-                    documents.clear()
-        else:
-            documents = get_gazetteers_from_documents(items)
-        doc_store.write_documents(documents)
+    documents = []
+    if len(items) == 0 and doc_store.get_document_count() == 0:
+        with open(os.path.join(thesis_path, "data", "mlowner",
+                               "lowner_gazetteer.json"),
+                  "r",
+                  encoding="utf-8") as file:
+            lowner_gaz = json.load(file)
+        for gaz in tqdm(lowner_gaz):
+            if is_supported_doc(gaz["entity"].split()):
+                documents.append(
+                    Document(id=str(uuid.uuid4()),
+                             content=gaz["entity"],
+                             meta={
+                                 "data_type": "gazetteers",
+                                 "type": gaz["type"],
+                                 "entity_id": gaz["entity_id"]
+                             }))
+            if len(documents) > 0 and len(documents) % 1e4 == 0:
+                doc_store.write_documents(documents)
+                documents.clear()
+    else:
+        documents = get_gazetteers_from_documents(items)
+    doc_store.write_documents(documents)
 
 
 def train_update_lownergaz_faiss_index(
