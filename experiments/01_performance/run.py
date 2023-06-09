@@ -171,8 +171,8 @@ def measure_model_performance(seed: int, config,
                                       prefetch_factor=20)
             # Validation loaders
             train_val_loader = DataLoader(train,
-                                          batch_size=int(
-                                              train_config["batch_size"] * 4),
+                                          batch_size=int(config["batch_size"] *
+                                                         4),
                                           collate_fn=ner_collate_fn,
                                           num_workers=3,
                                           persistent_workers=False,
@@ -180,8 +180,8 @@ def measure_model_performance(seed: int, config,
                                           shuffle=False,
                                           prefetch_factor=20)
             dev_val_loader = DataLoader(val,
-                                        batch_size=int(
-                                            train_config["batch_size"] * 4),
+                                        batch_size=int(config["batch_size"] *
+                                                       4),
                                         collate_fn=ner_collate_fn,
                                         num_workers=3,
                                         persistent_workers=False,
@@ -190,15 +190,15 @@ def measure_model_performance(seed: int, config,
                                         prefetch_factor=20)
             test_val_loader = None
             if test is not None:
-                test_val_loader = DataLoader(
-                    test,
-                    batch_size=int(train_config["batch_size"] * 4),
-                    collate_fn=ner_collate_fn,
-                    num_workers=3,
-                    persistent_workers=False,
-                    pin_memory=True,
-                    shuffle=False,
-                    prefetch_factor=20)
+                test_val_loader = DataLoader(test,
+                                             batch_size=int(
+                                                 config["batch_size"] * 4),
+                                             collate_fn=ner_collate_fn,
+                                             num_workers=3,
+                                             persistent_workers=False,
+                                             pin_memory=True,
+                                             shuffle=False,
+                                             prefetch_factor=20)
 
             trainer = pl.Trainer(accelerator="gpu",
                                  logger=tb_logger,
@@ -302,9 +302,8 @@ for seed in seeds:
             dataset = datasets[part]
             dataset_name = "lowner_" + part
             # save search results for augmentation
-            file_name = os.path.join(config["data_path"], f"seed_{str(seed)}",
-                                     "01_search_results", config['name'],
-                                     f"{dataset_name}.pkl")
+            file_name = os.path.join(config["data_path"], "01_search_results",
+                                     config['name'], f"{dataset_name}.pkl")
             if not os.path.exists(os.path.dirname(file_name)):
                 os.makedirs(os.path.dirname(file_name))
 
