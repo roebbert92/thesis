@@ -24,28 +24,6 @@ from hyperparameter_tuning.utils import get_search_results_for_file
 from search.utils import get_gazetteers_from_documents
 from data_preparation.utils import remove_exact_matches
 
-files = {
-    "types":
-    os.path.join(thesis_path, "data", "mlowner", "lowner_types.json"),
-    "train":
-    os.path.join(thesis_path, "data", "mlowner", "lowner_train.json"),
-    "dev":
-    os.path.join(thesis_path, "data", "mlowner", "lowner_dev.json"),
-    "test":
-    os.path.join(
-        thesis_path,
-        "data",
-        "mlowner",
-        #"lowner_test.json"
-        "lowner_test.json"),
-    "multiconer":
-    os.path.join(thesis_path, "data", "multiconer", "multiconer_test.json"),
-    "lownergaz":
-    os.path.join(thesis_path, "data", "mlowner", "lowner_gazetteer.json"),
-}
-
-cpu_count = int(mp.cpu_count() // 2)
-
 
 def get_tokenized_filepath(config, files, file_path, search_results, data_path,
                            output_name: Optional[str]):
@@ -115,24 +93,41 @@ def setup_database(sent_search_algorithm: str,
 ## 04_metrics
 def generate_experiment_data(seeds: List[int], gazetteer_sizes: List[int],
                              error_percent_ratios: List[int]):
+    files = {
+        "types":
+        os.path.join(thesis_path, "data", "mlowner", "lowner_types.json"),
+        "train":
+        os.path.join(thesis_path, "data", "mlowner", "lowner_train.json"),
+        "dev":
+        os.path.join(thesis_path, "data", "mlowner", "lowner_dev.json"),
+        "test":
+        os.path.join(thesis_path, "data", "mlowner", "lowner_test.json"),
+        "multiconer":
+        os.path.join(thesis_path, "data", "multiconer",
+                     "multiconer_test.json"),
+        "lownergaz":
+        os.path.join(thesis_path, "data", "mlowner", "lowner_gazetteer.json"),
+    }
 
-    # filter multiconer data
-    with open(files["train"], encoding="utf-8") as file:
-        lowner_train = json.load(file)
+    cpu_count = int(mp.cpu_count() // 2)
 
-    with open(files["dev"], encoding="utf-8") as file:
-        lowner_dev = json.load(file)
-
-    with open(files["test"], encoding="utf-8") as file:
-        lowner_test = json.load(file)
-
-    with open(files["multiconer"], encoding="utf-8") as file:
-        multiconer = json.load(file)
-    multiconer = remove_exact_matches(multiconer,
-                                      lowner_train + lowner_dev + lowner_test)
     files["filtered_multiconer"] = os.path.join(
         os.path.dirname(files["multiconer"]), "filtered_multiconer.json")
+
     if not os.path.exists(files["filtered_multiconer"]):
+        with open(files["train"], encoding="utf-8") as file:
+            lowner_train = json.load(file)
+
+        with open(files["dev"], encoding="utf-8") as file:
+            lowner_dev = json.load(file)
+
+        with open(files["test"], encoding="utf-8") as file:
+            lowner_test = json.load(file)
+
+        with open(files["multiconer"], encoding="utf-8") as file:
+            multiconer = json.load(file)
+        multiconer = remove_exact_matches(
+            multiconer, lowner_train + lowner_dev + lowner_test)
         with open(files["filtered_multiconer"], "w", encoding="utf-8") as file:
             json.dump(multiconer, file)
 
@@ -145,10 +140,11 @@ def generate_experiment_data(seeds: List[int], gazetteer_sizes: List[int],
 
     # 00_datasets
     experiment_data_paths["00_datasets"] = {}
-    dataset_configs = [(config, seed, gazetteer_size, error_percent_ratio)
-                       for gazetteer_size in gazetteer_sizes
-                       for error_percent_ratio in error_percent_ratios
-                       for seed in seeds]
+    dataset_configs = [
+        (config, files, seed, gazetteer_size, error_percent_ratio)
+        for gazetteer_size in gazetteer_sizes
+        for error_percent_ratio in error_percent_ratios for seed in seeds
+    ]
     with mp.get_context('spawn').Pool(cpu_count // 2) as pool:
         for seed, gazetteer_size, error_percent_ratio, dataset_paths in pool.starmap(
                 create_dataset, dataset_configs):
@@ -158,7 +154,7 @@ def generate_experiment_data(seeds: List[int], gazetteer_sizes: List[int],
     # 01_search_results
     experiment_data_paths["01_search_results"] = {}
     search_results_configs = [
-        (config, experiment_data_paths["00_datasets"]
+        (config, files, experiment_data_paths["00_datasets"]
          [f"{seed}_{gazetteer_size}_{error_percent_ratio}"], seed,
          gazetteer_size, error_percent_ratio)
         for gazetteer_size in gazetteer_sizes
@@ -197,7 +193,7 @@ def generate_experiment_data(seeds: List[int], gazetteer_sizes: List[int],
                             f"full_search_result_{part}"] = file_path_part
 
     # 02_tokenized_dataset
-    tokenizing_configs = [(config, experiment_data_paths["00_datasets"]
+    tokenizing_configs = [(config, files, experiment_data_paths["00_datasets"]
                            [f"{seed}_{gazetteer_size}_{error_percent_ratio}"],
                            experiment_data_paths["01_search_results"]
                            [f"{seed}_{gazetteer_size}_{error_percent_ratio}"],
@@ -215,7 +211,7 @@ def generate_experiment_data(seeds: List[int], gazetteer_sizes: List[int],
     return experiment_data_paths
 
 
-def prep_tokenized_dataset(config, dataset_paths, search_results_paths,
+def prep_tokenized_dataset(config, files, dataset_paths, search_results_paths,
                            seed: int, gazetteer_size: int,
                            error_percent_ratio: int):
     tokenized_data_path = os.path.join(config["data_path"],
@@ -263,8 +259,8 @@ def prep_tokenized_dataset(config, dataset_paths, search_results_paths,
     return seed, gazetteer_size, error_percent_ratio, tokenized_files
 
 
-def get_search_results(config, dataset_paths, seed: int, gazetteer_size: int,
-                       error_percent_ratio: int):
+def get_search_results(config, files, dataset_paths, seed: int,
+                       gazetteer_size: int, error_percent_ratio: int):
     search_base_path = os.path.join(config["data_path"], f"seed_{str(seed)}",
                                     "01_search_results",
                                     f"size_{gazetteer_size}",
@@ -334,7 +330,7 @@ def get_search_results(config, dataset_paths, seed: int, gazetteer_size: int,
     return seed, gazetteer_size, error_percent_ratio, search_results_paths
 
 
-def create_dataset(config, seed: int, gazetteer_size: int,
+def create_dataset(config, files, seed: int, gazetteer_size: int,
                    error_percent_ratio: int):
     dataset_base_path = os.path.join(config["data_path"], f"seed_{seed}",
                                      "00_datasets", f"size_{gazetteer_size}",
