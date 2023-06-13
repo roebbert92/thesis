@@ -1,5 +1,9 @@
 from flair.models import SequenceTagger
 from flair.data import Sentence
+import flair
+import torch
+import os
+from pathlib import Path
 from typing import List
 import random
 import numpy as np
@@ -15,8 +19,11 @@ keyboard_aug = KeyboardAug(aug_char_p=0.2,
                            include_numeric=False,
                            include_special_char=False,
                            include_upper_case=False)
-
-tagger = SequenceTagger.load("flair/pos-english-fast")
+# No flair for pytorch version 2.0+
+os.environ["TORCH_FORCE_WEIGHTS_ONLY_LOAD"] = "0"
+flair.cache_root = Path(os.path.dirname(os.path.realpath(__file__)))
+tagger = SequenceTagger.load("flair/pos-english")
+# using spacy instead
 
 
 def get_random_mask(size: int):
@@ -52,10 +59,11 @@ def error_type1_augmentation(sample: dict, types: List[str]):
     # make sure: no overlaps:
     for span in valid_spans:
         for ent_span in entity_spans:
-            if span[0] <= ent_span[0] <= span[1] or span[1] >= ent_span[1] >= span[0]:
+            if span[0] <= ent_span[0] <= span[1] or span[1] >= ent_span[
+                    1] >= span[0]:
                 valid_spans.remove(span)
                 break
-    
+
     if len(valid_spans) > 0:
         span = random.choice(valid_spans)
         augmented_sample["entities"].append({
@@ -296,13 +304,13 @@ def make_erroneous_dataset(
         error_dist: List[float] = [0.36, 0.5, 0.04, 0.01, 0.09],
         spelling_dist: List[float] = [0.3]):
     result_dataset = copy.deepcopy(dataset)
-    error_size_sent = round(len(dataset) * ratio) + 1
+    error_size_sent = round(len(dataset) * ratio)
     samples_with_entities = [(sample_idx, entity_idx)
                              for sample_idx, sample in enumerate(dataset)
                              for entity_idx, _ in enumerate(sample["entities"])
                              ]
     samples = [sample_idx for sample_idx, sample in enumerate(dataset)]
-    error_size_entities = round(len(samples_with_entities) * ratio) + 1
+    error_size_entities = round(len(samples_with_entities) * ratio)
     mask = np.zeros(len(samples_with_entities))
     mask[:error_size_sent] = 1
     np.random.shuffle(mask)
@@ -312,7 +320,7 @@ def make_erroneous_dataset(
 
     type_list = list(types)
     print("adding error_type1")
-    error_type1_size = round(error_size_entities * error_dist[0]) + 1
+    error_type1_size = round(error_size_entities * error_dist[0])
     error_type1_samples = []
     while len(error_type1_samples) < error_type1_size:
         sample_idx = random.choice(samples)
@@ -326,7 +334,7 @@ def make_erroneous_dataset(
     error_entity_samples = [
         x for x in error_entity_samples if x[0] not in error_type1_samples
     ]
-    error_type2_size = round(error_size_entities * error_dist[1]) + 1
+    error_type2_size = round(error_size_entities * error_dist[1])
     error_type2_samples = []
     while len(error_type2_samples) < error_type2_size:
         sample_idx, entity_idx = random.choice(error_entity_samples)
@@ -341,7 +349,7 @@ def make_erroneous_dataset(
                             for sample_idx, sample in enumerate(result_dataset)
                             for entity_idx, _ in enumerate(sample["entities"])
                             if sample_idx not in error_type1_samples]
-    error_type3_size = round(error_size_entities * error_dist[2]) + 1
+    error_type3_size = round(error_size_entities * error_dist[2])
     error_type3_samples = []
     while len(error_type3_samples) < error_type3_size:
         sample_idx, entity_idx = random.choice(error_entity_samples)
@@ -355,7 +363,7 @@ def make_erroneous_dataset(
     error_entity_samples = [
         x for x in error_entity_samples if x not in error_type3_samples
     ]
-    error_type4_size = round(error_size_entities * error_dist[3]) + 1
+    error_type4_size = round(error_size_entities * error_dist[3])
     error_type4_samples = []
     while len(error_type4_samples) < error_type4_size:
         sample_idx, entity_idx = random.choice(error_entity_samples)
@@ -369,7 +377,7 @@ def make_erroneous_dataset(
     error_entity_samples = [
         x for x in error_entity_samples if x not in error_type4_samples
     ]
-    error_type5_size = round(error_size_entities * error_dist[4]) + 1
+    error_type5_size = round(error_size_entities * error_dist[4])
     error_type5_samples = []
     while len(error_type5_samples) < error_type5_size:
         sample_idx, entity_idx = random.choice(error_entity_samples)
@@ -382,7 +390,94 @@ def make_erroneous_dataset(
     print("adding spelling error")
     spelling_error_samples = np.random.choice(
         [idx for idx, _ in enumerate(result_dataset)],
-        size=round(error_size_sent * spelling_dist[0]) + 1).tolist()
+        size=round(error_size_sent * spelling_dist[0])).tolist()
+    for idx in spelling_error_samples:
+        result_dataset[idx], _ = spelling_error_augmentation(
+            result_dataset[idx], type_list)
+    return result_dataset
+
+
+def make_erroneous_gazetteer(
+        dataset: List[dict],
+        types: List[str],
+        ratio: float,
+        error_dist: List[float] = [0.78, 0.06, 0.02, 0.14],
+        spelling_dist: List[float] = [0.3]):
+    result_dataset = copy.deepcopy(dataset)
+    error_size_sent = round(len(dataset) * ratio)
+    samples_with_entities = [(sample_idx, entity_idx)
+                             for sample_idx, sample in enumerate(dataset)
+                             for entity_idx, _ in enumerate(sample["entities"])
+                             ]
+    samples = [sample_idx for sample_idx, sample in enumerate(dataset)]
+    error_size_entities = round(len(samples_with_entities) * ratio)
+    mask = np.zeros(len(samples_with_entities))
+    mask[:error_size_sent] = 1
+    np.random.shuffle(mask)
+    error_entity_samples = [
+        idxs for valid, idxs in zip(mask, samples_with_entities) if valid
+    ]
+
+    type_list = list(types)
+
+    print("adding error_type2")
+    error_entity_samples = [x for x in error_entity_samples]
+    error_type2_size = round(error_size_entities * error_dist[0])
+    error_type2_samples = []
+    while len(error_type2_samples) < error_type2_size:
+        sample_idx, entity_idx = random.choice(error_entity_samples)
+        aug_sample, augmented = error_type2_augmentation(
+            result_dataset[sample_idx], type_list, entity_idx=entity_idx)
+        if augmented:
+            result_dataset[sample_idx] = aug_sample
+            error_type2_samples.append((sample_idx, entity_idx))
+
+    print("adding error_type3")
+    error_entity_samples = [(sample_idx, entity_idx)
+                            for sample_idx, sample in enumerate(result_dataset)
+                            for entity_idx, _ in enumerate(sample["entities"])]
+    error_type3_size = round(error_size_entities * error_dist[1])
+    error_type3_samples = []
+    while len(error_type3_samples) < error_type3_size:
+        sample_idx, entity_idx = random.choice(error_entity_samples)
+        aug_sample, augmented = error_type3_augmentation(
+            result_dataset[sample_idx], type_list, entity_idx=entity_idx)
+        if augmented:
+            result_dataset[sample_idx] = aug_sample
+            error_type3_samples.append((sample_idx, entity_idx))
+
+    print("adding error_type4")
+    error_entity_samples = [
+        x for x in error_entity_samples if x not in error_type3_samples
+    ]
+    error_type4_size = round(error_size_entities * error_dist[2])
+    error_type4_samples = []
+    while len(error_type4_samples) < error_type4_size:
+        sample_idx, entity_idx = random.choice(error_entity_samples)
+        aug_sample, augmented = error_type4_augmentation(
+            result_dataset[sample_idx], type_list, entity_idx=entity_idx)
+        if augmented:
+            result_dataset[sample_idx] = aug_sample
+            error_type4_samples.append((sample_idx, entity_idx))
+
+    print("adding error_type5")
+    error_entity_samples = [
+        x for x in error_entity_samples if x not in error_type4_samples
+    ]
+    error_type5_size = round(error_size_entities * error_dist[3])
+    error_type5_samples = []
+    while len(error_type5_samples) < error_type5_size:
+        sample_idx, entity_idx = random.choice(error_entity_samples)
+        aug_sample, augmented = error_type5_augmentation(
+            result_dataset[sample_idx], type_list, entity_idx=entity_idx)
+        if augmented:
+            result_dataset[sample_idx] = aug_sample
+            error_type5_samples.append((sample_idx, entity_idx))
+
+    print("adding spelling error")
+    spelling_error_samples = np.random.choice(
+        [idx for idx, _ in enumerate(result_dataset)],
+        size=round(error_size_sent * spelling_dist[0])).tolist()
     for idx in spelling_error_samples:
         result_dataset[idx], _ = spelling_error_augmentation(
             result_dataset[idx], type_list)

@@ -26,10 +26,12 @@ pattern = regex.compile(r"\\(\w+)\"")
 
 
 def gazetteer_entry_correction(entity: str):
-    if "\t" in entity and entity.endswith('"'):
+    if "\t" in entity:
         entity = entity.replace("\t", "")
-        entity = entity[:-1]
-        entity = pattern.sub('"\\1"', entity)
+        if entity.endswith('"'):
+            entity = entity[:-1]
+            entity = pattern.sub('"\\1"', entity)
+    return " ".join([token for token in entity.split(" ") if token])
 
 
 def lowner_gaz_to_json(gaz_file: str):
@@ -54,7 +56,7 @@ def lowner_gaz_to_json(gaz_file: str):
                 assert len(items) == 4
                 ent_id, ent_type, _, ent = items
                 assert ent_type in wnut_types
-                gazetteer_entry_correction(ent)
+                ent = gazetteer_entry_correction(ent)
                 gazetteer.append({
                     "entity_id": ent_id,
                     "type": wnut_types[ent_type],

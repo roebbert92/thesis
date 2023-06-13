@@ -261,11 +261,10 @@ def measure_model_performance(seed: int, config,
                 "batch_size"] // train_config["gradient_accumulation_steps"]
 
 
-for seed in seeds:
-    # seed
-    seed_everything(seed)
-
-    for config in configs:
+for config in configs:
+    for seed in seeds:
+        # seed
+        seed_everything(seed)
         # setup database
         search = None
         if config["name"] == "t5_asp_lownergaz_sent":

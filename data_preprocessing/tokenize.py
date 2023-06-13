@@ -57,12 +57,17 @@ def map_entities_to_sentence(entities, sentence, inv_subtoken_map,
     else:
         m_types, m_startings, m_endings = [], [], []
 
-    sorted_pos = sorted(
-        [(inv_subtoken_map[x][0], MENTION_END, label_to_id[t], idx)
-         for idx, (x, t) in enumerate(zip(m_endings, m_types))] +
-        [(inv_subtoken_map[x][0], MENTION_START, label_to_id[t], idx)
-         for idx, (x, t) in enumerate(zip(m_startings, m_types))],
-        reverse=True)
+    try:
+        sorted_pos = sorted(
+            [(inv_subtoken_map[x][0], MENTION_END, label_to_id[t], idx)
+             for idx, (x, t) in enumerate(zip(m_endings, m_types))] +
+            [(inv_subtoken_map[x][0], MENTION_START, label_to_id[t], idx)
+             for idx, (x, t) in enumerate(zip(m_startings, m_types))],
+            reverse=True)
+    except Exception as e:
+        print(entities, sentence, inv_subtoken_map, subtoken_map, label_to_id)
+
+        raise Exception(e)
 
     target_sentence = copy.deepcopy(sentence)
     ent_indices = [-1 for _ in range(len(sentence))]
@@ -537,6 +542,7 @@ def tokenize_search_results_json(tokenizer: PreTrainedTokenizer,
                                  type_file: str,
                                  search_results: Dict[int, List[Document]],
                                  output_path: str,
+                                 output_name: Optional[str] = None,
                                  use_labels: Optional[bool] = None,
                                  use_mentions: Optional[bool] = None,
                                  sent_use_labels: Optional[bool] = None,
@@ -614,11 +620,16 @@ def tokenize_search_results_json(tokenizer: PreTrainedTokenizer,
             "ent_type_sequence": entity_type_sequence,
             "ent_indices": entity_indices
         })
-
-    output_file_name = os.path.join(
-        output_path,
-        f"{os.path.basename(os.path.splitext(file_name)[0])}.{os.path.basename(os.path.splitext(tokenizer.name_or_path)[0])}.jsonlines"
-    )
+    if output_name is None:
+        output_file_name = os.path.join(
+            output_path,
+            f"{os.path.basename(os.path.splitext(file_name)[0])}.{os.path.basename(os.path.splitext(tokenizer.name_or_path)[0])}.jsonlines"
+        )
+    else:
+        output_file_name = os.path.join(
+            output_path,
+            f"{output_name}.{os.path.basename(os.path.splitext(tokenizer.name_or_path)[0])}.jsonlines"
+        )
     with open(output_file_name, "w", encoding="utf-8") as output_file:
         json.dump(tokenized_dataset, output_file)
     return output_file_name

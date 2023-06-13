@@ -5,8 +5,8 @@ from tqdm import tqdm
 import multiprocessing as mp
 from itertools import repeat
 
-fmodel = fasttext.load_model(
-    "/home/loebbert/projects/thesis/data_preparation/lang_detect/lid.176.bin")
+# fmodel = fasttext.load_model(
+#     "/home/loebbert/projects/thesis/data_preparation/lang_detect/lid.176.bin")
 punct_removal = str.maketrans("", "", string.punctuation)
 
 supported_lang = ["en", "fr", "de", "it", "es", "pt", "nl", "pl"]

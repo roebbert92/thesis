@@ -295,6 +295,7 @@ for database_comb in database_combinations:
                                 sents=dataset)
 
 for seed in seeds:
+    seed_everything(seed)
     tokenized_files = {}
     for database_comb in database_combinations:
         if len(database_comb) > 1:
