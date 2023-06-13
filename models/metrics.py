@@ -1,3 +1,4 @@
+from typing import List
 from torchmetrics import Metric
 import torch
 from collections import defaultdict
@@ -66,18 +67,14 @@ class ASPMetrics(Metric):
         self.add_state("error_type5",
                        default=torch.tensor(0, dtype=torch.int),
                        dist_reduce_fx="sum")
-        self.metrics = []
+        self.predictions = {}
 
     def update(self, id: str, preds: list, targets: list):
         preds_set = set(preds)
         targets_set = set(targets)
-        # local update
         tp = torch.tensor(len(preds_set & targets_set), dtype=torch.float)
         fn = torch.tensor(len(targets_set - preds_set), dtype=torch.float)
         fp = torch.tensor(len(preds_set - targets_set), dtype=torch.float)
-        precision = ASPMetrics.calc_precision(tp, fp)
-        recall = ASPMetrics.calc_recall(tp, fn)
-        f1 = ASPMetrics.calc_f1(precision, recall)
         error_type1 = torch.tensor(len(
             ASPMetrics.get_error_type1(preds_set, targets_set)),
                                    dtype=torch.int)
@@ -94,21 +91,7 @@ class ASPMetrics(Metric):
             ASPMetrics.get_error_type5(preds_set, targets_set)),
                                    dtype=torch.int)
 
-        self.metrics.append({
-            "doc_id": id,
-            "targets": len(targets_set),
-            "tp": tp.item(),
-            "fn": fn.item(),
-            "fp": fp.item(),
-            "precision": precision.item(),
-            "recall": recall.item(),
-            "f1": f1.item(),
-            "error_type1": error_type1.item(),
-            "error_type2": error_type2.item(),
-            "error_type3": error_type3.item(),
-            "error_type4": error_type4.item(),
-            "error_type5": error_type5.item(),
-        })
+        self.predictions[id] = preds
         # global update
         self.tp += tp
         self.fn += fn
@@ -245,17 +228,53 @@ class ASPMetrics(Metric):
                 self.error_type3.item(), self.error_type4.item(),
                 self.error_type5.item())
 
-    def metrics_per_sample(self):
-        # dataframe with f1, precision, recall, error types per sample_id
-        return pd.DataFrame.from_records(self.metrics)
+    def metrics_per_sample(self, dataset: List[dict], types: List[str]):
+        # dataframe with tp, fp, fn, error types per sample_id and entity type
+        metrics = []
+        for doc in dataset:
+            doc_id = doc["doc_id"]
+            assert doc_id in self.predictions
+            for t in types:
+                preds_set = set([
+                    pred for pred in self.predictions[doc_id] if pred[2] == t
+                ])
+                targets_set = set([(ent["start"], ent["end"], ent["type"])
+                                   for ent in doc["entities"]
+                                   if ent["type"] == t])
+                tp = len(preds_set & targets_set)
+                fn = len(targets_set - preds_set)
+                fp = len(preds_set - targets_set)
+                error_type1 = len(
+                    ASPMetrics.get_error_type1(preds_set, targets_set))
+                error_type2 = len(
+                    ASPMetrics.get_error_type2(preds_set, targets_set))
+                error_type3 = len(
+                    ASPMetrics.get_error_type3(preds_set, targets_set))
+                error_type4 = len(
+                    ASPMetrics.get_error_type4(preds_set, targets_set))
+                error_type5 = len(
+                    ASPMetrics.get_error_type5(preds_set, targets_set))
+                metrics.append({
+                    "doc_id": doc_id,
+                    "targets": len(targets_set),
+                    "entity_type": t,
+                    "tp": tp,
+                    "fn": fn,
+                    "fp": fp,
+                    "error_type1": error_type1,
+                    "error_type2": error_type2,
+                    "error_type3": error_type3,
+                    "error_type4": error_type4,
+                    "error_type5": error_type5,
+                })
+        return pd.DataFrame.from_records(metrics)
 
     def reset(self):
         super().reset()
-        self.metrics.clear()
+        self.predictions.clear()
 
 
 class FalsePositivesASP():
-
     def __init__(self) -> None:
         self.false_positives = defaultdict(list)
 
