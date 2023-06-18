@@ -232,7 +232,7 @@ def prep_tokenized_dataset(config, files, dataset_paths, search_results_paths,
             config, files, dataset_paths[f"error_lowner_{part}"],
             error_search_results_error_part, tokenized_data_path,
             f"error_search_error_{part}")
-    with open(search_results_paths["error_search_test"], "rb") as file:
+    with open(search_results_paths["error_search_results_test"], "rb") as file:
         error_search_results_test = pickle.load(file)
     tokenized_files["error_search_test"] = get_tokenized_filepath(
         config, files, files["test"], error_search_results_test,
@@ -268,64 +268,82 @@ def get_search_results(config, files, dataset_paths, seed: int,
     os.makedirs(search_base_path, exist_ok=True)
     seed_everything(seed)
     search_results_paths = {}
-    with open(dataset_paths["error_sampled_multiconer"]) as file:
-        error_multiconer = json.load(file)
-    with open(dataset_paths["error_sampled_lownergaz"]) as file:
-        error_lownergaz = json.load(file)
-    # setup database for errorneous multiconer + lownergaz
-    error_sampled_search = setup_database(
-        config["sent_search_algorithm"],
-        config["sent_search_topk"],
-        config["gaz_search_algorithm"],
-        config["gaz_search_topk"],
-        config["search_join_method"],
-        config["search_topk"],
-        reset=True,
-        name=f"{seed}_{gazetteer_size}_{error_percent_ratio}_error_sampled",
-        sents=error_multiconer,
-        gazs=error_lownergaz)
-    # get search results for erroneous lowner train + dev, clean lowner test
     for part in ["train", "dev"]:
-        error_search_results_error_part = get_search_results_for_file(
-            error_sampled_search, dataset_paths[f"error_lowner_{part}"])
         search_results_paths[
             f"error_search_results_error_{part}"] = os.path.join(
                 search_base_path, f"error_search_results_error_{part}.pkl")
-        with open(search_results_paths[f"error_search_results_error_{part}"],
-                  "wb") as file:
-            pickle.dump(error_search_results_error_part, file)
-    error_search_results_test = get_search_results_for_file(
-        error_sampled_search, files["test"])
     search_results_paths["error_search_results_test"] = os.path.join(
         search_base_path, "error_search_results_test.pkl")
-    with open(search_results_paths["error_search_results_test"], "wb") as file:
-        pickle.dump(error_search_results_test, file)
+
+    if any([
+            not os.path.exists(path) for path in [
+                search_results_paths["error_search_results_test"],
+                search_results_paths["error_search_results_error_train"],
+                search_results_paths["error_search_results_error_dev"],
+            ]
+    ]):
+        with open(dataset_paths["error_sampled_multiconer"]) as file:
+            error_multiconer = json.load(file)
+        with open(dataset_paths["error_sampled_lownergaz"]) as file:
+            error_lownergaz = json.load(file)
+        # setup database for errorneous multiconer + lownergaz
+        error_sampled_search = setup_database(
+            config["sent_search_algorithm"],
+            config["sent_search_topk"],
+            config["gaz_search_algorithm"],
+            config["gaz_search_topk"],
+            config["search_join_method"],
+            config["search_topk"],
+            reset=True,
+            name=f"{seed}_{gazetteer_size}_{error_percent_ratio}_error_sampled",
+            sents=error_multiconer,
+            gazs=error_lownergaz)
+        # get search results for erroneous lowner train + dev, clean lowner test
+        for part in ["train", "dev"]:
+            error_search_results_error_part = get_search_results_for_file(
+                error_sampled_search, dataset_paths[f"error_lowner_{part}"])
+            with open(
+                    search_results_paths[f"error_search_results_error_{part}"],
+                    "wb") as file:
+                pickle.dump(error_search_results_error_part, file)
+
+        error_search_results_test = get_search_results_for_file(
+            error_sampled_search, files["test"])
+        with open(search_results_paths["error_search_results_test"],
+                  "wb") as file:
+            pickle.dump(error_search_results_test, file)
 
     # setup database for sampled multiconer + lownergaz
-    with open(dataset_paths["clean_sampled_multiconer"]) as file:
-        sampled_multiconer = json.load(file)
-    with open(dataset_paths["clean_sampled_lownergaz"]) as file:
-        sampled_lownergaz = json.load(file)
-    sampled_search = setup_database(
-        config["sent_search_algorithm"],
-        config["sent_search_topk"],
-        config["gaz_search_algorithm"],
-        config["gaz_search_topk"],
-        config["search_join_method"],
-        config["search_topk"],
-        reset=True,
-        name=f"{seed}_{gazetteer_size}_{error_percent_ratio}_clean_sampled",
-        sents=sampled_multiconer,
-        gazs=sampled_lownergaz)
-    # get search results for clean lowner train, dev, test
     for part in ["train", "dev", "test"]:
-        sampled_search_results_part = get_search_results_for_file(
-            sampled_search, files[part])
         search_results_paths[f"sampled_search_results_{part}"] = os.path.join(
             search_base_path, f"sampled_search_results_{part}.pkl")
-        with open(search_results_paths[f"sampled_search_results_{part}"],
-                  "wb") as file:
-            pickle.dump(sampled_search_results_part, file)
+    if any([
+            not os.path.exists(
+                search_results_paths[f"sampled_search_results_{part}"])
+            for part in ["train", "dev", "test"]
+    ]):
+        with open(dataset_paths["clean_sampled_multiconer"]) as file:
+            sampled_multiconer = json.load(file)
+        with open(dataset_paths["clean_sampled_lownergaz"]) as file:
+            sampled_lownergaz = json.load(file)
+        sampled_search = setup_database(
+            config["sent_search_algorithm"],
+            config["sent_search_topk"],
+            config["gaz_search_algorithm"],
+            config["gaz_search_topk"],
+            config["search_join_method"],
+            config["search_topk"],
+            reset=True,
+            name=f"{seed}_{gazetteer_size}_{error_percent_ratio}_clean_sampled",
+            sents=sampled_multiconer,
+            gazs=sampled_lownergaz)
+        # get search results for clean lowner train, dev, test
+        for part in ["train", "dev", "test"]:
+            sampled_search_results_part = get_search_results_for_file(
+                sampled_search, files[part])
+            with open(search_results_paths[f"sampled_search_results_{part}"],
+                      "wb") as file:
+                pickle.dump(sampled_search_results_part, file)
 
     return seed, gazetteer_size, error_percent_ratio, search_results_paths
 
@@ -347,78 +365,100 @@ def create_dataset(config, files, seed: int, gazetteer_size: int,
         types = json.load(file)["entities"]
 
     # sample from multiconer
-    print("started sampling multiconer")
-    sampled_multiconer, _ = per_type_uniform_sampling(multiconer, list(types),
-                                                      gazetteer_size)
     dataset_paths["clean_sampled_multiconer"] = os.path.join(
         dataset_base_path, "clean_sampled_multiconer.json")
-    with open(dataset_paths["clean_sampled_multiconer"], "w",
-              encoding="utf-8") as file:
-        json.dump(sampled_multiconer, file)
-    print("finished sampling multiconer")
+    if not os.path.exists(dataset_paths["clean_sampled_multiconer"]):
+        print("started sampling multiconer")
+        sampled_multiconer, _ = per_type_uniform_sampling(
+            multiconer, list(types), gazetteer_size)
+        with open(dataset_paths["clean_sampled_multiconer"],
+                  "w",
+                  encoding="utf-8") as file:
+            json.dump(sampled_multiconer, file)
+        print("finished sampling multiconer")
+    else:
+        with open(dataset_paths["clean_sampled_multiconer"],
+                  encoding="utf-8") as file:
+            sampled_multiconer = json.load(file)
     # sample from lownergaz
-    print("started sampling lownergaz")
-    lowner_gaz_search = Pipeline()
-    add_lownergaz_search_components(lowner_gaz_search,
-                                    config["gaz_search_algorithm"], 5)
-    sampled_multiconer_gaz = [{
-        "extended": str(doc.content).split(" ")
-    } for doc in get_gazetteers_from_documents(sampled_multiconer)]
-    sampled_lownergaz = []
-    sampled_lownergaz_ids = set()
-    for _, results in query_database(sampled_multiconer_gaz,
-                                     lowner_gaz_search):
-        for result in results:
-            if result.id not in sampled_lownergaz_ids:
-                sampled_lownergaz_ids.add(result.id)
-                tokens = [
-                    token for token in str(result.content).split(" ") if token
-                ]
-                sampled_lownergaz.append({
-                    "tokens":
-                    tokens,
-                    "entities": [{
-                        "start": 0,
-                        "end": len(tokens),
-                        "type": result.meta["type"],
-                    }],
-                    "doc_id":
-                    result.id
-                })
     dataset_paths["clean_sampled_lownergaz"] = os.path.join(
         dataset_base_path, "clean_sampled_lownergaz.json")
-    with open(dataset_paths["clean_sampled_lownergaz"], "w",
-              encoding="utf-8") as file:
-        json.dump(sampled_lownergaz, file)
-    print("finished sampling lownergaz")
+    if not os.path.exists(dataset_paths["clean_sampled_lownergaz"]):
+        print("started sampling lownergaz")
+        lowner_gaz_search = Pipeline()
+        add_lownergaz_search_components(lowner_gaz_search,
+                                        config["gaz_search_algorithm"], 5)
+        sampled_multiconer_gaz = [{
+            "extended": str(doc.content).split(" ")
+        } for doc in get_gazetteers_from_documents(sampled_multiconer)]
+        sampled_lownergaz = []
+        sampled_lownergaz_ids = set()
+        for _, results in query_database(sampled_multiconer_gaz,
+                                         lowner_gaz_search):
+            for result in results:
+                if result.id not in sampled_lownergaz_ids:
+                    sampled_lownergaz_ids.add(result.id)
+                    tokens = [
+                        token for token in str(result.content).split(" ")
+                        if token
+                    ]
+                    sampled_lownergaz.append({
+                        "tokens":
+                        tokens,
+                        "entities": [{
+                            "start": 0,
+                            "end": len(tokens),
+                            "type": result.meta["type"],
+                        }],
+                        "doc_id":
+                        result.id
+                    })
+
+        with open(dataset_paths["clean_sampled_lownergaz"],
+                  "w",
+                  encoding="utf-8") as file:
+            json.dump(sampled_lownergaz, file)
+        print("finished sampling lownergaz")
+    else:
+        with open(dataset_paths["clean_sampled_lownergaz"],
+                  encoding="utf-8") as file:
+            sampled_lownergaz = json.load(file)
 
     # create erroneous lowner train, dev + gazetteer split
     print("creating erroneous lowner train, dev + gazetteer split")
     for part in ["train", "dev"]:
-        with open(files[part]) as file:
-            lowner_part = json.load(file)
-        error_lowner_part = make_erroneous_dataset(lowner_part, list(types),
-                                                   error_ratio)
         dataset_paths[f"error_lowner_{part}"] = os.path.join(
             dataset_base_path, f"error_lowner_{part}.json")
-        with open(dataset_paths[f"error_lowner_{part}"], "w",
-                  encoding="utf-8") as file:
-            json.dump(error_lowner_part, file)
+        if not os.path.exists(dataset_paths[f"error_lowner_{part}"]):
+            with open(files[part]) as file:
+                lowner_part = json.load(file)
+            error_lowner_part = make_erroneous_dataset(lowner_part,
+                                                       list(types),
+                                                       error_ratio)
+            with open(dataset_paths[f"error_lowner_{part}"],
+                      "w",
+                      encoding="utf-8") as file:
+                json.dump(error_lowner_part, file)
 
-    error_multiconer = make_erroneous_dataset(sampled_multiconer, list(types),
-                                              error_ratio)
     dataset_paths["error_sampled_multiconer"] = os.path.join(
         dataset_base_path, "error_sampled_multiconer.json")
-    with open(dataset_paths["error_sampled_multiconer"], "w",
-              encoding="utf-8") as file:
-        json.dump(error_multiconer, file)
-    error_lownergaz = make_erroneous_gazetteer(sampled_lownergaz, list(types),
-                                               error_ratio)
+    if not os.path.exists(dataset_paths["error_sampled_multiconer"]):
+        error_multiconer = make_erroneous_dataset(sampled_multiconer,
+                                                  list(types), error_ratio)
+        with open(dataset_paths["error_sampled_multiconer"],
+                  "w",
+                  encoding="utf-8") as file:
+            json.dump(error_multiconer, file)
+
     dataset_paths["error_sampled_lownergaz"] = os.path.join(
         dataset_base_path, "error_sampled_lownergaz.json")
-    with open(dataset_paths["error_sampled_lownergaz"], "w",
-              encoding="utf-8") as file:
-        json.dump(error_lownergaz, file)
+    if not os.path.exists(dataset_paths["error_sampled_lownergaz"]):
+        error_lownergaz = make_erroneous_gazetteer(sampled_lownergaz,
+                                                   list(types), error_ratio)
+        with open(dataset_paths["error_sampled_lownergaz"],
+                  "w",
+                  encoding="utf-8") as file:
+            json.dump(error_lownergaz, file)
 
     print("finished erroneous lowner train, dev + gazetteer split")
 
