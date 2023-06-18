@@ -176,14 +176,6 @@ if __name__ == "__main__":
     gazetteer_sizes = [2000, 4000, 6000, 8000]
     error_percent_ratios = [0, 5, 10, 15]
 
-    total = [
-        (6000, 15),
-        (8000, 0),
-        (8000, 5),
-        (8000, 10),
-        (8000, 15),
-    ]
-
     config = T5_ASP_LOWNERGAZ_SENT
     config.update({
         "data_path":
@@ -200,85 +192,86 @@ if __name__ == "__main__":
     with open("experiment_data_paths.json", "w") as file:
         json.dump(experiment_data, file)
 
-    # for gazetteer_size in gazetteer_sizes:
-    #     for error_percent_ratio in error_percent_ratios:
-    for gazetteer_size, error_percent_ratio in total:
-        for seed in seeds:
-            # seed
-            seed_everything(seed)
-            error_ratio = error_percent_ratio / 100
-            tokenized_files = experiment_data["02_tokenized_dataset"][
-                f"{seed}_{gazetteer_size}_{error_percent_ratio}"]
+    for gazetteer_size in gazetteer_sizes:
+        for error_percent_ratio in error_percent_ratios:
+            for seed in seeds:
+                # seed
+                seed_everything(seed)
+                error_ratio = error_percent_ratio / 100
+                tokenized_files = experiment_data["02_tokenized_dataset"][
+                    f"{seed}_{gazetteer_size}_{error_percent_ratio}"]
 
-            processor = NERDataProcessor(
-                config,
-                get_tokenizer(config),
-                tokenized_files["error_search_error_train"],
-                tokenized_files["error_search_error_dev"],
-                tokenized_files["error_search_test"],
-                files["types"],
-                use_cache=False)
-            config["num_labels"] = len(processor.labels)
+                processor = NERDataProcessor(
+                    config,
+                    get_tokenizer(config),
+                    tokenized_files["error_search_error_train"],
+                    tokenized_files["error_search_error_dev"],
+                    tokenized_files["error_search_test"],
+                    files["types"],
+                    use_cache=False)
+                config["num_labels"] = len(processor.labels)
 
-            error_search_error_train, error_search_error_dev, error_search_test = processor.get_tensor_samples(
-            )
-            config["train_len"] = len(error_search_error_train)
+                error_search_error_train, error_search_error_dev, error_search_test = processor.get_tensor_samples(
+                )
+                config["train_len"] = len(error_search_error_train)
 
-            # train model on erroneous lowner train + validate on erroneous lowner dev
-            last_ckpt, best_ckpt = train_model(seed, gazetteer_size,
-                                               error_percent_ratio, config,
-                                               error_search_error_train,
-                                               error_search_error_dev)
+                # train model on erroneous lowner train + validate on erroneous lowner dev
+                last_ckpt, best_ckpt = train_model(seed, gazetteer_size,
+                                                   error_percent_ratio, config,
+                                                   error_search_error_train,
+                                                   error_search_error_dev)
 
-            # test model on erroneous lowner train, dev + clean lowner test
-            test_model(config, best_ckpt, last_ckpt, error_search_error_train,
-                       "error_search_error_train")
-            test_model(config, best_ckpt, last_ckpt, error_search_error_dev,
-                       "error_search_error_dev")
-            test_model(config, best_ckpt, last_ckpt, error_search_test,
-                       "error_search_test")
+                # test model on erroneous lowner train, dev + clean lowner test
+                test_model(config, best_ckpt, last_ckpt,
+                           error_search_error_train,
+                           "error_search_error_train")
+                test_model(config, best_ckpt, last_ckpt,
+                           error_search_error_dev, "error_search_error_dev")
+                test_model(config, best_ckpt, last_ckpt, error_search_test,
+                           "error_search_test")
 
-            # test model on clean lowner train, dev, test with clean sampled search
-            processor = NERDataProcessor(
-                config,
-                get_tokenizer(config),
-                tokenized_files["sampled_search_train"],
-                tokenized_files["sampled_search_dev"],
-                tokenized_files["sampled_search_test"],
-                files["types"],
-                use_cache=False)
-            config["num_labels"] = len(processor.labels)
+                # test model on clean lowner train, dev, test with clean sampled search
+                processor = NERDataProcessor(
+                    config,
+                    get_tokenizer(config),
+                    tokenized_files["sampled_search_train"],
+                    tokenized_files["sampled_search_dev"],
+                    tokenized_files["sampled_search_test"],
+                    files["types"],
+                    use_cache=False)
+                config["num_labels"] = len(processor.labels)
 
-            sampled_search_train, sampled_search_dev, sampled_search_test = processor.get_tensor_samples(
-            )
-            config["train_len"] = len(sampled_search_train)
+                sampled_search_train, sampled_search_dev, sampled_search_test = processor.get_tensor_samples(
+                )
+                config["train_len"] = len(sampled_search_train)
 
-            # test model on clean train, dev, test
-            test_model(config, best_ckpt, last_ckpt, sampled_search_train,
-                       "sampled_search_train")
-            test_model(config, best_ckpt, last_ckpt, sampled_search_dev,
-                       "sampled_search_dev")
-            test_model(config, best_ckpt, last_ckpt, sampled_search_test,
-                       "sampled_search_test")
+                # test model on clean train, dev, test
+                test_model(config, best_ckpt, last_ckpt, sampled_search_train,
+                           "sampled_search_train")
+                test_model(config, best_ckpt, last_ckpt, sampled_search_dev,
+                           "sampled_search_dev")
+                test_model(config, best_ckpt, last_ckpt, sampled_search_test,
+                           "sampled_search_test")
 
-            # prep clean lowner train, dev, test
-            processor = NERDataProcessor(config,
-                                         get_tokenizer(config),
-                                         tokenized_files["full_search_train"],
-                                         tokenized_files["full_search_dev"],
-                                         tokenized_files["full_search_test"],
-                                         files["types"],
-                                         use_cache=False)
-            config["num_labels"] = len(processor.labels)
+                # prep clean lowner train, dev, test
+                processor = NERDataProcessor(
+                    config,
+                    get_tokenizer(config),
+                    tokenized_files["full_search_train"],
+                    tokenized_files["full_search_dev"],
+                    tokenized_files["full_search_test"],
+                    files["types"],
+                    use_cache=False)
+                config["num_labels"] = len(processor.labels)
 
-            full_search_train, full_search_dev, full_search_test = processor.get_tensor_samples(
-            )
-            config["train_len"] = len(full_search_train)
+                full_search_train, full_search_dev, full_search_test = processor.get_tensor_samples(
+                )
+                config["train_len"] = len(full_search_train)
 
-            # test model on clean train, dev, test
-            test_model(config, best_ckpt, last_ckpt, full_search_train,
-                       "full_search_train")
-            test_model(config, best_ckpt, last_ckpt, full_search_dev,
-                       "full_search_dev")
-            test_model(config, best_ckpt, last_ckpt, full_search_test,
-                       "full_search_test")
+                # test model on clean train, dev, test
+                test_model(config, best_ckpt, last_ckpt, full_search_train,
+                           "full_search_train")
+                test_model(config, best_ckpt, last_ckpt, full_search_dev,
+                           "full_search_dev")
+                test_model(config, best_ckpt, last_ckpt, full_search_test,
+                           "full_search_test")
