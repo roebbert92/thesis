@@ -54,8 +54,12 @@ with open(files["test"], encoding="utf-8") as file:
 seeds = [1, 2, 3]
 datasets = {"train": lowner_train, "dev": lowner_dev, "test": lowner_test}
 configs = [
-    T5_ASP_LOWNERGAZ_SENT, T5_ASP_LOWNERGAZ, T5_ASP_GAZ_SENT, T5_ASP_GAZ,
-    T5_ASP_SENT, T5_ASP
+    # T5_ASP_LOWNERGAZ_SENT,
+    T5_ASP_LOWNERGAZ,
+    T5_ASP_GAZ_SENT,
+    T5_ASP_GAZ,
+    T5_ASP_SENT,
+    T5_ASP
 ]
 for config in configs:
     config.update({
@@ -63,6 +67,9 @@ for config in configs:
         os.path.join(thesis_path, "experiments", "01_performance", "data")
     })
 parts = ["train", "dev", "test"]
+
+total = sorted(list(zip(configs, seeds)),
+               key=lambda x: x[0]["name"] + str(x[1]))
 
 
 def measure_model_performance(seed: int, config,
@@ -261,63 +268,65 @@ def measure_model_performance(seed: int, config,
                 "batch_size"] // train_config["gradient_accumulation_steps"]
 
 
-for config in configs:
-    for seed in seeds:
-        # seed
-        seed_everything(seed)
-        # setup database
-        search = None
-        if config["name"] == "t5_asp_lownergaz_sent":
-            search = setup_database_lownergaz_sent(
-                config["sent_search_algorithm"],
-                config["sent_search_topk"],
-                config["gaz_search_algorithm"],
-                config["gaz_search_topk"],
-                config["search_join_method"],
-                config["search_topk"],
-            )
-        if config["name"] == "t5_asp_gaz_sent":
-            search = setup_database_gaz_sent(
-                config["sent_search_algorithm"],
-                config["sent_search_topk"],
-                config["gaz_search_algorithm"],
-                config["gaz_search_topk"],
-                config["search_join_method"],
-                config["search_topk"],
-            )
-        if config["name"] == "t5_asp_lownergaz":
-            search = setup_database_lownergaz(config["search_algorithm"],
-                                              config["search_topk"])
-        if config["name"] == "t5_asp_gaz":
-            search = setup_database_gaz(config["search_algorithm"],
-                                        config["search_topk"])
-        if config["name"] == "t5_asp_sent":
-            search = setup_database_sent(config["search_algorithm"],
-                                         config["search_topk"])
+for config, seed in total:
+    if seed == 1 and config["name"] == "t5_asp_lownergaz":
+        continue
+    print(seed, config["name"])
+    # seed
+    seed_everything(seed)
+    # setup database
+    search = None
+    if config["name"] == "t5_asp_lownergaz_sent":
+        search = setup_database_lownergaz_sent(
+            config["sent_search_algorithm"],
+            config["sent_search_topk"],
+            config["gaz_search_algorithm"],
+            config["gaz_search_topk"],
+            config["search_join_method"],
+            config["search_topk"],
+        )
+    if config["name"] == "t5_asp_gaz_sent":
+        search = setup_database_gaz_sent(
+            config["sent_search_algorithm"],
+            config["sent_search_topk"],
+            config["gaz_search_algorithm"],
+            config["gaz_search_topk"],
+            config["search_join_method"],
+            config["search_topk"],
+        )
+    if config["name"] == "t5_asp_lownergaz":
+        search = setup_database_lownergaz(config["search_algorithm"],
+                                          config["search_topk"])
+    if config["name"] == "t5_asp_gaz":
+        search = setup_database_gaz(config["search_algorithm"],
+                                    config["search_topk"])
+    if config["name"] == "t5_asp_sent":
+        search = setup_database_sent(config["search_algorithm"],
+                                     config["search_topk"])
 
-        # go through all datasets
-        search_results = {}
-        for part in parts:
-            dataset = datasets[part]
-            dataset_name = "lowner_" + part
-            # save search results for augmentation
-            file_name = os.path.join(config["data_path"], "01_search_results",
-                                     config['name'], f"{dataset_name}.pkl")
-            if not os.path.exists(os.path.dirname(file_name)):
-                os.makedirs(os.path.dirname(file_name))
+    # go through all datasets
+    search_results = {}
+    for part in parts:
+        dataset = datasets[part]
+        dataset_name = "lowner_" + part
+        # save search results for augmentation
+        file_name = os.path.join(config["data_path"], "01_search_results",
+                                 config['name'], f"{dataset_name}.pkl")
+        if not os.path.exists(os.path.dirname(file_name)):
+            os.makedirs(os.path.dirname(file_name))
 
-            # get search results
-            search_result = None
-            if search is not None:
-                if not os.path.exists(file_name):
-                    search_result = get_search_results(search, dataset)
-                    with open(file_name, "wb") as file:
-                        pickle.dump(search_result, file)
-                else:
-                    with open(file_name, "rb") as file:
-                        search_result = pickle.load(file)
+        # get search results
+        search_result = None
+        if search is not None:
+            if not os.path.exists(file_name):
+                search_result = get_search_results(search, dataset)
+                with open(file_name, "wb") as file:
+                    pickle.dump(search_result, file)
+            else:
+                with open(file_name, "rb") as file:
+                    search_result = pickle.load(file)
 
-                search_results[part] = search_result
+            search_results[part] = search_result
 
-        # train model and get results
-        measure_model_performance(seed, config, search_results)
+    # train model and get results
+    measure_model_performance(seed, config, search_results)
