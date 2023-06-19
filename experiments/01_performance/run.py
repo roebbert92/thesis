@@ -57,10 +57,10 @@ datasets = {"train": lowner_train, "dev": lowner_dev, "test": lowner_test}
 configs = [
     # T5_ASP_LOWNERGAZ_SENT,
     T5_ASP_LOWNERGAZ,
-    T5_ASP_GAZ_SENT,
-    T5_ASP_GAZ,
-    T5_ASP_SENT,
-    T5_ASP
+    #T5_ASP_GAZ_SENT,
+    #T5_ASP_GAZ,
+    #T5_ASP_SENT,
+    #T5_ASP
 ]
 for config in configs:
     config.update({
@@ -272,11 +272,6 @@ def measure_model_performance(seed: int, config,
 
 
 for config, seed in total:
-    if (seed == 1 and config["name"] == "t5_asp_lownergaz") or \
-        (seed == 2 and config["name"] == "t5_asp_gaz_sent") or \
-           (seed == 3 and config["name"] == "t5_asp_gaz") :
-        continue
-
     print(seed, config["name"])
     # seed
     seed_everything(seed)
