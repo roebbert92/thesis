@@ -1,6 +1,7 @@
 import copy
 import sys
 import os
+from itertools import product
 
 thesis_path = "/" + os.path.join(
     *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-2])
@@ -68,8 +69,10 @@ for config in configs:
     })
 parts = ["train", "dev", "test"]
 
-total = sorted(list(zip(configs, seeds)),
+total = sorted(list(product(configs, seeds)),
                key=lambda x: x[0]["name"] + str(x[1]))
+
+print(len(total))
 
 
 def measure_model_performance(seed: int, config,
@@ -269,8 +272,11 @@ def measure_model_performance(seed: int, config,
 
 
 for config, seed in total:
-    if seed == 1 and config["name"] == "t5_asp_lownergaz":
+    if (seed == 1 and config["name"] == "t5_asp_lownergaz") or \
+        (seed == 2 and config["name"] == "t5_asp_gaz_sent") or \
+           (seed == 3 and config["name"] == "t5_asp_gaz") :
         continue
+
     print(seed, config["name"])
     # seed
     seed_everything(seed)
@@ -330,3 +336,4 @@ for config, seed in total:
 
     # train model and get results
     measure_model_performance(seed, config, search_results)
+print("Done")
