@@ -458,7 +458,7 @@ def query_database(instances: List, search: Pipeline):
         for i in range(0, len(instances), chunk_size):
             chunk = instances[i:i + chunk_size]
             results = search.run_batch(
-                [" ".join(instance['extended']) for instance in chunk])
+                [" ".join(instance['tokens']) for instance in chunk])
             for j, res in zip(
                     range(len(chunk)),
                     results["documents"] if results is not None else []):
