@@ -234,38 +234,42 @@ class ASPMetrics(Metric):
         for doc in dataset:
             doc_id = doc["doc_id"]
             assert doc_id in self.predictions
+            preds_set = set([(pred[0], pred[1] + 1, types[pred[2]])
+                             for pred in self.predictions[doc_id]])
+            targets_set = set([(ent["start"], ent["end"], ent["type"])
+                               for ent in doc["entities"]])
+            tp = preds_set & targets_set
+            fn = targets_set - preds_set
+            fp = preds_set - targets_set
+            error_type1 = ASPMetrics.get_error_type1(preds_set, targets_set)
+            error_type2 = ASPMetrics.get_error_type2(preds_set, targets_set)
+            error_type3 = ASPMetrics.get_error_type3(preds_set, targets_set)
+            error_type4 = ASPMetrics.get_error_type4(preds_set, targets_set)
+            error_type5 = ASPMetrics.get_error_type5(preds_set, targets_set)
             for t in types:
-                preds_set = set([
-                    pred for pred in self.predictions[doc_id] if pred[2] == t
-                ])
-                targets_set = set([(ent["start"], ent["end"], ent["type"])
-                                   for ent in doc["entities"]
-                                   if ent["type"] == t])
-                tp = len(preds_set & targets_set)
-                fn = len(targets_set - preds_set)
-                fp = len(preds_set - targets_set)
-                error_type1 = len(
-                    ASPMetrics.get_error_type1(preds_set, targets_set))
-                error_type2 = len(
-                    ASPMetrics.get_error_type2(preds_set, targets_set))
-                error_type3 = len(
-                    ASPMetrics.get_error_type3(preds_set, targets_set))
-                error_type4 = len(
-                    ASPMetrics.get_error_type4(preds_set, targets_set))
-                error_type5 = len(
-                    ASPMetrics.get_error_type5(preds_set, targets_set))
                 metrics.append({
-                    "doc_id": doc_id,
-                    "targets": len(targets_set),
-                    "entity_type": t,
-                    "tp": tp,
-                    "fn": fn,
-                    "fp": fp,
-                    "error_type1": error_type1,
-                    "error_type2": error_type2,
-                    "error_type3": error_type3,
-                    "error_type4": error_type4,
-                    "error_type5": error_type5,
+                    "doc_id":
+                    doc_id,
+                    "targets":
+                    len([item for item in targets_set if item[2] == t]),
+                    "entity_type":
+                    t,
+                    "tp":
+                    len([item for item in tp if item[2] == t]),
+                    "fn":
+                    len([item for item in fn if item[2] == t]),
+                    "fp":
+                    len([item for item in fp if item[2] == t]),
+                    "error_type1":
+                    len([item for item in error_type1 if item[2] == t]),
+                    "error_type2":
+                    len([item for item in error_type2 if item[2] == t]),
+                    "error_type3":
+                    len([item for item in error_type3 if item[2] == t]),
+                    "error_type4":
+                    len([item for item in error_type4 if item[2] == t]),
+                    "error_type5":
+                    len([item for item in error_type5 if item[2] == t]),
                 })
         return pd.DataFrame.from_records(metrics)
 
@@ -275,6 +279,7 @@ class ASPMetrics(Metric):
 
 
 class FalsePositivesASP():
+
     def __init__(self) -> None:
         self.false_positives = defaultdict(list)
 
