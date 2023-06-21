@@ -37,6 +37,14 @@ def wnut_t5_asp_lownergaz_sent_configs():
     config["batch_size"] = 40
 
     best_configs = [{
+        "adam_weight_decay": 0.016588591997135332,
+        "gaz_search_topk": 8,
+        "num_epochs": 49,
+        "plm_learning_rate": 5.079514296736147e-06,
+        "search_topk": 15,
+        "sent_search_topk": 3,
+        "task_learning_rate": 0.005165833135805472
+    }, {
         "adam_weight_decay": 0.011738749999999989,
         "asp_dropout_rate": 0.4540625,
         "asp_hidden_dim": 633,

@@ -48,17 +48,20 @@ worst_model_ckpt_path = "/home/loebbert/projects/thesis/experiments/02_content/d
 
 elasticsearch_client = Elasticsearch("http://localhost:9200")
 
-config = T5_ASP
+config = T5_ASP_LOWNERGAZ_SENT
 config.update({
     "data_path":
     os.path.join(thesis_path, "experiments", "03_adaptation_emerging_entities",
                  "data")
 })
 
-training_combinations = [("no", "best-pretrained"), ("no", "worst-pretrained"),
-                         ("full", "best-pretrained"),
-                         ("full", "worst-pretrained"),
-                         ("full", "no-pretrained")]
+training_combinations = [
+    ("full", "no-pretrained"),
+    ("full", "best-pretrained"),
+    ("full", "worst-pretrained"),
+    ("no", "best-pretrained"),
+    ("no", "worst-pretrained"),
+]
 
 database_combinations = [
     ("lownergaz_sent", ),
@@ -102,12 +105,14 @@ def get_validation_dataloader(config, dataset: Dataset):
 
 def train_model(seed: int, config, train: Dataset, val: Dataset,
                 ckpt_path: Optional[str]):
+    if "PL_GLOBAL_SEED" in os.environ:
+        del os.environ["PL_GLOBAL_SEED"]
+    seed_everything(seed)
 
     grad_accum_steps = factors(config["batch_size"])
     tokenizer = get_tokenizer(config)
 
-    collator = NERCollator(config["train_search_dropout"],
-                           False) if ckpt_path is not None else ner_collate_fn
+    collator = NERCollator(config["train_search_dropout"], False)
 
     config["fused"] = True
     config["precision"] = "bf16-mixed"
@@ -153,7 +158,7 @@ def train_model(seed: int, config, train: Dataset, val: Dataset,
 
     def get_model_trainer():
         if ckpt_path is not None:
-            model = ASPT5Model.load_from_checkpoint(ckpt_path)
+            model = ASPT5Model.load_from_checkpoint(ckpt_path, **train_config)
         else:
             model = ASPT5Model(train_config, tokenizer)
         trainer = pl.Trainer(accelerator="gpu",
@@ -413,13 +418,10 @@ config["num_labels"] = len(processor.labels)
 
 train, val, _ = processor.get_tensor_samples()
 for seed, (finetuning, pretrained) in total:
-    if seed == 1:
-        if (finetuning, pretrained) in training_combinations[:4]:
-            continue
-
     if "PL_GLOBAL_SEED" in os.environ:
         del os.environ["PL_GLOBAL_SEED"]
     seed_everything(seed)
+
     # finetune models -> get last + best ckpt path
     checkpoint_base_path = os.path.join(config["data_path"],
                                         f"seed_{str(seed)}", "03_checkpoints",
