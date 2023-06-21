@@ -417,6 +417,8 @@ for seed, (finetuning, pretrained) in total:
         if (finetuning, pretrained) in training_combinations[:4]:
             continue
 
+    if "PL_GLOBAL_SEED" in os.environ:
+        del os.environ["PL_GLOBAL_SEED"]
     seed_everything(seed)
     # finetune models -> get last + best ckpt path
     checkpoint_base_path = os.path.join(config["data_path"],

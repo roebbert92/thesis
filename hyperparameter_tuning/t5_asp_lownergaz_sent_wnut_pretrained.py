@@ -28,12 +28,12 @@ from haystack import Pipeline
 from haystack.nodes import JoinDocuments
 
 
-def wnut_t5_asp_lownergaz_sent_configs():
+def best_pretrained_wnut_t5_asp_configs(pretrained_ckpt_path: str):
     config = T5_BASE.copy()
 
     config["data_path"] = os.path.join(thesis_path, "hyperparameter_tuning",
                                        "tune")
-    config["name"] = "wnut_t5_asp_lownergaz_sent"
+    config["name"] = "best_wnut_t5_asp_lownergaz_sent"
     config["batch_size"] = 40
 
     best_configs = [{
@@ -43,7 +43,7 @@ def wnut_t5_asp_lownergaz_sent_configs():
         "gaz_search_algorithm": "bm25",
         "gaz_search_topk": 6,
         "gaz_use_mentions": True,
-        "num_epochs": 40,
+        "num_epochs": 16,
         "plm_learning_rate": 0.00017496219281663535,
         "search_join_method": "reciprocal_rank_fusion",
         "search_topk": 8,
@@ -69,7 +69,7 @@ def wnut_t5_asp_lownergaz_sent_configs():
     config["gaz_use_labels"] = True
     config["gaz_use_mentions"] = True
     config["search_join_method"] = "reciprocal_rank_fusion"
-    config["search_topk"] = tune.randint(8, 18)
+    config["search_topk"] = tune.randint(8, 19)
     config["prepend_search_results"] = False
     config["filter_exact_match"] = False
     config["filter_same_document"] = False
@@ -78,9 +78,70 @@ def wnut_t5_asp_lownergaz_sent_configs():
     config["train_search_shuffle"] = False
     config["plm_learning_rate"] = tune.uniform(5e-6, 5e-4)
     config["task_learning_rate"] = tune.uniform(1e-4, 1e-2)
-    config["adam_weight_decay"] = tune.uniform(5e-5, 3e-2)
+    config["adam_weight_decay"] = tune.uniform(5e-5, 0.02)
     config["warmup_ratio"] = 0.37917808219178084
-    config["num_epochs"] = tune.randint(40, 61)
+    config["num_epochs"] = 15
+
+    config["ckpt_path"] = pretrained_ckpt_path
+
+    return config, best_configs
+
+
+def worst_pretrained_wnut_t5_asp_configs(pretrained_ckpt_path: str):
+    config = T5_BASE.copy()
+
+    config["data_path"] = os.path.join(thesis_path, "hyperparameter_tuning",
+                                       "tune")
+    config["name"] = "worst_wnut_t5_asp_lownergaz_sent"
+    config["batch_size"] = 40
+
+    best_configs = [{
+        "adam_weight_decay": 0.011738749999999989,
+        "asp_dropout_rate": 0.4540625,
+        "asp_hidden_dim": 633,
+        "gaz_search_algorithm": "bm25",
+        "gaz_search_topk": 6,
+        "gaz_use_mentions": True,
+        "num_epochs": 16,
+        "plm_learning_rate": 0.00017496219281663535,
+        "search_join_method": "reciprocal_rank_fusion",
+        "search_topk": 8,
+        "sent_search_algorithm": "ann",
+        "sent_search_topk": 6,
+        "sent_use_mentions": True,
+        "task_learning_rate": 0.0035849253731343286,
+        "train_search_dropout": 0.05492957746478871,
+        "warmup_ratio": 0.37917808219178084
+    }]
+
+    config["asp_hidden_dim"] = 633
+    config["asp_dropout_rate"] = 0.4540625
+    config["asp_init_std"] = 0.02
+    config["asp_activation"] = "relu"
+    config["beam_size"] = 1
+    config["sent_search_algorithm"] = "ann"
+    config["sent_search_topk"] = tune.randint(3, 7)
+    config["sent_use_labels"] = True
+    config["sent_use_mentions"] = True
+    config["gaz_search_algorithm"] = "bm25"
+    config["gaz_search_topk"] = tune.randint(5, 13)
+    config["gaz_use_labels"] = True
+    config["gaz_use_mentions"] = True
+    config["search_join_method"] = "reciprocal_rank_fusion"
+    config["search_topk"] = tune.randint(8, 19)
+    config["prepend_search_results"] = False
+    config["filter_exact_match"] = False
+    config["filter_same_document"] = False
+    config["seed"] = 42
+    config["train_search_dropout"] = 0.05492957746478871
+    config["train_search_shuffle"] = False
+    config["plm_learning_rate"] = tune.uniform(5e-6, 5e-3)
+    config["task_learning_rate"] = tune.uniform(1e-4, 1e-1)
+    config["adam_weight_decay"] = tune.uniform(5e-5, 0.05)
+    config["warmup_ratio"] = 0.37917808219178084
+    config["num_epochs"] = tune.randint(5, 21)
+
+    config["ckpt_path"] = pretrained_ckpt_path
 
     return config, best_configs
 
@@ -220,7 +281,8 @@ def prep_data(path, tokenizer, config: dict):
     return files["tokenized_train"], files["tokenized_dev"], files["types"]
 
 
-def run_wnut_t5_asp_lownergaz_sent_training(config: dict, fixed_params: dict):
+def run_pretrained_wnut_t5_asp_lownergaz_sent_training(config: dict,
+                                                       fixed_params: dict):
     config.update(fixed_params)
 
     if "PL_GLOBAL_SEED" in os.environ:
@@ -296,14 +358,15 @@ def run_wnut_t5_asp_lownergaz_sent_training(config: dict, fixed_params: dict):
                     "gradient_accumulation_steps"],
                 precision=train_config["precision"],
                 max_epochs=train_config["num_epochs"],
-                check_val_every_n_epoch=4,
+                check_val_every_n_epoch=2,
                 num_sanity_val_steps=0,
                 enable_checkpointing=False,
                 enable_progress_bar=False,
                 callbacks=[tune_report_f1]  # type: ignore
             )
 
-            model = ASPT5Model(train_config, tokenizer)
+            model = ASPT5Model.load_from_checkpoint(config["ckpt_path"],
+                                                    **config)
 
             trainer.fit(model, train_loader, val_dataloaders=val_loader)
             trainer.validate(model, val_loader)
