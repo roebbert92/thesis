@@ -179,10 +179,10 @@ def tune_wnut_hyperparameters(name, config, best_configs, tune_training_method,
 
 training_budget = 3
 
-wnut = wnut_t5_asp_lownergaz_sent_configs()
-tune_wnut_hyperparameters("wnut_t5_asp_lownergaz_sent", wnut[0], wnut[1],
-                          run_wnut_t5_asp_lownergaz_sent_training,
-                          training_budget)
+# wnut = wnut_t5_asp_lownergaz_sent_configs()
+# tune_wnut_hyperparameters("wnut_t5_asp_lownergaz_sent", wnut[0], wnut[1],
+#                           run_wnut_t5_asp_lownergaz_sent_training,
+#                           training_budget)
 wnut_worst = worst_pretrained_wnut_t5_asp_configs(
     "/home/loebbert/projects/thesis/experiments/02_content/data/seed_2/03_checkpoints/size_4000/error_ratio_15/last.ckpt"
 )

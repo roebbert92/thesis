@@ -1,3 +1,4 @@
+from collections import defaultdict
 import copy
 import sys
 import os
@@ -21,10 +22,10 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger
 
 from data_preprocessing.tensorize import NERCollator, NERDataProcessor, ner_collate_fn
-from data_preprocessing.tokenize import tokenize_search_results_json, query_database
+from data_preprocessing.tokenize import tokenize_json, tokenize_search_results_json, query_database
 from models.asp_t5 import ASPT5Model, get_tokenizer
 from pipelines.evaluation import factors
-from configs.asp_t5 import T5_ASP_LOWNERGAZ_SENT, T5_ASP
+from configs.asp_t5 import FULL_WNUT_T5_ASP, BEST_PRETRAINED_T5_ASP, WORST_PRETRAINED_T5_ASP, T5_ASP_LOWNERGAZ_SENT, T5_ASP
 from hyperparameter_tuning.utils import get_search_results
 from data_augmentation.sampling import per_type_uniform_sampling
 from search.lownergaz.setup import add_lownergaz_search_components
@@ -42,18 +43,25 @@ files = {
 }
 
 seeds = [1, 2, 3]
-# TODO: Use evaluation function - to aggregate model performance results and pick path
-best_model_ckpt_path = "/home/loebbert/projects/thesis/experiments/01_performance/data/seed_1/03_checkpoints/t5_asp_lownergaz_sent/last.ckpt"
-worst_model_ckpt_path = "/home/loebbert/projects/thesis/experiments/02_content/data/seed_2/03_checkpoints/size_4000/error_ratio_15/last.ckpt"
 
 elasticsearch_client = Elasticsearch("http://localhost:9200")
 
-config = T5_ASP_LOWNERGAZ_SENT
-config.update({
-    "data_path":
-    os.path.join(thesis_path, "experiments", "03_adaptation_emerging_entities",
-                 "data")
-})
+configs = {
+    ("full", "no-pretrained"): FULL_WNUT_T5_ASP,
+    ("full", "best-pretrained"): BEST_PRETRAINED_T5_ASP,
+    ("full", "worst-pretrained"): WORST_PRETRAINED_T5_ASP,
+    ("no", "best-pretrained"): T5_ASP_LOWNERGAZ_SENT,
+    ("no", "worst-pretrained"): T5_ASP_LOWNERGAZ_SENT,
+    ("full", "vanilla"): T5_ASP,
+    ("full", "vanilla-pretrained"): T5_ASP,
+}
+for config in configs.values():
+    if config is not None:
+        config.update({
+            "data_path":
+            os.path.join(thesis_path, "experiments",
+                         "03_adaptation_emerging_entities", "data")
+        })
 
 training_combinations = [
     ("full", "no-pretrained"),
@@ -103,8 +111,10 @@ def get_validation_dataloader(config, dataset: Dataset):
                       prefetch_factor=20)
 
 
-def train_model(seed: int, config, train: Dataset, val: Dataset,
+def train_model(seed: int, config: dict, tokenized_files: dict,
                 ckpt_path: Optional[str]):
+
+    train_config = copy.deepcopy(config)
     if "PL_GLOBAL_SEED" in os.environ:
         del os.environ["PL_GLOBAL_SEED"]
     seed_everything(seed)
@@ -112,15 +122,25 @@ def train_model(seed: int, config, train: Dataset, val: Dataset,
     grad_accum_steps = factors(config["batch_size"])
     tokenizer = get_tokenizer(config)
 
+    processor = NERDataProcessor(train_config,
+                                 tokenizer,
+                                 tokenized_files["train"],
+                                 tokenized_files["dev"],
+                                 None,
+                                 files["types"],
+                                 use_cache=False)
+    config["num_labels"] = len(processor.labels)
+
+    train, val, _ = processor.get_tensor_samples()
+    train_config["train_len"] = len(train)
+
     collator = NERCollator(config["train_search_dropout"], False)
 
-    config["fused"] = True
-    config["precision"] = "bf16-mixed"
+    train_config["fused"] = True
+    train_config["precision"] = "bf16-mixed"
     torch.set_float32_matmul_precision("medium")
     torch.backends.cuda.matmul.allow_tf32 = True  # type: ignore
     torch.backends.cudnn.allow_tf32 = True  # type: ignore
-    train_config = copy.deepcopy(config)
-    trained = False
 
     # Checkpoints
     checkpoint_best = ModelCheckpoint(dirpath=checkpoint_base_path,
@@ -158,7 +178,9 @@ def train_model(seed: int, config, train: Dataset, val: Dataset,
 
     def get_model_trainer():
         if ckpt_path is not None:
-            model = ASPT5Model.load_from_checkpoint(ckpt_path, **train_config)
+            model = ASPT5Model.load_from_checkpoint(ckpt_path,
+                                                    config=train_config,
+                                                    tokenizer=tokenizer)
         else:
             model = ASPT5Model(train_config, tokenizer)
         trainer = pl.Trainer(accelerator="gpu",
@@ -179,6 +201,7 @@ def train_model(seed: int, config, train: Dataset, val: Dataset,
 
     train_loader, dev_val_loader = get_dataloaders()
     model, trainer = get_model_trainer()
+    trained = False
     while not trained:
         try:
             trainer.fit(model, train_loader, val_dataloaders=dev_val_loader)
@@ -206,32 +229,30 @@ def test_model(config, best_ckpt_path, last_ckpt_path, dataset: Dataset, name):
                                      f"{finetuning}_{pretrained}",
                                      "_".join(database_comb))
     os.makedirs(metrics_base_path, exist_ok=True)
-    tokenizer = get_tokenizer(config)
-    config["fused"] = True
-    config["precision"] = "bf16-mixed"
     torch.set_float32_matmul_precision("medium")
     torch.backends.cuda.matmul.allow_tf32 = True  # type: ignore
     torch.backends.cudnn.allow_tf32 = True  # type: ignore
-    model = ASPT5Model(config, tokenizer)
     trainer = pl.Trainer(accelerator="gpu",
                          devices=1,
-                         precision=config["precision"],
+                         precision="bf16-mixed",
                          num_sanity_val_steps=0,
                          enable_checkpointing=False,
                          enable_progress_bar=True)
     val_loader = get_validation_dataloader(config, dataset)
 
-    def save_metrics(dataset, checkpoint):
+    def save_metrics(model, dataset, checkpoint):
         with open(
                 os.path.join(metrics_base_path, f"{checkpoint}_{dataset}.pkl"),
                 "wb") as file:
             pickle.dump(model.test_metrics, file)
 
     # test model
-    trainer.test(model, val_loader, ckpt_path=last_ckpt_path)
-    save_metrics(name, "last")
-    trainer.test(model, val_loader, ckpt_path=best_ckpt_path)
-    save_metrics(name, "best")
+    last_model = ASPT5Model.load_from_checkpoint(last_ckpt_path)
+    trainer.test(last_model, val_loader)
+    save_metrics(last_model, name, "last")
+    best_model = ASPT5Model.load_from_checkpoint(best_ckpt_path)
+    trainer.test(best_model, val_loader)
+    save_metrics(best_model, name, "best")
 
 
 def setup_database(sent_search_algorithm: str,
@@ -293,6 +314,7 @@ def get_tokenized_filepath(config, file_path, search_results, data_path):
 
 
 # prepare databases
+config = list(configs.values())[0]
 for database_comb in database_combinations:
     if len(database_comb) > 1:
         name = "_".join(database_comb)
@@ -335,92 +357,122 @@ for database_comb in database_combinations:
                                     gazs=dataset,
                                     sents=dataset)
 
-tokenized_files = {}
-for database_comb in database_combinations:
-    # get search results
-    search_base_path = os.path.join(config["data_path"], "01_search_results",
-                                    "_".join(database_comb))
-    os.makedirs(search_base_path, exist_ok=True)
+tokenized_files = defaultdict(dict)
+search_configs = set([
+    (config["sent_search_algorithm"], config["sent_search_topk"],
+     config["gaz_search_algorithm"], config["gaz_search_topk"],
+     config["search_join_method"], config["search_topk"],
+     config["data_path"]) if "search_join_method" in config else
+    ("None", "None", "None", "None", "None", "None", config["data_path"])
+    for config in configs.values() if config is not None
+])
+for search_config in search_configs:
+    sent_search_algorithm, sent_search_topk, gaz_search_algorithm, gaz_search_topk, search_join_method, search_topk, data_path = search_config
+    search_config_name = "_".join([
+        sent_search_algorithm,
+        str(sent_search_topk), gaz_search_algorithm,
+        str(gaz_search_topk), search_join_method,
+        str(search_topk)
+    ])
+    if search_join_method == "None":
+        tokenized_data_path = os.path.join(config["data_path"],
+                                           "02_tokenized_dataset",
+                                           search_config_name)
+        tokenizer = get_tokenizer(config)
+        for part in ["train", "dev", "test"]:
+            tokenized_files[search_config_name][part] = tokenize_json(
+                tokenizer, files[f"wnut_{part}"], files["types"],
+                tokenized_data_path)
+    for database_comb in database_combinations:
+        # get search results
+        search_base_path = os.path.join(config["data_path"],
+                                        "01_search_results",
+                                        search_config_name,
+                                        "_".join(database_comb))
+        os.makedirs(search_base_path, exist_ok=True)
 
-    def get_search():
-        if len(database_comb) > 1:
-            name = "_".join(database_comb)
-            search = setup_database(config["sent_search_algorithm"],
-                                    config["sent_search_topk"],
-                                    config["gaz_search_algorithm"],
-                                    config["gaz_search_topk"],
-                                    config["search_join_method"],
-                                    config["search_topk"],
-                                    name=name)
+        def get_search():
+            if len(database_comb) > 1:
+                name = "_".join(database_comb)
+                search = setup_database(sent_search_algorithm,
+                                        sent_search_topk,
+                                        gaz_search_algorithm,
+                                        gaz_search_topk,
+                                        search_join_method,
+                                        search_topk,
+                                        name=name)
+            else:
+                search = setup_database(sent_search_algorithm,
+                                        sent_search_topk, gaz_search_algorithm,
+                                        gaz_search_topk, search_join_method,
+                                        search_topk)
+            return search
+
+        train_search_path = os.path.join(search_base_path, "wnut_train.pkl")
+        if not os.path.exists(train_search_path):
+            search = get_search()
+            search_results_train = get_search_results(search,
+                                                      datasets["wnut_train"])
+            with open(train_search_path, "wb") as file:
+                pickle.dump(search_results_train, file)
         else:
-            search = setup_database(config["sent_search_algorithm"],
-                                    config["sent_search_topk"],
-                                    config["gaz_search_algorithm"],
-                                    config["gaz_search_topk"],
-                                    config["search_join_method"],
-                                    config["search_topk"])
-        return search
+            with open(train_search_path, "rb") as file:
+                search_results_train = pickle.load(file)
 
-    train_search_path = os.path.join(search_base_path, "wnut_train.pkl")
-    if not os.path.exists(train_search_path):
-        search = get_search()
-        search_results_train = get_search_results(search,
-                                                  datasets["wnut_train"])
-        with open(train_search_path, "wb") as file:
-            pickle.dump(search_results_train, file)
-    else:
-        with open(train_search_path, "rb") as file:
-            search_results_train = pickle.load(file)
+        dev_search_path = os.path.join(search_base_path, "wnut_dev.pkl")
+        if not os.path.exists(dev_search_path):
+            search = get_search()
+            search_results_dev = get_search_results(search,
+                                                    datasets["wnut_dev"])
+            with open(dev_search_path, "wb") as file:
+                pickle.dump(search_results_dev, file)
+        else:
+            with open(dev_search_path, "rb") as file:
+                search_results_dev = pickle.load(file)
 
-    dev_search_path = os.path.join(search_base_path, "wnut_dev.pkl")
-    if not os.path.exists(dev_search_path):
-        search = get_search()
-        search_results_dev = get_search_results(search, datasets["wnut_dev"])
-        with open(dev_search_path, "wb") as file:
-            pickle.dump(search_results_dev, file)
-    else:
-        with open(dev_search_path, "rb") as file:
-            search_results_dev = pickle.load(file)
+        test_search_path = os.path.join(search_base_path, "wnut_test.pkl")
+        if not os.path.exists(test_search_path):
+            search = get_search()
+            search_results_test = get_search_results(search,
+                                                     datasets["wnut_test"])
+            with open(test_search_path, "wb") as file:
+                pickle.dump(search_results_test, file)
+        else:
+            with open(test_search_path, "rb") as file:
+                search_results_test = pickle.load(file)
 
-    test_search_path = os.path.join(search_base_path, "wnut_test.pkl")
-    if not os.path.exists(test_search_path):
-        search = get_search()
-        search_results_test = get_search_results(search, datasets["wnut_test"])
-        with open(test_search_path, "wb") as file:
-            pickle.dump(search_results_test, file)
-    else:
-        with open(test_search_path, "rb") as file:
-            search_results_test = pickle.load(file)
+        # prep data
+        tokenized_data_path = os.path.join(config["data_path"],
+                                           "02_tokenized_dataset",
+                                           search_config_name,
+                                           "_".join(database_comb))
+        os.makedirs(tokenized_data_path, exist_ok=True)
+        tokenized_files[search_config_name][database_comb] = {}
+        for part in ["train", "dev", "test"]:
+            wnut_tokenized_path = os.path.join(
+                config["data_path"], "02_tokenized_dataset",
+                search_config_name, "_".join(database_comb),
+                f"wnut_{part}.t5-small.jsonlines")
+            if not os.path.exists(wnut_tokenized_path):
+                get_tokenized_filepath(config, files[f"wnut_{part}"],
+                                       search_results_train,
+                                       tokenized_data_path)
+            tokenized_files[search_config_name][database_comb][
+                part] = wnut_tokenized_path
 
-    # prep data
-    tokenized_data_path = os.path.join(config["data_path"],
-                                       "02_tokenized_dataset",
-                                       "_".join(database_comb))
-    os.makedirs(tokenized_data_path, exist_ok=True)
-    tokenized_files[database_comb] = {}
-    tokenized_files[database_comb]["train"] = get_tokenized_filepath(
-        config, files["wnut_train"], search_results_train, tokenized_data_path)
-    tokenized_files[database_comb]["dev"] = get_tokenized_filepath(
-        config, files["wnut_dev"], search_results_dev, tokenized_data_path)
-    tokenized_files[database_comb]["test"] = get_tokenized_filepath(
-        config, files["wnut_test"], search_results_test, tokenized_data_path)
-
-# get train + val datasets for model training
-processor = NERDataProcessor(
-    config,
-    get_tokenizer(config),
-    "/home/loebbert/projects/thesis/data/wnut/wnut_train.t5-small.jsonlines",  #tokenized_files[database_combinations[0]]["train"],
-    "/home/loebbert/projects/thesis/data/wnut/wnut_dev.t5-small.jsonlines",  #tokenized_files[database_combinations[0]]["dev"],
-    None,
-    files["types"],
-    use_cache=False)
-config["num_labels"] = len(processor.labels)
-
-train, val, _ = processor.get_tensor_samples()
 for seed, (finetuning, pretrained) in total:
     if "PL_GLOBAL_SEED" in os.environ:
         del os.environ["PL_GLOBAL_SEED"]
     seed_everything(seed)
+    config = configs[(finetuning, pretrained)]
+    search_config_name = "_".join([
+        config["sent_search_algorithm"],
+        str(config["sent_search_topk"]),
+        config["gaz_search_algorithm"],
+        str(config["gaz_search_topk"]),
+        config["search_join_method"],
+        str(config["search_topk"]),
+    ])
 
     # finetune models -> get last + best ckpt path
     checkpoint_base_path = os.path.join(config["data_path"],
@@ -429,10 +481,10 @@ for seed, (finetuning, pretrained) in total:
     os.makedirs(checkpoint_base_path, exist_ok=True)
     if finetuning == "no":
         # copy best + last ckpt
-        ckpt_path = best_model_ckpt_path
+        ckpt_path = BEST_PRETRAINED_T5_ASP["ckpt_path"]
         if pretrained == "worst-pretrained":
-            ckpt_path = worst_model_ckpt_path
-        ckpt_dir_path = os.path.dirname(best_model_ckpt_path)
+            ckpt_path = WORST_PRETRAINED_T5_ASP["ckpt_path"]
+        ckpt_dir_path = os.path.dirname(BEST_PRETRAINED_T5_ASP["ckpt_path"])
         for file_name in ["best.ckpt", "last.ckpt"]:
             shutil.copy(os.path.join(ckpt_dir_path, file_name),
                         os.path.join(checkpoint_base_path, file_name))
@@ -442,24 +494,28 @@ for seed, (finetuning, pretrained) in total:
         # take best / worst ckpt / None for finetuning
         ckpt_path = None
         if pretrained == "best-pretrained":
-            ckpt_path = best_model_ckpt_path
+            ckpt_path = BEST_PRETRAINED_T5_ASP["ckpt_path"]
         elif pretrained == "worst-pretrained":
-            ckpt_path = worst_model_ckpt_path
-        last_ckpt_path, best_ckpt_path = train_model(seed, config, train, val,
-                                                     ckpt_path)
+            ckpt_path = WORST_PRETRAINED_T5_ASP["ckpt_path"]
+
+        last_ckpt_path, best_ckpt_path = train_model(
+            seed, config,
+            tokenized_files[search_config_name][database_combinations[0]],
+            ckpt_path)
     else:
         last_ckpt_path = ""
         best_ckpt_path = ""
 
     # test models with augmented datasets
     for database_comb in database_combinations:
-        processor = NERDataProcessor(config,
-                                     get_tokenizer(config),
-                                     tokenized_files[database_comb]["train"],
-                                     tokenized_files[database_comb]["dev"],
-                                     tokenized_files[database_comb]["test"],
-                                     files["types"],
-                                     use_cache=False)
+        processor = NERDataProcessor(
+            config,
+            get_tokenizer(config),
+            tokenized_files[search_config_name][database_comb]["train"],
+            tokenized_files[search_config_name][database_comb]["dev"],
+            tokenized_files[search_config_name][database_comb]["test"],
+            files["types"],
+            use_cache=False)
         train_dataset, dev_dataset, test_dataset = processor.get_tensor_samples(
         )
         test_model(config, best_ckpt_path, last_ckpt_path, train_dataset,
