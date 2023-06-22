@@ -11,10 +11,10 @@ from haystack.document_stores import FAISSDocumentStore, BaseDocumentStore, Elas
 from haystack.nodes import EmbeddingRetriever, BM25Retriever
 from haystack import Pipeline
 import json
-import faiss
 
 
-def add_multiconer_gazetteers(doc_store: BaseDocumentStore):
+def add_multiconer_gazetteers(doc_store: BaseDocumentStore,
+                              prepend_type: bool = False):
     if doc_store.get_document_count() == 0:
         with open(os.path.join(thesis_path, "data", "multiconer",
                                "multiconer_test.json"),
@@ -22,7 +22,8 @@ def add_multiconer_gazetteers(doc_store: BaseDocumentStore):
                   encoding="utf-8") as file:
             multiconer = json.load(file)
         # don't filter multiconer as the sentences are the gazetteers
-        documents = get_gazetteers_from_documents(multiconer)
+        documents = get_gazetteers_from_documents(multiconer,
+                                                  prepend_type=prepend_type)
         doc_store.write_documents(documents)
 
 
@@ -73,26 +74,31 @@ def add_gaz_search_components(search: Pipeline,
                         inputs=["Query"])
         join_documents_input.append("GazBM25Retriever")
     elif search_algorithm.startswith("ann"):
-        faiss_index_path = os.path.join(thesis_path, "search", "gaz",
-                                        "faiss_index.faiss")
-        if not os.path.exists(faiss_index_path):
-            document_store = create_gaz_faiss_document_store()
-            ann_retriever = EmbeddingRetriever(
-                document_store=document_store,  # type: ignore
-                embedding_model=EMBEDDING_MODEL,
-                model_format="sentence_transformers",
-                top_k=search_topk)
-            add_multiconer_gazetteers(document_store)  # type: ignore
-            train_update_gaz_faiss_index(document_store, ann_retriever)
-
-        document_store = FAISSDocumentStore.load(  # type: ignore
-            index_path=os.path.join(thesis_path, "search", "gaz",
-                                    "faiss_index.faiss"),
-            config_path=os.path.join(thesis_path, "search", "gaz",
-                                     "faiss_config.json"))
-        document_store.faiss_indexes[
-            document_store.index] = faiss.index_cpu_to_all_gpus(
-                index=document_store.faiss_indexes[document_store.index])
+        # faiss_index_path = os.path.join(thesis_path, "search", "gaz",
+        #                                 "faiss_index.faiss")
+        # if not os.path.exists(faiss_index_path):
+        #     document_store = create_gaz_faiss_document_store()
+        #     ann_retriever = EmbeddingRetriever(
+        #         document_store=document_store,  # type: ignore
+        #         embedding_model=EMBEDDING_MODEL,
+        #         model_format="sentence_transformers",
+        #         top_k=search_topk)
+        #     add_multiconer_gazetteers(document_store)  # type: ignore
+        #     train_update_gaz_faiss_index(document_store, ann_retriever)
+        #
+        # document_store = FAISSDocumentStore.load(  # type: ignore
+        #     index_path=os.path.join(thesis_path, "search", "gaz",
+        #                             "faiss_index.faiss"),
+        #     config_path=os.path.join(thesis_path, "search", "gaz",
+        #                              "faiss_config.json"))
+        # document_store.faiss_indexes[
+        #     document_store.index] = faiss.index_cpu_to_all_gpus(
+        #         index=document_store.faiss_indexes[document_store.index])
+        document_store = ElasticsearchDocumentStore(
+            index="ann_gaz",
+            embedding_dim=EMBEDDING_DIM,
+            similarity="cosine",
+            recreate_index=reset)
         ann_retriever = EmbeddingRetriever(
             document_store=document_store,
             embedding_model=EMBEDDING_MODEL,

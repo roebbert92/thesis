@@ -6,7 +6,9 @@ EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"  # "sentence-transfo
 EMBEDDING_DIM = 768  #  384
 
 
-def get_gazetteers_from_documents(docs, name: str = ""):
+def get_gazetteers_from_documents(docs,
+                                  name: str = "",
+                                  prepend_type: bool = False):
     items = defaultdict(dict)
     for doc in docs:
         for entity in doc["entities"]:
@@ -21,7 +23,8 @@ def get_gazetteers_from_documents(docs, name: str = ""):
     return [
         Document(
             id=str(uuid.uuid4()),
-            content=doc["content"],
+            content=doc["content"]
+            if not prepend_type else f"{doc['type']}: {doc['content']}",
             meta={
                 #"doc_id": doc["doc_id"],
                 #"dataset": doc["dataset"],
