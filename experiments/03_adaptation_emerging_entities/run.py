@@ -315,8 +315,8 @@ def get_tokenized_filepath(config, file_path, search_results, data_path):
 # prepare databases
 config = list(configs.values())[0]
 for database_comb in database_combinations:
-    if len(database_comb) > 1:
-        name = "_".join(database_comb)
+    name = "_".join(database_comb)
+    if "lownergaz_sent" in database_comb and len(database_comb) > 1:
         if not elasticsearch_client.indices.exists(
                 index=name +
                 "_lownergaz") or not elasticsearch_client.indices.exists(
@@ -355,6 +355,24 @@ for database_comb in database_combinations:
                                     name=name,
                                     gazs=dataset,
                                     sents=dataset)
+        elif "lownergaz_sent" not in database_comb:
+            if not elasticsearch_client.indices.exists(
+                    index=name +
+                    "_lownergaz") or not elasticsearch_client.indices.exists(
+                        index=name + "_sent"):
+                dataset = []
+                for dataset_name in database_comb:
+                    dataset.extend(datasets[dataset_name])
+                # populate database
+                search = setup_database(config["sent_search_algorithm"],
+                                        config["sent_search_topk"],
+                                        config["gaz_search_algorithm"],
+                                        config["gaz_search_topk"],
+                                        config["search_join_method"],
+                                        config["search_topk"],
+                                        name=name,
+                                        gazs=dataset,
+                                        sents=dataset)
 
 tokenized_files = defaultdict(dict)
 search_configs = set([
