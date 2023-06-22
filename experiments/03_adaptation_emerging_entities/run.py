@@ -25,8 +25,8 @@ from data_preprocessing.tensorize import NERCollator, NERDataProcessor, ner_coll
 from data_preprocessing.tokenize import tokenize_json, tokenize_search_results_json, query_database
 from models.asp_t5 import ASPT5Model, get_tokenizer
 from pipelines.evaluation import factors
-from configs.asp_t5 import BEST_T5_ASP, FULL_WNUT_T5_ASP_LOWNERGAZ_SENT, BEST_PRETRAINED_T5_ASP_LOWNERGAZ_SENT, WORST_PRETRAINED_T5_ASP_LOWNERGAZ_SENT, T5_ASP_LOWNERGAZ_SENT, T5_ASP
-from hyperparameter_tuning.utils import get_search_results
+from configs.asp_t5 import BEST_WNUT_T5_ASP, WNUT_T5_ASP_LOWNERGAZ_SENT, BEST_WNUT_T5_ASP_LOWNERGAZ_SENT, WORST_WNUT_T5_ASP_LOWNERGAZ_SENT, T5_ASP_LOWNERGAZ_SENT, WNUT_T5_ASP
+from hyperparameter_tuning.utils import get_search_results, get_search_results_filtered
 from data_augmentation.sampling import per_type_uniform_sampling
 from search.lownergaz.setup import add_lownergaz_search_components
 from search.sent.setup import add_sent_search_components
@@ -47,12 +47,12 @@ seeds = [1, 2, 3]
 elasticsearch_client = Elasticsearch("http://localhost:9200")
 
 configs = {
-    ("full", "vanilla"): T5_ASP,
-    ("full", "vanilla-pretrained"): BEST_T5_ASP,
-    ("no", "vanilla-pretrained"): BEST_T5_ASP,
-    ("full", "no-pretrained"): FULL_WNUT_T5_ASP_LOWNERGAZ_SENT,
-    ("full", "best-pretrained"): BEST_PRETRAINED_T5_ASP_LOWNERGAZ_SENT,
-    ("full", "worst-pretrained"): WORST_PRETRAINED_T5_ASP_LOWNERGAZ_SENT,
+    ("full", "vanilla"): WNUT_T5_ASP,
+    ("full", "vanilla-pretrained"): BEST_WNUT_T5_ASP,
+    ("no", "vanilla-pretrained"): BEST_WNUT_T5_ASP,
+    ("full", "no-pretrained"): WNUT_T5_ASP_LOWNERGAZ_SENT,
+    ("full", "best-pretrained"): BEST_WNUT_T5_ASP_LOWNERGAZ_SENT,
+    ("full", "worst-pretrained"): WORST_WNUT_T5_ASP_LOWNERGAZ_SENT,
     ("no", "best-pretrained"): T5_ASP_LOWNERGAZ_SENT,
     ("no", "worst-pretrained"): T5_ASP_LOWNERGAZ_SENT,
 }
@@ -128,7 +128,9 @@ def train_model(seed: int, config: dict, tokenized_files: dict,
     train, val, _ = processor.get_tensor_samples()
     train_config["train_len"] = len(train)
 
-    collator = NERCollator(config["train_search_dropout"], False)
+    collator = ner_collate_fn
+    if "train_search_dropout" in config:
+        collator = NERCollator(config["train_search_dropout"], False)
 
     train_config["fused"] = True
     train_config["precision"] = "bf16-mixed"
@@ -410,8 +412,8 @@ for search_config in search_configs:
                                              "wnut_train.pkl")
             if not os.path.exists(train_search_path):
                 search = get_search()
-                search_results_train = get_search_results(
-                    search, datasets["wnut_train"])
+                search_results_train = get_search_results_filtered(
+                    search, datasets["wnut_train"], True)
                 with open(train_search_path, "wb") as file:
                     pickle.dump(search_results_train, file)
             else:
@@ -464,14 +466,25 @@ for seed, (finetuning, pretrained) in total:
         del os.environ["PL_GLOBAL_SEED"]
     seed_everything(seed)
     config = configs[(finetuning, pretrained)]
-    search_config_name = "_".join([
-        config["sent_search_algorithm"],
-        str(config["sent_search_topk"]),
-        config["gaz_search_algorithm"],
-        str(config["gaz_search_topk"]),
-        config["search_join_method"],
-        str(config["search_topk"]),
-    ])
+
+    if "search_join_method" in config:
+        search_config_name = "_".join([
+            config["sent_search_algorithm"],
+            str(config["sent_search_topk"]),
+            config["gaz_search_algorithm"],
+            str(config["gaz_search_topk"]),
+            config["search_join_method"],
+            str(config["search_topk"]),
+        ])
+    else:
+        search_config_name = "_".join([
+            "None",
+            "None",
+            "None",
+            "None",
+            "None",
+            "None",
+        ])
 
     # finetune models -> get last + best ckpt path
     checkpoint_base_path = os.path.join(config["data_path"],
@@ -480,13 +493,13 @@ for seed, (finetuning, pretrained) in total:
     os.makedirs(checkpoint_base_path, exist_ok=True)
     if finetuning == "no":
         # copy best + last ckpt
-        ckpt_path = BEST_T5_ASP["ckpt_path"]
+        ckpt_path = BEST_WNUT_T5_ASP["ckpt_path"]
         if pretrained == "best-pretrained":
-            ckpt_path = BEST_PRETRAINED_T5_ASP_LOWNERGAZ_SENT["ckpt_path"]
+            ckpt_path = BEST_WNUT_T5_ASP_LOWNERGAZ_SENT["ckpt_path"]
         if pretrained == "worst-pretrained":
-            ckpt_path = WORST_PRETRAINED_T5_ASP_LOWNERGAZ_SENT["ckpt_path"]
+            ckpt_path = WORST_WNUT_T5_ASP_LOWNERGAZ_SENT["ckpt_path"]
         ckpt_dir_path = os.path.dirname(
-            BEST_PRETRAINED_T5_ASP_LOWNERGAZ_SENT["ckpt_path"])
+            BEST_WNUT_T5_ASP_LOWNERGAZ_SENT["ckpt_path"])
         for file_name in ["best.ckpt", "last.ckpt"]:
             shutil.copy(os.path.join(ckpt_dir_path, file_name),
                         os.path.join(checkpoint_base_path, file_name))
@@ -496,16 +509,19 @@ for seed, (finetuning, pretrained) in total:
         # take best / worst ckpt / None for finetuning
         ckpt_path = None
         if pretrained == "best-pretrained":
-            ckpt_path = BEST_PRETRAINED_T5_ASP_LOWNERGAZ_SENT["ckpt_path"]
+            ckpt_path = BEST_WNUT_T5_ASP_LOWNERGAZ_SENT["ckpt_path"]
         elif pretrained == "worst-pretrained":
-            ckpt_path = WORST_PRETRAINED_T5_ASP_LOWNERGAZ_SENT["ckpt_path"]
+            ckpt_path = WORST_WNUT_T5_ASP_LOWNERGAZ_SENT["ckpt_path"]
         elif pretrained == "vanilla-pretrained":
-            ckpt_path = BEST_T5_ASP["ckpt_path"]
+            ckpt_path = BEST_WNUT_T5_ASP["ckpt_path"]
 
-        last_ckpt_path, best_ckpt_path = train_model(
-            seed, config,
-            tokenized_files[search_config_name][database_combinations[0]],
-            ckpt_path)
+        relevant_files = tokenized_files[search_config_name]
+        if "search_join_method" in config:
+            relevant_files = tokenized_files[search_config_name][
+                database_combinations[0]]
+
+        last_ckpt_path, best_ckpt_path = train_model(seed, config,
+                                                     relevant_files, ckpt_path)
     else:
         last_ckpt_path = ""
         best_ckpt_path = ""

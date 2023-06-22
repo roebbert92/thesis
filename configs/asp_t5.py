@@ -178,15 +178,18 @@ T5_ASP.update({
     "name": "t5_asp"
 })
 
-BEST_T5_ASP = T5_ASP.copy()
-BEST_T5_ASP.update({
+WNUT_T5_ASP = T5_ASP.copy()
+WNUT_T5_ASP.update({"name": "wnut_t5_asp"})
+
+BEST_WNUT_T5_ASP = T5_ASP.copy()
+BEST_WNUT_T5_ASP.update({
     "ckpt_path":
     "/home/loebbert/projects/thesis/experiments/01_performance/data/seed_1/03_checkpoints/t5_asp/last.ckpt",
-    "name": "best_t5_asp"
+    "name": "best_wnut_t5_asp"
 })
 
-FULL_WNUT_T5_ASP_LOWNERGAZ_SENT = T5_ASP_LOWNERGAZ_SENT.copy()
-FULL_WNUT_T5_ASP_LOWNERGAZ_SENT.update({
+WNUT_T5_ASP_LOWNERGAZ_SENT = T5_ASP_LOWNERGAZ_SENT.copy()
+WNUT_T5_ASP_LOWNERGAZ_SENT.update({
     "adam_weight_decay": 0.008067866817204384,
     "gaz_search_topk": 12,
     "num_epochs": 51,
@@ -197,8 +200,8 @@ FULL_WNUT_T5_ASP_LOWNERGAZ_SENT.update({
     "name": "wnut_t5_asp_lownergaz_sent"
 })
 
-BEST_PRETRAINED_T5_ASP_LOWNERGAZ_SENT = T5_ASP_LOWNERGAZ_SENT.copy()
-BEST_PRETRAINED_T5_ASP_LOWNERGAZ_SENT.update({
+BEST_WNUT_T5_ASP_LOWNERGAZ_SENT = T5_ASP_LOWNERGAZ_SENT.copy()
+BEST_WNUT_T5_ASP_LOWNERGAZ_SENT.update({
     "adam_weight_decay":
     0.01805954081911936,
     "asp_dropout_rate":
@@ -225,8 +228,8 @@ BEST_PRETRAINED_T5_ASP_LOWNERGAZ_SENT.update({
     "best_wnut_t5_asp_lownergaz_sent"
 })
 
-WORST_PRETRAINED_T5_ASP_LOWNERGAZ_SENT = T5_ASP_LOWNERGAZ_SENT.copy()
-WORST_PRETRAINED_T5_ASP_LOWNERGAZ_SENT.update({
+WORST_WNUT_T5_ASP_LOWNERGAZ_SENT = T5_ASP_LOWNERGAZ_SENT.copy()
+WORST_WNUT_T5_ASP_LOWNERGAZ_SENT.update({
     "adam_weight_decay":
     0.010792175245094616,
     "asp_dropout_rate":

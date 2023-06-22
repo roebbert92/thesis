@@ -21,7 +21,9 @@ import pickle as pkl
 #from hyperparameter_tuning.t5_asp_gaz_sent import t5_asp_gaz_sent_configs, t5_asp_gaz_sent_configs, run_t5_asp_gaz_sent_training
 #from hyperparameter_tuning.t5_asp_lownergaz_sent import t5_asp_lownergaz_sent_configs, run_t5_asp_lownergaz_sent_training
 from hyperparameter_tuning.t5_asp_lownergaz_sent_wnut import wnut_t5_asp_lownergaz_sent_configs, run_wnut_t5_asp_lownergaz_sent_training
-from hyperparameter_tuning.t5_asp_lownergaz_sent_wnut_pretrained import best_pretrained_wnut_t5_asp_configs, worst_pretrained_wnut_t5_asp_configs, run_pretrained_wnut_t5_asp_lownergaz_sent_training
+from hyperparameter_tuning.t5_asp_lownergaz_sent_wnut_pretrained import best_pretrained_wnut_t5_asp_lownergaz_sent_configs, worst_pretrained_wnut_t5_asp_lownergaz_sent_configs, run_pretrained_wnut_t5_asp_lownergaz_sent_training
+from hyperparameter_tuning.t5_asp_wnut import wnut_t5_asp_configs, run_wnut_t5_asp_training
+from hyperparameter_tuning.t5_asp_wnut_pretrained import run_best_wnut_t5_asp_training, best_pretrained_wnut_t5_asp_configs
 
 
 def tune_hyperparameters(name, config, best_configs, tune_training_method,
@@ -183,14 +185,25 @@ training_budget = 3
 # tune_wnut_hyperparameters("wnut_t5_asp_lownergaz_sent", wnut[0], wnut[1],
 #                           run_wnut_t5_asp_lownergaz_sent_training,
 #                           training_budget)
-wnut_worst = worst_pretrained_wnut_t5_asp_configs(
+
+# wnut_vanilla = wnut_t5_asp_configs()
+# tune_wnut_hyperparameters("vanilla_wnut_t5_asp", wnut_vanilla[0],
+#                           wnut_vanilla[1], run_wnut_t5_asp_training,
+#                           training_budget)
+wnut_vanilla_pretrained = best_pretrained_wnut_t5_asp_configs()
+tune_wnut_hyperparameters("best_vanilla_wnut_t5_asp",
+                          wnut_vanilla_pretrained[0],
+                          wnut_vanilla_pretrained[1],
+                          run_best_wnut_t5_asp_training, training_budget)
+
+wnut_worst = worst_pretrained_wnut_t5_asp_lownergaz_sent_configs(
     "/home/loebbert/projects/thesis/experiments/02_content/data/seed_2/03_checkpoints/size_4000/error_ratio_15/last.ckpt"
 )
 tune_wnut_hyperparameters("worst_pretrained_wnut_t5_asp", wnut_worst[0],
                           wnut_worst[1],
                           run_pretrained_wnut_t5_asp_lownergaz_sent_training,
                           training_budget)
-wnut_best = best_pretrained_wnut_t5_asp_configs(
+wnut_best = best_pretrained_wnut_t5_asp_lownergaz_sent_configs(
     "/home/loebbert/projects/thesis/experiments/01_performance/data/seed_1/03_checkpoints/t5_asp_lownergaz_sent/last.ckpt"
 )
 tune_wnut_hyperparameters("best_pretrained_wnut_t5_asp", wnut_best[0],

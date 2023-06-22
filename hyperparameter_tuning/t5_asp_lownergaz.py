@@ -3,6 +3,7 @@ import json
 import pickle
 import sys
 import os
+from typing import Optional
 
 from tqdm import tqdm
 
@@ -81,15 +82,23 @@ def t5_asp_lownergaz_configs():
     return config, best_configs
 
 
-
-
-def setup_database(search_algorithm: str, search_topk: int, reset=False):
+def setup_database(search_algorithm: str,
+                   search_topk: int,
+                   reset=False,
+                   name: Optional[str] = None):
     search = Pipeline()
 
-    add_lownergaz_search_components(search,
-                                    search_algorithm,
-                                    search_topk,
-                                    reset=reset)
+    if name is None:
+        add_lownergaz_search_components(search,
+                                        search_algorithm,
+                                        search_topk,
+                                        reset=reset)
+    else:
+        add_lownergaz_search_components(search,
+                                        search_algorithm,
+                                        search_topk,
+                                        name=name,
+                                        reset=reset)
 
     return search
 
@@ -195,7 +204,7 @@ def run_t5_asp_lownergaz_training(config: dict, fixed_params: dict):
     config["fused"] = True
     config["precision"] = "bf16-mixed"
     torch.set_float32_matmul_precision("medium")
-    torch.backends.cuda.matmul.allow_tf32 = True # type: ignore
+    torch.backends.cuda.matmul.allow_tf32 = True  # type: ignore
     torch.backends.cudnn.allow_tf32 = True  # type: ignore
 
     tb_logger = TensorBoardLogger(save_dir=os.getcwd(), name="", version=".")

@@ -3,6 +3,7 @@ import json
 import pickle
 import sys
 import os
+from typing import Optional
 
 from tqdm import tqdm
 from search.sent.setup import add_multiconer_sentences, add_sent_search_components, create_sent_faiss_document_store, train_update_sent_faiss_index
@@ -81,13 +82,23 @@ def t5_asp_sent_configs():
     return config, best_configs
 
 
-def setup_database(search_algorithm: str, search_topk: int, reset=False):
+def setup_database(search_algorithm: str,
+                   search_topk: int,
+                   reset=False,
+                   name: Optional[str] = None):
     search = Pipeline()
 
-    add_sent_search_components(search,
-                               search_algorithm,
-                               search_topk,
-                               reset=reset)
+    if name is None:
+        add_sent_search_components(search,
+                                   search_algorithm,
+                                   search_topk,
+                                   reset=reset)
+    else:
+        add_sent_search_components(search,
+                                   search_algorithm,
+                                   search_topk,
+                                   name=name,
+                                   reset=reset)
 
     return search
 

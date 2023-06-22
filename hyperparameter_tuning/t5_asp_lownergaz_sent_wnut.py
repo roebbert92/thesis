@@ -15,7 +15,7 @@ import torch
 from torch.utils.data import DataLoader
 from data_preprocessing.tensorize import NERCollator, NERDataProcessor, ner_collate_fn
 from data_preprocessing.tokenize import tokenize_search_results_json
-from hyperparameter_tuning.utils import factors, get_search_results, get_search_results_for_file
+from hyperparameter_tuning.utils import factors, get_search_results, get_search_results_for_file, get_search_results_for_file_filtered
 from hyperparameter_tuning.t5_asp_lownergaz import setup_database as gaz_setup_database
 from hyperparameter_tuning.t5_asp_sent import setup_database as sent_setup_database
 from hyperparameter_tuning.ray_logging import TuneReportCallback
@@ -93,45 +93,19 @@ def wnut_t5_asp_lownergaz_sent_configs():
     return config, best_configs
 
 
-def setup_database(sent_search_algorithm: str,
-                   sent_search_topk: int,
-                   gaz_search_algorithm: str,
-                   gaz_search_topk: int,
-                   join_method: str,
-                   join_topk: int,
-                   reset=False,
-                   name: str = "lownergaz"):
-    search = Pipeline()
-    join_documents_input = []
-    # sentences
-    sent_name = "sent" if name == "lownergaz" else name + "_sent"
-    add_sent_search_components(search, sent_search_algorithm, sent_search_topk,
-                               join_documents_input, reset, sent_name)
-
-    # lowner gazetteers
-    lownergaz_name = name if name == "lownergaz" else name + "_lownergaz"
-    add_lownergaz_search_components(search, gaz_search_algorithm,
-                                    gaz_search_topk, join_documents_input,
-                                    reset, lownergaz_name)
-
-    # join documents
-
-    join_documents = JoinDocuments(join_mode=join_method, top_k_join=join_topk)
-    search.add_node(join_documents, "DocumentJoin", join_documents_input)
-
-    return search
-
-
 def augment_dataset(config, data_path, tokenizer, files, parts):
     join_documents = JoinDocuments(join_mode=config["search_join_method"],
                                    top_k_join=config["search_topk"])
+    search_config_name = "_".join(("lownergaz_sent", "wnut_train"))
     for part in parts:
         # load lowner search results
         wnut_gaz_result_path = os.path.join(
             thesis_path, "search", "lownergaz",
             f"wnut_{part}_{config['gaz_search_algorithm']}.pkl")
         if not os.path.exists(wnut_gaz_result_path):
-            search = gaz_setup_database(config["gaz_search_algorithm"], 50)
+            search = gaz_setup_database(config["gaz_search_algorithm"],
+                                        50,
+                                        name=search_config_name + "_lownergaz")
             wnut_result = get_search_results_for_file(search, files[part])
             with open(wnut_gaz_result_path, "wb") as file:
                 pickle.dump(wnut_result, file)
@@ -151,8 +125,14 @@ def augment_dataset(config, data_path, tokenizer, files, parts):
             thesis_path, "search", "sent",
             f"wnut_{part}_{config['sent_search_algorithm']}.pkl")
         if not os.path.exists(wnut_sent_result_path):
-            search = sent_setup_database(config["sent_search_algorithm"], 50)
-            sent_result = get_search_results_for_file(search, files[part])
+            search = sent_setup_database(config["sent_search_algorithm"],
+                                         50,
+                                         name=search_config_name + "_sent")
+            if part == "train":
+                sent_result = get_search_results_for_file_filtered(
+                    search, files[part], True)
+            else:
+                sent_result = get_search_results_for_file(search, files[part])
             with open(wnut_sent_result_path, "wb") as file:
                 pickle.dump(sent_result, file)
             del search

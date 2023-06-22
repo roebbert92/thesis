@@ -9,7 +9,7 @@ thesis_path = "/" + os.path.join(
     *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-1])
 sys.path.append(thesis_path)
 
-from data_preprocessing.tokenize import query_database
+from data_preprocessing.tokenize import query_database, query_database_with_filter
 
 from haystack import Pipeline, Document
 
@@ -77,9 +77,26 @@ def get_search_results_for_file(search: Pipeline, file_name: str):
     return get_search_results(search, instances)
 
 
+def get_search_results_for_file_filtered(search: Pipeline, file_name: str,
+                                         filter_exact_match: bool):
+    with open(file_name, encoding="utf-8") as file:
+        instances = json.load(file)
+    return get_search_results_filtered(search, instances, filter_exact_match)
+
+
 def get_search_results(search: Pipeline, dataset: List[dict]):
     results = {
         instance_idx: result
         for instance_idx, result in query_database(dataset, search)
+    }
+    return results
+
+
+def get_search_results_filtered(search: Pipeline, dataset: List[dict],
+                                filter_exact_match: bool):
+    results = {
+        instance_idx: result
+        for instance_idx, result in query_database_with_filter(
+            dataset, search, filter_exact_match)
     }
     return results
