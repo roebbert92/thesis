@@ -66,6 +66,9 @@ for config in configs.values():
         })
 
 database_combinations = [
+    ("wnut_train", ),
+    ("wnut_train", "wnut_dev"),
+    ("wnut_train", "wnut_dev", "wnut_test"),
     ("lownergaz_sent", ),
     ("lownergaz_sent", "wnut_train"),
     ("lownergaz_sent", "wnut_train", "wnut_dev"),
