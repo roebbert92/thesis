@@ -10,7 +10,6 @@ from search.utils import EMBEDDING_DIM, EMBEDDING_MODEL, get_gazetteers_from_doc
 from haystack.document_stores import FAISSDocumentStore, BaseDocumentStore, ElasticsearchDocumentStore
 from haystack.nodes import EmbeddingRetriever, BM25Retriever
 from haystack import Pipeline
-from data_preparation.utils import remove_exact_matches
 import json
 import faiss
 
@@ -22,20 +21,8 @@ def add_multiconer_gazetteers(doc_store: BaseDocumentStore):
                   "r",
                   encoding="utf-8") as file:
             multiconer = json.load(file)
-
-        with open(os.path.join(thesis_path, "data/mlowner/lowner_train.json"),
-                  encoding="utf-8") as file:
-            lowner_train = json.load(file)
-        with open(os.path.join(thesis_path, "data/mlowner/lowner_dev.json"),
-                  encoding="utf-8") as file:
-            lowner_dev = json.load(file)
-        with open(os.path.join(thesis_path, "data/mlowner/lowner_test.json"),
-                  encoding="utf-8") as file:
-            lowner_test = json.load(file)
-
-        filtered_multiconer = remove_exact_matches(
-            multiconer, lowner_train + lowner_dev + lowner_test)
-        documents = get_gazetteers_from_documents(filtered_multiconer)
+        # don't filter multiconer as the sentences are the gazetteers
+        documents = get_gazetteers_from_documents(multiconer)
         doc_store.write_documents(documents)
 
 

@@ -274,6 +274,8 @@ def measure_model_performance(seed: int, config,
 for config, seed in total:
     print(seed, config["name"])
     # seed
+    if "PL_GLOBAL_SEED" in os.environ:
+        del os.environ["PL_GLOBAL_SEED"]
     seed_everything(seed)
     # setup database
     search = None

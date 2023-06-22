@@ -21,6 +21,7 @@ import pickle as pkl
 #from hyperparameter_tuning.t5_asp_gaz_sent import t5_asp_gaz_sent_configs, t5_asp_gaz_sent_configs, run_t5_asp_gaz_sent_training
 #from hyperparameter_tuning.t5_asp_lownergaz_sent import t5_asp_lownergaz_sent_configs, run_t5_asp_lownergaz_sent_training
 from hyperparameter_tuning.t5_asp_lownergaz_sent_wnut import wnut_t5_asp_lownergaz_sent_configs, run_wnut_t5_asp_lownergaz_sent_training
+from hyperparameter_tuning.t5_asp_lownergaz_sent_wnut_pretrained import best_pretrained_wnut_t5_asp_configs, worst_pretrained_wnut_t5_asp_configs, run_pretrained_wnut_t5_asp_lownergaz_sent_training
 
 
 def tune_hyperparameters(name, config, best_configs, tune_training_method,
@@ -118,17 +119,26 @@ def tune_wnut_hyperparameters(name, config, best_configs, tune_training_method,
         # parameter_columns=["batch_size"],
         metric_columns=["f1", "training_iteration"])
 
-    budget = 40
+    training_budget_sec = training_budget_in_h * 60 * 60
+    time_per_epoch_sec = 30
+    min_epochs = param_space[
+        "num_epochs"].lower if "num_epochs" in param_space else fixed_params[
+            "num_epochs"]
+    budget = int(training_budget_sec * 1.5 /
+                 (min_epochs * time_per_epoch_sec)) + 1
     # if name == "t5_asp":
     #     budget = 140
 
     ng_search = NevergradSearch(
-        optimizer=ng.optimizers.ScrHammersleySearch,
-        optimizer_kwargs={"budget": budget},
+        optimizer=ng.optimizers.DifferentialEvolution(crossover="twopoints",
+                                                      high_speed=True),
+        #optimizer_kwargs={
+        #    #"budget": budget
+        #    "high_speed": True
+        #},
         metric="f1",
         mode="max",
-        #points_to_evaluate=best_configs
-    )
+        points_to_evaluate=best_configs)
 
     method = tune.with_resources(tune.with_parameters(
         tune_training_method, fixed_params=fixed_params),
@@ -142,7 +152,7 @@ def tune_wnut_hyperparameters(name, config, best_configs, tune_training_method,
         metric='f1',
         mode='max',
         max_t=100,
-        grace_period=2,
+        grace_period=4,
         reduction_factor=2,
         brackets=1,
     )
@@ -153,7 +163,7 @@ def tune_wnut_hyperparameters(name, config, best_configs, tune_training_method,
                            scheduler=scheduler,
                            search_alg=ng_search,
                            num_samples=-1,
-                           time_budget_s=training_budget_in_h * 60 * 60),
+                           time_budget_s=training_budget_sec),
                        run_config=air.RunConfig(local_dir=config["data_path"],
                                                 name=name,
                                                 progress_reporter=reporter))
@@ -169,10 +179,25 @@ def tune_wnut_hyperparameters(name, config, best_configs, tune_training_method,
 
 training_budget = 3
 
-wnut = wnut_t5_asp_lownergaz_sent_configs()
-tune_wnut_hyperparameters("wnut_t5_asp_lownergaz_sent", wnut[0], wnut[1],
-                          run_wnut_t5_asp_lownergaz_sent_training,
+# wnut = wnut_t5_asp_lownergaz_sent_configs()
+# tune_wnut_hyperparameters("wnut_t5_asp_lownergaz_sent", wnut[0], wnut[1],
+#                           run_wnut_t5_asp_lownergaz_sent_training,
+#                           training_budget)
+wnut_worst = worst_pretrained_wnut_t5_asp_configs(
+    "/home/loebbert/projects/thesis/experiments/02_content/data/seed_2/03_checkpoints/size_4000/error_ratio_15/last.ckpt"
+)
+tune_wnut_hyperparameters("worst_pretrained_wnut_t5_asp", wnut_worst[0],
+                          wnut_worst[1],
+                          run_pretrained_wnut_t5_asp_lownergaz_sent_training,
                           training_budget)
+wnut_best = best_pretrained_wnut_t5_asp_configs(
+    "/home/loebbert/projects/thesis/experiments/01_performance/data/seed_1/03_checkpoints/t5_asp_lownergaz_sent/last.ckpt"
+)
+tune_wnut_hyperparameters("best_pretrained_wnut_t5_asp", wnut_best[0],
+                          wnut_best[1],
+                          run_pretrained_wnut_t5_asp_lownergaz_sent_training,
+                          training_budget)
+
 # t5_asp_gaz_sent_config = t5_asp_gaz_sent_configs()
 # tune_hyperparameters("t5_asp_gaz_sent", t5_asp_gaz_sent_config[0],
 #                      t5_asp_gaz_sent_config[1], run_t5_asp_gaz_sent_training,

@@ -177,3 +177,49 @@ T5_ASP.update({
     "warmup_ratio": 0.29414201183431954,
     "name": "t5_asp"
 })
+
+FULL_WNUT_T5_ASP = T5_ASP_LOWNERGAZ_SENT.copy()
+FULL_WNUT_T5_ASP.update({
+    "adam_weight_decay": 0.008067866817204384,
+    "gaz_search_topk": 12,
+    "num_epochs": 51,
+    "plm_learning_rate": 0.00012035795477287743,
+    "search_topk": 16,
+    "sent_search_topk": 6,
+    "task_learning_rate": 0.0074485651615560184,
+    "name": "wnut_t5_asp_lownergaz_sent"
+})
+
+BEST_PRETRAINED_T5_ASP = T5_ASP_LOWNERGAZ_SENT.copy()
+BEST_PRETRAINED_T5_ASP.update({
+    "adam_weight_decay": 0.01805954081911936,
+    "asp_dropout_rate": 0.22760117960387666,
+    "gaz_search_topk": 6,
+    "plm_learning_rate": 0.00025950985292715387,
+    "sent_search_topk": 5,
+    "search_topk": 11,
+    "task_learning_rate": 0.0021225113190029856,
+    "train_search_dropout": 0.029444504313170923,
+    "warmup_ratio": 0.36693271098631797,
+    "num_epochs": 15,
+    "ckpt_path":
+    "/home/loebbert/projects/thesis/experiments/01_performance/data/seed_1/03_checkpoints/t5_asp_lownergaz_sent/last.ckpt",
+    "name": "best_wnut_t5_asp_lownergaz_sent"
+})
+
+WORST_PRETRAINED_T5_ASP = T5_ASP_LOWNERGAZ_SENT.copy()
+WORST_PRETRAINED_T5_ASP.update({
+    "adam_weight_decay": 0.010792175245094616,
+    "asp_dropout_rate": 0.439294967901422,
+    "gaz_search_topk": 6,
+    "num_epochs": 18,
+    "plm_learning_rate": 0.00014868807960086362,
+    "sent_search_topk": 5,
+    "search_topk": 11,
+    "task_learning_rate": 0.0026384650282772083,
+    "train_search_dropout": 0.08316258683721132,
+    "warmup_ratio": 0.251818821694038,
+    "ckpt_path":
+    "/home/loebbert/projects/thesis/experiments/02_content/data/seed_2/03_checkpoints/size_4000/error_ratio_15/last.ckpt",
+    "name": "worst_wnut_t5_asp_lownergaz_sent"
+})

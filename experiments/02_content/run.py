@@ -196,6 +196,8 @@ if __name__ == "__main__":
         for error_percent_ratio in error_percent_ratios:
             for seed in seeds:
                 # seed
+                if "PL_GLOBAL_SEED" in os.environ:
+                    del os.environ["PL_GLOBAL_SEED"]
                 seed_everything(seed)
                 error_ratio = error_percent_ratio / 100
                 tokenized_files = experiment_data["02_tokenized_dataset"][
