@@ -75,6 +75,13 @@ database_combinations = [
     ("lownergaz_sent", "wnut_train", "wnut_dev", "wnut_test"),
 ]
 
+# For training purposes, remove exact matches
+database_training_combinations = [
+    ("wnut_train", ),
+    ("lownergaz_sent", ),
+    ("lownergaz_sent", "wnut_train"),
+]
+
 with open(files["wnut_train"], encoding="utf-8") as file:
     wnut_train = json.load(file)
 
