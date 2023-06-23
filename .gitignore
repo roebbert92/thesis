@@ -17,4 +17,3 @@ search/lownergaz/*.faiss
 02_tokenized_datasets
 02_tokenized_dataset
 03_checkpoints
-*flair*
