@@ -320,38 +320,40 @@ def get_tokenized_filepath(config, file_path, search_results, data_path):
 
 
 # prepare databases
-config = list(configs.values())[0]
+config = list(configs.values())[4]
 for database_comb in database_combinations:
     name = "_".join(database_comb)
     if "lownergaz_sent" in database_comb and len(database_comb) > 1:
-        if not elasticsearch_client.indices.exists(
-                index=name +
-                "_lownergaz") or not elasticsearch_client.indices.exists(
-                    index=name + "_sent"):
+        lownergaz_exists = elasticsearch_client.indices.exists(index=name +
+                                                               "_lownergaz")
+        sent_exists = elasticsearch_client.indices.exists(index=name + "_sent")
+        if not lownergaz_exists or not sent_exists:
             dataset = []
             for dataset_name in database_comb[1:]:
                 dataset.extend(datasets[dataset_name])
-            # copy lownergaz database
-            elasticsearch_client.indices.clone(index="lownergaz",
-                                               target=name + "_lownergaz")
-            elasticsearch_client.indices.put_settings(
-                index=name + "_lownergaz",
-                body={"index": {
-                    "blocks": {
-                        "write": False
-                    }
-                }})
+            if not lownergaz_exists:
+                # copy lownergaz database
+                elasticsearch_client.indices.clone(index="lownergaz",
+                                                   target=name + "_lownergaz")
+                elasticsearch_client.indices.put_settings(
+                    index=name + "_lownergaz",
+                    body={"index": {
+                        "blocks": {
+                            "write": False
+                        }
+                    }})
 
-            # copy sent database
-            elasticsearch_client.indices.clone(index="sent",
-                                               target=name + "_sent")
-            elasticsearch_client.indices.put_settings(
-                index=name + "_sent",
-                body={"index": {
-                    "blocks": {
-                        "write": False
-                    }
-                }})
+            if not sent_exists:
+                # copy sent database
+                elasticsearch_client.indices.clone(index="sent",
+                                                   target=name + "_sent")
+                elasticsearch_client.indices.put_settings(
+                    index=name + "_sent",
+                    body={"index": {
+                        "blocks": {
+                            "write": False
+                        }
+                    }})
             # populate database
             search = setup_database(config["sent_search_algorithm"],
                                     config["sent_search_topk"],

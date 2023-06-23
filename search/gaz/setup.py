@@ -95,15 +95,19 @@ def add_gaz_search_components(search: Pipeline,
         #     document_store.index] = faiss.index_cpu_to_all_gpus(
         #         index=document_store.faiss_indexes[document_store.index])
         document_store = ElasticsearchDocumentStore(
-            index="ann_gaz",
+            index="gaz",
             embedding_dim=EMBEDDING_DIM,
             similarity="cosine",
-            recreate_index=reset)
+            recreate_index=reset,
+            excluded_meta_data=["embedding"])
+        add_multiconer_gazetteers(document_store)
         ann_retriever = EmbeddingRetriever(
             document_store=document_store,
             embedding_model=EMBEDDING_MODEL,
             model_format="sentence_transformers",
             top_k=search_topk)
+        document_store.update_embeddings(ann_retriever,
+                                         update_existing_embeddings=False)
         search.add_node(component=ann_retriever,
                         name="GazANNRetriever",
                         inputs=["Query"])

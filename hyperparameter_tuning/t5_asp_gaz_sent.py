@@ -4,16 +4,16 @@ import pickle
 import sys
 import os
 
+thesis_path = "/" + os.path.join(
+    *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-1])
+sys.path.append(thesis_path)
+
 from tqdm import tqdm
 from hyperparameter_tuning.t5_asp_gaz import add_multiconer_gazetteers
 
 from hyperparameter_tuning.t5_asp_sent import add_multiconer_sentences
 from search.gaz.setup import add_gaz_search_components
 from search.sent.setup import add_sent_search_components, create_sent_faiss_document_store, train_update_sent_faiss_index
-
-thesis_path = "/" + os.path.join(
-    *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-1])
-sys.path.append(thesis_path)
 
 from configs.asp_t5 import T5_BASE
 from models.asp_t5 import ASPT5Model, get_tokenizer
@@ -126,7 +126,7 @@ def setup_database(sent_search_algorithm: str,
                               join_documents_input, reset)
 
     # join documents
-    join_documents = JoinDocuments(join_mode=join_method, top_k_join=join_topk)
+    join_documents = JoinDocuments(join_mode=join_method)
     search.add_node(join_documents, "DocumentJoin", join_documents_input)
 
     return search

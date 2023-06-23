@@ -279,8 +279,8 @@ def get_windowed_context(dataset: List[dict], window_size=3):
             # search result
             if item["meta"]["data_type"] == "gazetteers":
                 # gazetteer - take full context
-                contexts.add(
-                    (item["content"], item["content"], item["meta"]["type"]))
+                contexts.add((f"{item['meta']['type']}: {item['content']}",
+                              item["content"], item["meta"]["type"]))
             elif item["meta"]["data_type"] == "sentences":
                 # sentence
                 ents = copy.deepcopy(item["meta"]["entities"])
@@ -299,7 +299,10 @@ def get_full_context(dataset: List[dict]):
         elif "content" in item:
             # search result
             sentence_ids.append(item["id"])
-            sentences.append(item["content"])
+            if item["meta"]["data_type"] == "gazetteers":
+                sentences.append(f"{item['meta']['type']}: {item['content']}")
+            else:
+                sentences.append(item["content"])
     return sentence_ids, sentences
 
 

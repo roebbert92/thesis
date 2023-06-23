@@ -26,6 +26,7 @@ from hyperparameter_tuning.ray_logging import TuneReportCallback
 from lightning.fabric.utilities.seed import seed_everything
 from lightning.pytorch.loggers import TensorBoardLogger
 import lightning.pytorch as pl
+from search.ranking import PostprocessGazetteers
 
 from haystack import Pipeline, Document
 from haystack.document_stores import ElasticsearchDocumentStore, FAISSDocumentStore, BaseDocumentStore

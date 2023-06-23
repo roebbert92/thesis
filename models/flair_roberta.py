@@ -51,6 +51,7 @@ def train_model(data_path: str, corpus: Corpus, seed: int):
 
     model_output_path = os.path.join(data_path, f"seed_{seed}",
                                      "03_checkpoints")
+    os.makedirs(model_output_path, exist_ok=True)
     training_result = trainer.fine_tune(
         model_output_path,
         seed=seed,

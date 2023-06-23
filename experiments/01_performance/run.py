@@ -56,9 +56,9 @@ seeds = [1, 2, 3]
 datasets = {"train": lowner_train, "dev": lowner_dev, "test": lowner_test}
 configs = [
     # T5_ASP_LOWNERGAZ_SENT,
-    T5_ASP_LOWNERGAZ,
-    #T5_ASP_GAZ_SENT,
-    #T5_ASP_GAZ,
+    # T5_ASP_LOWNERGAZ,
+    T5_ASP_GAZ_SENT,
+    T5_ASP_GAZ,
     #T5_ASP_SENT,
     #T5_ASP
 ]

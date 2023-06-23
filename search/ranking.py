@@ -5,7 +5,7 @@ import copy
 from haystack.schema import Document, MultiLabel
 
 
-class PrepareGazetteers(BaseComponent):
+class PreprocessGazetteers(BaseComponent):
     outgoing_edges = 1
 
     def run(self, documents: List[Document]):

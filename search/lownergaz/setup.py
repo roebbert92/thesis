@@ -17,7 +17,8 @@ import uuid
 
 
 def add_lownergaz_gazetteers(doc_store: BaseDocumentStore,
-                             items: List[dict] = []):
+                             items: List[dict] = [],
+                             prepend_type: bool = False):
     documents = []
     if len(items) == 0 and doc_store.get_document_count() == 0:
         with open(os.path.join(thesis_path, "data", "mlowner",
@@ -27,9 +28,12 @@ def add_lownergaz_gazetteers(doc_store: BaseDocumentStore,
             lowner_gaz = json.load(file)
         for gaz in tqdm(lowner_gaz):
             if is_supported_doc(gaz["entity"].split()):
+                entity = gaz["entity"]
+                if prepend_type:
+                    entity = f"{gaz['type']}: {gaz['entity']}"
                 documents.append(
                     Document(id=str(uuid.uuid4()),
-                             content=gaz["entity"],
+                             content=entity,
                              meta={
                                  "data_type": "gazetteers",
                                  "type": gaz["type"],
@@ -39,7 +43,8 @@ def add_lownergaz_gazetteers(doc_store: BaseDocumentStore,
                 doc_store.write_documents(documents)
                 documents.clear()
     else:
-        documents = get_gazetteers_from_documents(items)
+        documents = get_gazetteers_from_documents(items,
+                                                  prepend_type=prepend_type)
     doc_store.write_documents(documents)
 
 

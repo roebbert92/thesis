@@ -192,7 +192,7 @@ WNUT_T5_ASP_LOWNERGAZ_SENT = T5_ASP_LOWNERGAZ_SENT.copy()
 WNUT_T5_ASP_LOWNERGAZ_SENT.update({
     "adam_weight_decay": 0.008067866817204384,
     "gaz_search_topk": 12,
-    "num_epochs": 51,
+    "num_epochs": 40,
     "plm_learning_rate": 0.00012035795477287743,
     "search_topk": 16,
     "sent_search_topk": 6,

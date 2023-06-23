@@ -77,11 +77,13 @@ def get_search_results_for_file(search: Pipeline, file_name: str):
     return get_search_results(search, instances)
 
 
-def get_search_results_for_file_filtered(search: Pipeline, file_name: str,
-                                         filter_exact_match: bool):
+def get_search_results_for_file_filtered(search_func, file_name: str,
+                                         filter_exact_match: bool,
+                                         **search_kwargs):
     with open(file_name, encoding="utf-8") as file:
         instances = json.load(file)
-    return get_search_results_filtered(search, instances, filter_exact_match)
+    return get_search_results_filtered(search_func, instances,
+                                       filter_exact_match, **search_kwargs)
 
 
 def get_search_results(search: Pipeline, dataset: List[dict]):
@@ -92,11 +94,11 @@ def get_search_results(search: Pipeline, dataset: List[dict]):
     return results
 
 
-def get_search_results_filtered(search: Pipeline, dataset: List[dict],
-                                filter_exact_match: bool):
+def get_search_results_filtered(search_func, dataset: List[dict],
+                                filter_exact_match: bool, **search_kwargs):
     results = {
         instance_idx: result
         for instance_idx, result in query_database_with_filter(
-            dataset, search, filter_exact_match)
+            dataset, search_func, filter_exact_match, **search_kwargs)
     }
     return results

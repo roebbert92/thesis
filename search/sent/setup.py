@@ -88,7 +88,8 @@ def add_sent_search_components(search: Pipeline,
             index=name,
             embedding_dim=EMBEDDING_DIM,
             similarity="cosine",
-            recreate_index=reset)
+            recreate_index=reset,
+            excluded_meta_data=["embedding"])
         bm25_retriever = BM25Retriever(document_store, top_k=search_topk)
         add_multiconer_sentences(document_store, items)
         search.add_node(component=bm25_retriever,
@@ -122,7 +123,8 @@ def add_sent_search_components(search: Pipeline,
             index=name,
             embedding_dim=EMBEDDING_DIM,
             similarity="cosine",
-            recreate_index=reset)
+            recreate_index=reset,
+            excluded_meta_data=["embedding"])
         add_multiconer_sentences(document_store, items)
         ann_retriever = EmbeddingRetriever(
             document_store=document_store,

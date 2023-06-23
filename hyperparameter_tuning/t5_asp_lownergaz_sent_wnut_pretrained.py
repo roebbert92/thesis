@@ -7,7 +7,7 @@ thesis_path = "/" + os.path.join(
     *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-1])
 sys.path.append(thesis_path)
 
-from configs.asp_t5 import T5_BASE
+from configs.asp_t5 import T5_BASE, WORST_WNUT_T5_ASP_LOWNERGAZ_SENT, BEST_WNUT_T5_ASP_LOWNERGAZ_SENT
 from models.asp_t5 import ASPT5Model, get_tokenizer
 
 from ray import tune
@@ -22,6 +22,7 @@ from hyperparameter_tuning.ray_logging import TuneReportCallback
 from lightning.fabric.utilities.seed import seed_everything
 from lightning.pytorch.loggers import TensorBoardLogger
 import lightning.pytorch as pl
+from lightning.pytorch.plugins.precision import MixedPrecisionPlugin
 from search.lownergaz.setup import add_lownergaz_search_components
 from search.sent.setup import add_sent_search_components
 from haystack import Pipeline
@@ -37,24 +38,7 @@ def best_pretrained_wnut_t5_asp_lownergaz_sent_configs(
     config["name"] = "best_wnut_t5_asp_lownergaz_sent"
     config["batch_size"] = 40
 
-    best_configs = [{
-        "adam_weight_decay": 0.011738749999999989,
-        "asp_dropout_rate": 0.4540625,
-        "asp_hidden_dim": 633,
-        "gaz_search_algorithm": "bm25",
-        "gaz_search_topk": 4,
-        "gaz_use_mentions": True,
-        "num_epochs": 16,
-        "plm_learning_rate": 0.00017496219281663535,
-        "search_join_method": "reciprocal_rank_fusion",
-        "search_topk": 8,
-        "sent_search_algorithm": "ann",
-        "sent_search_topk": 4,
-        "sent_use_mentions": True,
-        "task_learning_rate": 0.0035849253731343286,
-        "train_search_dropout": 0.05492957746478871,
-        "warmup_ratio": 0.37917808219178084
-    }]
+    best_configs = []
 
     config["asp_hidden_dim"] = 633
     config["asp_dropout_rate"] = tune.uniform(0.2, 0.5)
@@ -62,26 +46,26 @@ def best_pretrained_wnut_t5_asp_lownergaz_sent_configs(
     config["asp_activation"] = "relu"
     config["beam_size"] = 1
     config["sent_search_algorithm"] = "ann"
-    config["sent_search_topk"] = tune.randint(3, 7)
+    config["sent_search_topk"] = 6
     config["sent_use_labels"] = True
     config["sent_use_mentions"] = True
     config["gaz_search_algorithm"] = "bm25"
-    config["gaz_search_topk"] = tune.randint(4, 13)
+    config["gaz_search_topk"] = 6
     config["gaz_use_labels"] = True
     config["gaz_use_mentions"] = True
     config["search_join_method"] = "reciprocal_rank_fusion"
-    config["search_topk"] = 20
+    config["search_topk"] = 8
     config["prepend_search_results"] = False
     config["filter_exact_match"] = False
     config["filter_same_document"] = False
     config["seed"] = 42
-    config["train_search_dropout"] = tune.uniform(0.01, 0.4)
+    config["train_search_dropout"] = tune.uniform(0.05, 0.15)
     config["train_search_shuffle"] = False
-    config["plm_learning_rate"] = tune.uniform(5e-6, 5e-4)
-    config["task_learning_rate"] = tune.uniform(1e-4, 1e-2)
-    config["adam_weight_decay"] = tune.uniform(5e-5, 0.02)
-    config["warmup_ratio"] = tune.uniform(0.01, 0.4)
-    config["num_epochs"] = 15
+    config["plm_learning_rate"] = tune.uniform(5e-7, 1e-4)
+    config["task_learning_rate"] = tune.uniform(1e-5, 1e-3)
+    config["adam_weight_decay"] = tune.uniform(5e-5, 1e-3)
+    config["warmup_ratio"] = tune.uniform(0.1, 0.3)
+    config["num_epochs"] = tune.randint(18, 30)
 
     config["ckpt_path"] = pretrained_ckpt_path
 
@@ -114,7 +98,7 @@ def worst_pretrained_wnut_t5_asp_lownergaz_sent_configs(
         "task_learning_rate": 0.0035849253731343286,
         "train_search_dropout": 0.05492957746478871,
         "warmup_ratio": 0.37917808219178084
-    }]
+    }, WORST_WNUT_T5_ASP_LOWNERGAZ_SENT]
 
     config["asp_hidden_dim"] = 633
     config["asp_dropout_rate"] = tune.uniform(0.2, 0.5)
@@ -185,7 +169,12 @@ def augment_dataset(config, data_path, tokenizer, files, parts):
                                          name=search_config_name + "_sent")
             if part == "train":
                 sent_result = get_search_results_for_file_filtered(
-                    search, files[part], True)
+                    sent_setup_database,
+                    files[part],
+                    True,
+                    search_algorithm=config["sent_search_algorithm"],
+                    search_topk=50,
+                    name=search_config_name + "_sent")
             else:
                 sent_result = get_search_results_for_file(search, files[part])
             with open(wnut_sent_result_path, "wb") as file:
@@ -344,7 +333,7 @@ def run_pretrained_wnut_t5_asp_lownergaz_sent_training(config: dict,
                 num_sanity_val_steps=0,
                 enable_checkpointing=False,
                 enable_progress_bar=False,
-                callbacks=[tune_report_f1]  # type: ignore
+                callbacks=[tune_report_f1]  # type: ignore,
             )
 
             model = ASPT5Model.load_from_checkpoint(config["ckpt_path"],

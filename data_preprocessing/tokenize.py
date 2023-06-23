@@ -453,13 +453,13 @@ def get_input_sentence_database(tokenizer: PreTrainedTokenizer,
     return processed_doc
 
 
-def init_query_filter_db(instances: List, search: Pipeline, chunk_size: int,
-                         filter_exact_match: bool):
+def init_query_filter_db(instances: List, search, chunk_size: int,
+                         filter_exact_match: bool, search_kwargs: dict):
     global search_pipeline
     global items
     global size_chunk
     global exact_match_filter
-    search_pipeline = copy.deepcopy(search)
+    search_pipeline = search(**search_kwargs)
     items = instances
     size_chunk = chunk_size
     exact_match_filter = filter_exact_match
@@ -469,24 +469,38 @@ def run_database_query_with_filter(chunk_idx: int):
     chunk = items[chunk_idx:chunk_idx + size_chunk]
     results = []
     for item in chunk:
-        sentence = " ".join(item['tokens'])
+        sentence = " ".join(item['extended'])
         params = None
         if exact_match_filter:
-            params = {"filters": {"$and": {"$not": {"content": sentence}}}}
-        result = search_pipeline.run(query=sentence, params=params)
+            params = {
+                "filters": {
+                    "$and": {
+                        "$not": {
+                            "doc_id": item["doc_id"]
+                        }
+                    }
+                }
+            }
+        result = search_pipeline.run(query=sentence,
+                                     params=params)  # type: Pipeline
         results.append(result["documents"] if result is not None else [])
     return chunk_idx, results
 
 
 def query_database_with_filter(instances: List,
-                               search: Pipeline,
-                               filter_exact_match: bool = False):
-    chunk_size = 1000
+                               search_func,
+                               filter_exact_match: bool = False,
+                               **search_kwargs):
+    chunk_size = 50
     cpu_count = 4
     with tqdm(desc="Querying database", total=len(instances)) as pbar:
-        with mp.Pool(
-                cpu_count, init_query_filter_db,
-            (instances, search, chunk_size, filter_exact_match)) as pool:
+        with mp.Pool(cpu_count, init_query_filter_db, (
+                instances,
+                search_func,
+                chunk_size,
+                filter_exact_match,
+                search_kwargs,
+        )) as pool:
             chunks = list(range(0, len(instances), chunk_size))
             for chunk_idx, results in pool.map(run_database_query_with_filter,
                                                chunks,
