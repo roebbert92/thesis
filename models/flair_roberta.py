@@ -1,6 +1,8 @@
+import gc
 import pickle
 import sys
 import os
+from typing import List
 
 thesis_path = "/" + os.path.join(
     *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-1])
@@ -17,6 +19,10 @@ import lightning.pytorch as pl
 from torch.optim.adamw import AdamW
 from torch.optim.lr_scheduler import OneCycleLR
 import torch
+from torch.utils.data import Dataset
+
+from models.metrics import ASPMetrics
+from data_preparation.flair_evaluation import read_flair_predictions_to_asp, asp_dataset_to_asp_predictions
 
 
 def get_lowner_dataset():
@@ -31,7 +37,8 @@ def get_lowner_dataset():
     return corpus
 
 
-def train_model(data_path: str, corpus: Corpus, seed: int):
+def train_model(data_path: str, corpus: Corpus, seed: int,
+                evaluation_dataset_names: List[str]):
     label_type = "ner"
     label_dict = corpus.make_label_dictionary(label_type=label_type,
                                               add_unk=False)
@@ -53,7 +60,6 @@ def train_model(data_path: str, corpus: Corpus, seed: int):
         reproject_embeddings=False,
     )
     trainer = ModelTrainer(tagger, corpus)
-
     model_output_path = os.path.join(data_path, f"seed_{seed}",
                                      "03_checkpoints", "flair_roberta")
     os.makedirs(model_output_path, exist_ok=True)
@@ -65,7 +71,7 @@ def train_model(data_path: str, corpus: Corpus, seed: int):
     if "PL_GLOBAL_SEED" in os.environ:
         del os.environ["PL_GLOBAL_SEED"]
     pl.seed_everything(seed)
-    training_result = trainer.fine_tune(
+    trainer.fine_tune(
         model_output_path,
         #device="cuda:0",
         use_amp=True,
@@ -92,20 +98,75 @@ def train_model(data_path: str, corpus: Corpus, seed: int):
         metrics_for_tensorboard=[("macro avg", "f1-score"),
                                  ("macro avg", "precision"),
                                  ("macro avg", "recall")])
+    del tagger
+    del trainer
+    gc.collect()
+    torch.cuda.empty_cache()
 
-    return training_result
+    # metrics
+    metrics_base_path = os.path.join(data_path, f"seed_{seed}", "04_metrics",
+                                     "flair_roberta")
+
+    # get metrics for last ckpt
+    last_ckpt_path = os.path.join(model_output_path, "final-model.pt")
+    get_asp_metrics_from_flair(metrics_base_path, evaluation_dataset_names,
+                               corpus, "last", last_ckpt_path)
+
+    # get metrics for best ckpt
+    best_ckpt_path = os.path.join(model_output_path, "best-model.pt")
+    get_asp_metrics_from_flair(metrics_base_path, evaluation_dataset_names,
+                               corpus, "best", best_ckpt_path)
+
+
+def get_asp_metrics_from_flair(metrics_base_path: str, dataset_names: list,
+                               flair_dataset: Corpus, ckpt_name: str,
+                               ckpt_path: str):
+
+    tagger = SequenceTagger.load(ckpt_path)
+
+    os.makedirs(metrics_base_path, exist_ok=True)
+
+    for dataset_name in dataset_names:
+        # produce prediction file
+        dataset_part = dataset_name.split("_")[-1]
+        temp_path = os.path.join(metrics_base_path, "flair_prediction.txt")
+        flair_data = flair_dataset.train
+        if dataset_part == "dev":
+            flair_data = flair_dataset.dev
+        elif dataset_part == "test":
+            flair_data = flair_dataset.test
+        tagger.evaluate(
+            flair_data,  # type: ignore
+            "ner",
+            out_path=temp_path,
+            return_loss=False,
+            mini_batch_size=120)
+        # init metrics
+        metrics = ASPMetrics()
+        metrics.predictions = asp_dataset_to_asp_predictions(
+            read_flair_predictions_to_asp(dataset_name, temp_path))
+        os.remove(temp_path)
+        # save metrics
+        metrics_path = os.path.join(metrics_base_path,
+                                    f"{ckpt_name}_{dataset_name}.pkl")
+        with open(metrics_path, "wb") as file:
+            pickle.dump(metrics, file)
+    del tagger
+    gc.collect()
+    torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":
-    seeds = [2, 3]
+    seeds = [1, 2, 3]
     dataset = get_lowner_dataset()
     datapath = os.path.join("/home/loebbert/projects/thesis", "experiments",
                             "01_performance", "data")
+    dataset_names = ["lowner_train", "lowner_dev", "lowner_test"]
     for seed in seeds:
         trained = False
         while not trained:
             try:
-                train_model(datapath, dataset, seed)
+                train_model(datapath, dataset, seed, dataset_names)
                 trained = True
             except RuntimeError:
                 torch.cuda.empty_cache()
