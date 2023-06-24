@@ -234,8 +234,11 @@ class ASPMetrics(Metric):
         for doc in dataset:
             doc_id = doc["doc_id"]
             assert doc_id in self.predictions
-            preds_set = set([(pred[0], pred[1] + 1, types[pred[2]])
-                             for pred in self.predictions[doc_id]])
+            preds_set = set([
+                (pred[0], pred[1] + 1,
+                 types[pred[2]] if isinstance(pred[2], int) else pred[2])
+                for pred in self.predictions[doc_id]
+            ])
             targets_set = set([(ent["start"], ent["end"], ent["type"])
                                for ent in doc["entities"]])
             tp = preds_set & targets_set
@@ -279,7 +282,6 @@ class ASPMetrics(Metric):
 
 
 class FalsePositivesASP():
-
     def __init__(self) -> None:
         self.false_positives = defaultdict(list)
 
