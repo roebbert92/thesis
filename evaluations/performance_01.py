@@ -16,7 +16,7 @@ import pickle
 from haystack import Document
 from collections import defaultdict
 from data_metrics.entity_coverage_ratio import entity_coverage_ratio, entity_coverage_ratio_precounted, count_entities
-#from data_metrics.sample_similarity import
+from data_metrics.search_sample_similarity import get_search_sample_similarity
 from tqdm import tqdm
 
 
@@ -92,7 +92,7 @@ def get_per_sample_metrics():
     return metrics_df
 
 
-def get_f1(metrics_df: pd.DataFrame, checkpoint: str, dataset: str):
+def aggregate_performance_metrics(metrics_df: pd.DataFrame):
     agg_df = metrics_df.pivot_table(
         index=["seed", "model", "checkpoint", "dataset"],
         values=["tp", "fp", "fn"],
@@ -101,6 +101,35 @@ def get_f1(metrics_df: pd.DataFrame, checkpoint: str, dataset: str):
     agg_df["recall"] = 100 * agg_df["tp"] / (agg_df["tp"] + agg_df["fn"])
     agg_df["f1"] = 2 * agg_df["precision"] * agg_df["recall"] / (
         agg_df["precision"] + agg_df["recall"])
+
+    return agg_df
+
+
+def get_precision(metrics_df: pd.DataFrame, checkpoint: str, dataset: str):
+    agg_df = aggregate_performance_metrics(metrics_df)
+
+    avg_precision = agg_df.pivot_table(
+        index=["model", "checkpoint", "dataset"],
+        values=["precision"],
+        aggfunc=("mean", "std")).reset_index()
+
+    return avg_precision[(avg_precision["checkpoint"] == checkpoint)
+                         & (avg_precision["dataset"] == dataset)]
+
+
+def get_recall(metrics_df: pd.DataFrame, checkpoint: str, dataset: str):
+    agg_df = aggregate_performance_metrics(metrics_df)
+
+    avg_recall = agg_df.pivot_table(index=["model", "checkpoint", "dataset"],
+                                    values=["recall"],
+                                    aggfunc=("mean", "std")).reset_index()
+
+    return avg_recall[(avg_recall["checkpoint"] == checkpoint)
+                      & (avg_recall["dataset"] == dataset)]
+
+
+def get_f1(metrics_df: pd.DataFrame, checkpoint: str, dataset: str):
+    agg_df = aggregate_performance_metrics(metrics_df)
 
     avg_f1 = agg_df.pivot_table(index=["model", "checkpoint", "dataset"],
                                 values=["f1"],
@@ -419,31 +448,44 @@ def get_search_results_data_ecr():
     return ecr_df
 
 
-def get_search_results_data_ccr():
-    search_results, dataset = get_search_results_data()
-    ecr_metrics = []
-    ecr_class_labels = list(calc_ecr_classes({}, {}).keys())
-    with tqdm(total=len(search_results) * len(dataset),
-              desc="ECR classes search results") as pbar:
-        for model, search_result in search_results.items():
-            for dataset_name, search in search_result.items():
-                for idx, sample in enumerate(dataset[dataset_name]):
-                    ratio, c, _, _ = entity_coverage_ratio(
-                        search[idx], [sample])
-                    ecr_classes = calc_ecr_classes(ratio, c)
-                    ecr_metrics.append({
-                        "model": model,
-                        "dataset": dataset_name,
-                        "doc_id": sample["doc_id"],
-                        "targets": len(sample["entities"]),
-                        **{
-                            key: len(value)
-                            for key, value in ecr_classes.items()
-                        }
-                    })
-                pbar.update(1)
+def get_search_results_data_ccr_metrics():
+    metrics_file_path = os.path.join(
+        thesis_path, "evaluations", "metrics",
+        "01_performance_search_results_ccr_metrics.pkl")
+    if os.path.exists(metrics_file_path):
+        ccr_metrics_df = pd.read_pickle(metrics_file_path)
+    else:
+        search_results, dataset = get_search_results_data()
+        ccr_metrics = []
+        # ccr_columns = [
+        #     "max",
+        #     "φ ∈ (0.5,1]",
+        #     "φ ∈ (0,0.5]",
+        #     "φ ∈ (-0.5,0]",
+        #     "φ ∈ [-1,-0.5]",
+        # ]
+        with tqdm(total=len(search_results) * len(dataset),
+                  desc="CCR search results") as pbar:
+            for model, search_result in search_results.items():
+                for dataset_name, search in search_result.items():
+                    for ccr in get_search_sample_similarity(
+                            dataset[dataset_name], search):
+                        ccr_metrics.append({
+                            "model": model,
+                            "dataset": dataset_name,
+                            **ccr
+                        })
+                    pbar.update(1)
 
-    ecr_df = pd.DataFrame.from_records(ecr_metrics).pivot_table(
-        values=ecr_class_labels, index=["model", "dataset"],
-        aggfunc="sum").reset_index()
-    return ecr_df
+        ccr_metrics_df = pd.DataFrame.from_records(ccr_metrics)
+        os.makedirs(os.path.dirname(metrics_file_path), exist_ok=True)
+        ccr_metrics_df.to_pickle(metrics_file_path)
+    return ccr_metrics_df
+
+
+def get_search_results_data_ccr_max():
+    ccr_metrics_df = get_search_results_data_ccr_metrics()
+
+    return ccr_metrics_df.pivot_table(values="max",
+                                      index=["model", "dataset"],
+                                      aggfunc=["mean", "std"]).reset_index()

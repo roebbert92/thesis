@@ -9,7 +9,7 @@ import pandas as pd
 import copy
 import matplotlib.pyplot as plt
 import numpy as np
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoTokenizer, AutoModel  # type: ignore
 
 
 class SearchSampleSimilarity(torch.nn.Module):
@@ -33,8 +33,7 @@ class SearchSampleSimilarity(torch.nn.Module):
         sum_mask = torch.clamp(input_mask_expanded.sum(1), min=1e-9)
         return sum_embeddings / sum_mask
 
-    def forward(self, query_id, query, full_contexts, windowed_contexts,
-                encoded_inputs):
+    def forward(self, query_ids, queries, full_contexts, encoded_inputs):
         result = []
         encoded_inputs = encoded_inputs.to(self.model.device)
         with torch.no_grad():
@@ -42,9 +41,9 @@ class SearchSampleSimilarity(torch.nn.Module):
         embeds = SearchSampleSimilarity.mean_pooling(
             model_output, encoded_inputs["attention_mask"])
 
-        for idx, q_id in enumerate(query_id):
+        for idx, q_id in enumerate(query_ids):
             res = {"doc_id": q_id}
-            query_embed = embeds[query[idx]].unsqueeze(0)
+            query_embed = embeds[queries[idx]].unsqueeze(0)
             try:
                 full_start = full_contexts[idx][0]
                 full_end = full_contexts[idx][1]
@@ -54,46 +53,17 @@ class SearchSampleSimilarity(torch.nn.Module):
                     full_contexts_cosine = self.cosine(
                         query_embed.repeat((full_size, 1)),
                         full_contexts_embed)
+                    # calculate max + distribution
                     res.update({
-                        "cosine_full_max":
-                        torch.max(full_contexts_cosine),
-                        "cosine_full_mean":
-                        torch.mean(full_contexts_cosine),
-                        "cosine_full_min":
-                        torch.min(full_contexts_cosine),
+                        "max": torch.max(full_contexts_cosine),
                     })
                 else:
                     res.update({
-                        "cosine_full_max": torch.nan,
-                        "cosine_full_mean": torch.nan,
-                        "cosine_full_min": torch.nan,
+                        "max": torch.nan,
                     })
 
-                windowed_start = windowed_contexts[idx][0]
-                windowed_end = windowed_contexts[idx][1]
-                windowed_size = windowed_end - windowed_start
-                if windowed_size > 0:
-                    windowed_contexts_embed = embeds[
-                        windowed_start:windowed_end]
-                    windowed_contexts_cosine = self.cosine(
-                        query_embed.repeat((windowed_size, 1)),
-                        windowed_contexts_embed)
-                    res.update({
-                        "cosine_windowed_max":
-                        torch.max(windowed_contexts_cosine),
-                        "cosine_windowed_mean":
-                        torch.mean(windowed_contexts_cosine),
-                        "cosine_windowed_min":
-                        torch.min(windowed_contexts_cosine)
-                    })
-                else:
-                    res.update({
-                        "cosine_windowed_max": torch.nan,
-                        "cosine_windowed_mean": torch.nan,
-                        "cosine_windowed_min": torch.nan
-                    })
             except:
-                print(query, full_contexts, windowed_contexts, sep="\n")
+                print(queries, full_contexts, sep="\n")
             result.append(res)
 
         return result
@@ -111,9 +81,7 @@ class SearchSampleDataset(Dataset):
         sample = self.dataset[index]
         results = [doc.to_dict() for doc in self.search_results[index]]
         _, full_contexts = get_full_context(results)
-        _, windowed_contexts = get_windowed_context(results)
-        return (sample["doc_id"], " ".join(sample["tokens"]), full_contexts,
-                windowed_contexts)
+        return (sample["doc_id"], " ".join(sample["tokens"]), full_contexts)
 
 
 class SearchSampleSimilarityCollator(object):
@@ -124,9 +92,8 @@ class SearchSampleSimilarityCollator(object):
         query_ids = []
         queries = []
         full_contexts = []
-        windowed_contexts = []
         sentences = []
-        for query_id, query, full, windowed in collator_input:
+        for query_id, query, full in collator_input:
             query_ids.append(query_id)
             queries.append(len(sentences))
             sentences.append(query)
@@ -134,10 +101,6 @@ class SearchSampleSimilarityCollator(object):
             sentences.extend(full)
             full_end = len(sentences)
             full_contexts.append((full_start, full_end))
-            windowed_start = len(sentences)
-            sentences.extend(windowed)
-            windowed_end = len(sentences)
-            windowed_contexts.append((windowed_start, windowed_end))
 
         encoded_sentences = self.tokenizer(sentences,
                                            padding=True,
@@ -145,7 +108,7 @@ class SearchSampleSimilarityCollator(object):
                                            max_length=128,
                                            return_tensors='pt')
 
-        return query_ids, queries, full_contexts, windowed_contexts, encoded_sentences
+        return query_ids, queries, full_contexts, encoded_sentences
 
 
 def get_search_sample_similarity(dataset: List[dict], search_results: dict):
@@ -156,9 +119,8 @@ def get_search_sample_similarity(dataset: List[dict], search_results: dict):
     data = SearchSampleDataset(dataset, search_results)
     loader = DataLoader(data, batch_size=20, collate_fn=collator)
 
-    for query_id, query, full_contexts, windowed_contexts, encoded_inputs in loader:
-        for item in model(query_id, query, full_contexts, windowed_contexts,
-                          encoded_inputs):
+    for query_id, query, full_contexts, encoded_inputs in loader:
+        for item in model(query_id, query, full_contexts, encoded_inputs):
             yield item
 
 
@@ -279,8 +241,8 @@ def get_windowed_context(dataset: List[dict], window_size=3):
             # search result
             if item["meta"]["data_type"] == "gazetteers":
                 # gazetteer - take full context
-                contexts.add((f"{item['meta']['type']}: {item['content']}",
-                              item["content"], item["meta"]["type"]))
+                contexts.add(
+                    (item['content'], item["content"], item["meta"]["type"]))
             elif item["meta"]["data_type"] == "sentences":
                 # sentence
                 ents = copy.deepcopy(item["meta"]["entities"])
