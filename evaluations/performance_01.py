@@ -15,8 +15,8 @@ import json
 import pickle
 from haystack import Document
 from collections import defaultdict
-from data_metrics.entity_coverage_ratio import entity_coverage_ratio
-from data_metrics.sample_similarity import 
+from data_metrics.entity_coverage_ratio import entity_coverage_ratio, entity_coverage_ratio_precounted, count_entities
+#from data_metrics.sample_similarity import
 from tqdm import tqdm
 
 
@@ -268,6 +268,34 @@ def get_labeled_data_eecr():
     return eecr_df
 
 
+def get_labeled_data_eecr_per_sample():
+    labeled_data, models_to_labeled_data, dataset = get_labeled_data()
+    eecr_metrics = []
+    with tqdm(total=len(models_to_labeled_data) * len(dataset),
+              desc="EECR labeled data per sample") as pbar:
+        for model, data_parts in models_to_labeled_data.items():
+            data = [item for part in data_parts for item in labeled_data[part]]
+            data_counted = count_entities(data)
+            for dataset_name, d in dataset.items():
+                for sample in d:
+                    sample_counted = count_entities([sample])
+                    _, _, eecr, _ = entity_coverage_ratio_precounted(
+                        data_counted, sample_counted)
+                    eecr_metrics.append({
+                        "model": model,
+                        "dataset": dataset_name,
+                        "doc_id": sample["doc_id"],
+                        "targets": len(sample["entities"]),
+                        "eecr": eecr
+                    })
+                pbar.update(1)
+
+    eecr_df = pd.DataFrame.from_records(eecr_metrics).pivot_table(
+        values="eecr", index=["model",
+                              "dataset"], aggfunc="mean").reset_index()
+    return eecr_df
+
+
 def calc_ecr_classes(ratio: dict, c: dict):
     return {
         "ρ=1": [key for key, value in ratio.items() if value == 1.0],
@@ -304,6 +332,38 @@ def get_labeled_data_ecr():
     return ecr_df
 
 
+def get_labeled_data_ecr_per_sample():
+    labeled_data, models_to_labeled_data, dataset = get_labeled_data()
+    ecr_metrics = []
+    ecr_class_labels = sorted(list(calc_ecr_classes({}, {}).keys()))
+    with tqdm(total=len(models_to_labeled_data) * len(dataset),
+              desc="ECR classes labeled data per sample") as pbar:
+        for model, data_parts in models_to_labeled_data.items():
+            data = [item for part in data_parts for item in labeled_data[part]]
+            data_counted = count_entities(data)
+            for dataset_name, d in dataset.items():
+                for sample in d:
+                    sample_counted = count_entities([sample])
+                    ratio, c, _, _ = entity_coverage_ratio_precounted(
+                        data_counted, sample_counted)
+                    ecr_classes = calc_ecr_classes(ratio, c)
+                    ecr_metrics.append({
+                        "model": model,
+                        "dataset": dataset_name,
+                        "doc_id": sample["doc_id"],
+                        **{
+                            key: len(value)
+                            for key, value in ecr_classes.items()
+                        }
+                    })
+                pbar.update(1)
+
+    ecr_df = pd.DataFrame.from_records(ecr_metrics).pivot_table(
+        values=ecr_class_labels, index=["model", "dataset"],
+        aggfunc="sum").reset_index()
+    return ecr_df
+
+
 def get_search_results_data_eecr():
     search_results, dataset = get_search_results_data()
     eecr_metrics = []
@@ -332,7 +392,7 @@ def get_search_results_data_eecr():
 def get_search_results_data_ecr():
     search_results, dataset = get_search_results_data()
     ecr_metrics = []
-    ecr_class_labels = list(calc_ecr_classes({}, {}).keys())
+    ecr_class_labels = sorted(list(calc_ecr_classes({}, {}).keys()))
     with tqdm(total=len(search_results) * len(dataset),
               desc="ECR classes search results") as pbar:
         for model, search_result in search_results.items():
@@ -357,6 +417,7 @@ def get_search_results_data_ecr():
         values=ecr_class_labels, index=["model", "dataset"],
         aggfunc="sum").reset_index()
     return ecr_df
+
 
 def get_search_results_data_ccr():
     search_results, dataset = get_search_results_data()

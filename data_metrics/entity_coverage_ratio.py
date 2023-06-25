@@ -50,6 +50,34 @@ def count_entities(items: List[dict]):
 
     return Counter(entity_count), Counter(entity_type_count), types
 
+def entity_coverage_ratio_precounted(first, second):
+    first_entity_count, first_entity_type_count, first_types = first
+    second_entity_count, second_entity_type_count, second_types = second
+    types = first_types.union(second_types)
+    ratio = {}
+    c = {}
+    expected = 0.0
+    total_second_entity_count = 0
+    for entity, second_total_count in second_entity_count.items():
+        total_second_entity_count += second_total_count
+        if entity not in first_entity_count:
+            ratio[entity] = 0.0
+            c[entity] = 0
+        else:
+            ratio[entity] = 0.0
+            c[entity] = first_entity_count[entity]
+            for t in types:
+                if (entity, t) not in first_entity_type_count or (
+                        entity, t) not in second_entity_type_count:
+                    continue
+                ratio[entity] += (first_entity_type_count[(entity, t)] /
+                                  first_entity_count[entity]
+                                  ) * second_entity_type_count[(entity, t)]
+            ratio[entity] /= second_total_count
+            expected += ratio[entity] * second_total_count
+    if total_second_entity_count > 0:
+        expected /= total_second_entity_count
+    return ratio, c, expected, total_second_entity_count
 
 def entity_coverage_ratio(first: List[dict], second: List[dict]):
     first_entity_count, first_entity_type_count, first_types = count_entities(
