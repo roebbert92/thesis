@@ -21,7 +21,6 @@ from lightning.pytorch.loggers import TensorBoardLogger
 
 
 class DictMatchDataset(Dataset):
-
     def __init__(self, json_path: str) -> None:
         super().__init__()
         with open(json_path, "r") as file:
@@ -43,7 +42,6 @@ def collate_dict_batch(batch: List[dict]):
 
 
 class DictMatch(pl.LightningModule):
-
     def __init__(self, gazetteer_paths: List[str], seed: int) -> None:
         super().__init__()
         gazetteer = []
@@ -53,8 +51,8 @@ class DictMatch(pl.LightningModule):
         gaz_init = defaultdict(set)
         for gaz in gazetteer:
             if "entity" in gaz:
-                gaz_init[" ".join(gaz["entity"].strip().split(" ")).lower()].add(
-                    gaz["type"])
+                gaz_init[" ".join(
+                    gaz["entity"].strip().split(" ")).lower()].add(gaz["type"])
             elif "entities" in gaz:
                 for ent in gaz["entities"]:
                     gaz_init[" ".join(
@@ -62,9 +60,10 @@ class DictMatch(pl.LightningModule):
                             ent["type"])
             elif "content" in gaz:
                 for ent in gaz["meta"]["entities"]:
-                    gaz_init[" ".join(gaz["content"].strip().split(
-                        " ")[ent["start"]:ent["end"]]).lower()].add(ent["type"])
-            self.gaz = dict(gaz_init)
+                    gaz_init[" ".join(gaz["content"].strip().split(" ")
+                                      [ent["start"]:ent["end"]]).lower()].add(
+                                          ent["type"])
+        self.gaz = dict(gaz_init)
         self.test_metrics = ASPMetrics()
         self.seed = seed
 
@@ -80,13 +79,13 @@ class DictMatch(pl.LightningModule):
                         n_grams.extend(ngrams(available, n_gram_len))
                 for n_gram in n_grams:
                     start = n_gram[0][0]
-                    end = n_gram[-1][0]
+                    end = n_gram[-1][0] + 1
                     n_gram_tokens = " ".join(t[1] for t in n_gram).lower()
                     if n_gram_tokens in self.gaz and not (start, end) in [
                         (pred[0], pred[1]) for pred in predictions
                     ]:
                         predictions.append(
-                            (start, end + 1,
+                            (start, end,
                              random.choice(list(self.gaz[n_gram_tokens]))))
                 not_predicted = [[]]
                 current_prediction_idx = -1
