@@ -8,6 +8,9 @@
 @version: 1.0
 @desc  :
 """
+import copy
+import json
+import pickle
 import sys
 import os
 
@@ -15,29 +18,64 @@ thesis_path = "/" + os.path.join(
     *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-2])
 sys.path.append(thesis_path)
 
-import re
-import json
 import argparse
-import logging
 from functools import partial
 from collections import namedtuple
 
 from models.knn_ner.utils import collate_to_max_length
 from models.knn_ner.dataset import NERDataset
 from models.knn_ner.metrics import SpanF1ForNER
+from models.knn_ner.get_labels import get_labels
+from hyperparameter_tuning.utils import factors
 
 import torch
 from torch.nn import functional as F
 from torch.nn.modules import CrossEntropyLoss
 from torch.utils.data.dataloader import DataLoader, RandomSampler, SequentialSampler
-from transformers.optimization import AdamW, get_linear_schedule_with_warmup
+from transformers.optimization import get_linear_schedule_with_warmup
+from transformers.modeling_outputs import TokenClassifierOutput
 from transformers.models.bert import BertConfig, BertForTokenClassification
 from transformers.models.roberta import RobertaConfig, RobertaForTokenClassification
+from transformers.models.xlm_roberta import XLMRobertaConfig, XLMRobertaForTokenClassification
 
 import lightning.pytorch as pl
-from lightning import Trainer
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger
+
+
+@torch.jit.script_if_tracing
+def fill_masked_elements(
+    all_token_embeddings: torch.Tensor,
+    sentence_hidden_states: torch.Tensor,
+    mask: torch.Tensor,
+    word_ids: torch.Tensor,
+    lengths: torch.LongTensor,
+):
+    for i in torch.arange(int(all_token_embeddings.shape[0])):
+        all_token_embeddings[
+            i, :lengths[i], :] = insert_missing_embeddings(  # type: ignore
+                sentence_hidden_states[i][mask[i] & (word_ids[i] > 0)],
+                word_ids[i], lengths[i])
+    return all_token_embeddings
+
+
+@torch.jit.script_if_tracing
+def insert_missing_embeddings(token_embeddings: torch.Tensor,
+                              word_id: torch.Tensor,
+                              length: torch.LongTensor) -> torch.Tensor:
+    # in some cases we need to insert zero vectors for tokens without embedding.
+    if token_embeddings.shape[0] < length:
+        for _id in torch.arange(int(length)):
+            if not (word_id == _id).any():
+                token_embeddings = torch.cat(
+                    (
+                        token_embeddings[:_id],
+                        torch.zeros_like(token_embeddings[:1]),
+                        token_embeddings[_id:],
+                    ),
+                    dim=0,
+                )
+    return token_embeddings
 
 
 class NERTask(pl.LightningModule):
@@ -52,50 +90,41 @@ class NERTask(pl.LightningModule):
             self.args = args = TmpArgs(**args)  # type: ignore
 
         self.en_roberta = args.en_roberta
-        self.entity_labels = NERDataset.get_labels(
-            os.path.join(args.data_dir, "ner_labels.txt"))
+        self.entity_labels = NERDataset.get_labels(args.types)
         self.bert_dir = args.bert_path
         self.num_labels = len(self.entity_labels)
-        if not self.en_roberta:
-            self.bert_config = BertConfig.from_pretrained(
-                self.bert_dir,
-                output_hidden_states=True,
-                return_dict=True,
-                num_labels=self.num_labels,
-                hidden_dropout_prob=self.args.hidden_dropout_prob)
-            self.model = BertForTokenClassification.from_pretrained(
-                self.bert_dir, config=self.bert_config)
-        else:
-            self.bert_config = RobertaConfig.from_pretrained(
-                self.bert_dir,
-                output_hidden_states=True,
-                return_dict=True,
-                num_labels=self.num_labels,
-                hidden_dropout_prob=self.args.hidden_dropout_prob)
-            self.model = RobertaForTokenClassification.from_pretrained(
-                self.bert_dir, config=self.bert_config)
 
-        self.ner_evaluation_metric = SpanF1ForNER(
-            entity_labels=self.entity_labels,
-            save_prediction=self.args.save_ner_prediction)
+        # self.bert_config = XLMRobertaConfig.from_pretrained(
+        #     self.bert_dir,
+        #     output_hidden_states=True,
+        #     return_dict=True,
+        #     num_labels=self.num_labels,
+        #     hidden_dropout_prob=self.args.hidden_dropout_prob)
+        # self.model = XLMRobertaForTokenClassification.from_pretrained(
+        #     self.bert_dir, config=self.bert_config)
+        self.bert_config = XLMRobertaConfig.from_pretrained(
+            self.bert_dir,
+            output_hidden_states=True,
+            return_dict=True,
+            num_labels=self.num_labels,
+            hidden_dropout_prob=self.args.hidden_dropout_prob)
+        self.model = XLMRobertaForTokenClassification.from_pretrained(
+            self.bert_dir, config=self.bert_config)
 
-        format = '%(asctime)s - %(name)s - %(message)s'
-        logging.basicConfig(format=format,
-                            filename=os.path.join(self.args.save_path,
-                                                  "eval_result_log.txt"),
-                            level=logging.INFO)
-        self.result_logger = logging.getLogger(__name__)
-        self.result_logger.setLevel(logging.INFO)
+        self.val_metrics = SpanF1ForNER(entity_labels=self.entity_labels)
+        self.test_metrics = SpanF1ForNER(entity_labels=self.entity_labels)
 
     def configure_optimizers(self):
         """Prepare optimizer and schedule (linear warmup and decay)"""
-        no_decay = ["bias", "LayerNorm.weight"]
+        no_decay = ["bias", "LayerNorm.weight", 'layer_norm.weight']
         optimizer_grouped_parameters = [
             {
                 "params": [
                     p for n, p in self.model.named_parameters()
                     if not any(nd in n for nd in no_decay)
                 ],
+                "lr":
+                self.args.lr,
                 "weight_decay":
                 self.args.weight_decay,
             },
@@ -104,43 +133,85 @@ class NERTask(pl.LightningModule):
                     p for n, p in self.model.named_parameters()
                     if any(nd in n for nd in no_decay)
                 ],
+                "lr":
+                self.args.lr,
                 "weight_decay":
                 0.0,
             },
         ]
 
-        if self.args.optimizer == "adamw":
-            optimizer = AdamW(
-                optimizer_grouped_parameters,
-                betas=(0.9, 0.999),
-                lr=self.args.lr,
-                eps=self.args.adam_epsilon,
-            )
-        elif self.args.optimizer == "torch.adam":
-            optimizer = torch.optim.AdamW(optimizer_grouped_parameters,
-                                          lr=self.args.lr,
-                                          eps=self.args.adam_epsilon,
-                                          weight_decay=self.args.weight_decay)
-        else:
-            raise ValueError("Please import the Optimizer first. ")
+        optimizer = torch.optim.AdamW(optimizer_grouped_parameters,
+                                      lr=self.args.lr,
+                                      eps=self.args.adam_epsilon,
+                                      weight_decay=self.args.weight_decay,
+                                      fused=self.args.fused)
+
         num_gpus = len(
             [x for x in str(self.args.gpus).split(",") if x.strip()])
         t_total = (len(self.train_dataloader()) //
                    (self.args.accumulate_grad_batches * num_gpus) +
                    1) * self.args.max_epochs
         warmup_steps = int(self.args.warmup_proportion * t_total)
-        if self.args.no_lr_scheduler:
-            return [optimizer]
-        else:
-            scheduler = get_linear_schedule_with_warmup(
-                optimizer,
-                num_warmup_steps=warmup_steps,
-                num_training_steps=t_total)
-            return [optimizer], [{"scheduler": scheduler, "interval": "step"}]
+        scheduler = get_linear_schedule_with_warmup(
+            optimizer,
+            num_warmup_steps=warmup_steps,
+            num_training_steps=t_total)
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "step"
+            }
+        }
 
-    def forward(self, input_ids):
+    def forward(self, input_ids, word_maps, labels):
         attention_mask = (input_ids != 0).long()
-        return self.model(input_ids, attention_mask=attention_mask)
+        bert_output = self.model.roberta(input_ids,
+                                         attention_mask=attention_mask,
+                                         output_hidden_states=True)
+
+        loss_mask = torch.cat([
+            torch.ones_like(word_maps[:, :1]), (word_maps[:, 1:] != 0).long()
+        ],
+                              dim=1)
+        word_maps[loss_mask == 1] += 1
+        word_maps = torch.nn.functional.pad(word_maps, (1, 1), value=0)
+
+        sentence_hidden_states = torch.stack(
+            bert_output.hidden_states)[-1, :, :]
+        token_lengths = torch.max(word_maps, dim=1).values
+        all_token_embeddings = torch.zeros(  # type: ignore
+            word_maps.shape[0],
+            token_lengths.max(),
+            self.bert_config.hidden_size,
+            device=self.device)
+        no_pad_word_maps = word_maps[:, 1:-1]
+        true_tensor = torch.ones_like(no_pad_word_maps[:, :1],
+                                      dtype=torch.bool)
+        false_tensor = torch.zeros_like(no_pad_word_maps[:, :1],
+                                        dtype=torch.bool)
+        gain_mask = no_pad_word_maps[:,
+                                     1:] != no_pad_word_maps[:, :
+                                                             no_pad_word_maps.
+                                                             shape[1] - 1]
+        first_mask = torch.cat(
+            [false_tensor, true_tensor, gain_mask, false_tensor], dim=1)
+        all_token_embeddings = fill_masked_elements(all_token_embeddings,
+                                                    sentence_hidden_states,
+                                                    first_mask, word_maps,
+                                                    token_lengths)
+        sequence_output = self.model.dropout(all_token_embeddings)
+        logits = self.model.classifier(sequence_output)
+
+        loss_mask = torch.zeros(word_maps.shape[0],
+                                token_lengths.max(),
+                                dtype=torch.long).to(self.device)
+        for i in torch.arange(int(loss_mask.shape[0])):
+            loss_mask[i, :token_lengths[i]] = 1
+
+        loss = self.compute_loss(logits, labels, loss_mask)
+
+        return TokenClassifierOutput(logits=logits, loss=loss)
 
     def compute_loss(self, logits, labels, loss_mask=None):
         """
@@ -165,75 +236,72 @@ class NERTask(pl.LightningModule):
         return loss
 
     def training_step(self, batch, batch_idx):
-        input_ids, labels = batch
-        loss_mask = (input_ids != 0).long()
-        batch_size, seq_len = input_ids.shape
-        bert_classifiaction_outputs = self.forward(input_ids=input_ids)
-        loss = self.compute_loss(bert_classifiaction_outputs.logits,
-                                 labels,
-                                 loss_mask=loss_mask)
+        idxs, word_maps, input_ids, labels = batch
 
-        tf_board_logs = {
-            "train_loss": loss,
-            "lr": self.trainer.optimizers[0].param_groups[0]["lr"]
-        }
-        return {"loss": loss, "log": tf_board_logs}
+        batch_size, seq_len = input_ids.shape
+        bert_classifiaction_outputs = self.forward(input_ids=input_ids,
+                                                   word_maps=word_maps,
+                                                   labels=labels)
+
+        self.log("train_loss",
+                 bert_classifiaction_outputs.loss,
+                 on_step=True,
+                 on_epoch=True,
+                 prog_bar=True,
+                 logger=True,
+                 batch_size=batch_size)
+        return bert_classifiaction_outputs.loss
+
+    def on_validation_epoch_start(self) -> None:
+        self.val_metrics.reset()
+        super().on_validation_epoch_start()
 
     def validation_step(self, batch, batch_idx):
-        input_ids, gold_labels = batch
+        idxs, word_maps, input_ids, gold_labels = batch
         batch_size, seq_len = input_ids.shape
         loss_mask = (input_ids != 0).long()
-        bert_classifiaction_outputs = self.forward(input_ids=input_ids)
-        loss = self.compute_loss(bert_classifiaction_outputs.logits,
-                                 gold_labels,
-                                 loss_mask=loss_mask)
+        bert_classification_outputs = self.forward(input_ids=input_ids,
+                                                   word_maps=word_maps,
+                                                   labels=gold_labels)
         probabilities, argmax_labels = self.postprocess_logits_to_labels(
-            bert_classifiaction_outputs.logits.view(batch_size, seq_len, -1))
-        confusion_matrix = self.ner_evaluation_metric(argmax_labels,
-                                                      gold_labels,
-                                                      sequence_mask=loss_mask)
-        return {"val_loss": loss, "confusion_matrix": confusion_matrix}
+            bert_classification_outputs.logits)
+        self.val_metrics.update(idxs, word_maps, argmax_labels, gold_labels)
 
-    def validation_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
-        confusion_matrix = torch.stack(
-            [x["confusion_matrix"] for x in outputs]).sum(0)
-        all_true_positive, all_false_positive, all_false_negative = confusion_matrix
-        precision, recall, f1 = self.ner_evaluation_metric.compute_f1_using_confusion_matrix(
-            all_true_positive, all_false_positive, all_false_negative)
-
-        self.result_logger.info(
-            f"EVAL INFO -> current_epoch is: {self.trainer.current_epoch}, current_global_step is: {self.trainer.global_step} "
-        )
-        self.result_logger.info(f"EVAL INFO -> valid_f1 is: {f1}")
-        tensorboard_logs = {
-            "val_loss": avg_loss,
-            "val_f1": f1,
-        }
-        return {
-            "val_loss": avg_loss,
-            "val_log": tensorboard_logs,
-            "val_f1": f1,
-            "val_precision": precision,
-            "val_recall": recall
-        }
+    def on_validation_epoch_end(self) -> None:
+        errors = self.val_metrics.metrics.errors()
+        f1 = self.val_metrics.metrics.f1()
+        precision = self.val_metrics.metrics.precision()
+        recall = self.val_metrics.metrics.recall()
+        self.log_dict(
+            {
+                "val_f1": f1,
+                "val_precision": precision,
+                "val_recall": recall,
+                "val_error_type1": errors[0],
+                "val_error_type2": errors[1],
+                "val_error_type3": errors[2],
+                "val_error_type4": errors[3],
+                "val_error_type5": errors[4],
+            },
+            logger=True,
+            on_epoch=True)
+        super().on_validation_epoch_end()
 
     def train_dataloader(self, ) -> DataLoader:
-        return self.get_dataloader("train")
+        return self.get_dataloader(self.args.data_prefix + "train")
 
     def val_dataloader(self, ) -> DataLoader:
-        return self.get_dataloader("dev")
+        return self.get_dataloader(self.args.data_prefix + "dev")
 
     def _load_dataset(self, prefix="test"):
         vocab_file = self.args.bert_path
         if not self.en_roberta:
             vocab_file = os.path.join(self.args.bert_path, "vocab.txt")
         dataset = NERDataset(directory=self.args.data_dir,
+                             entity_labels=self.entity_labels,
                              prefix=prefix,
                              vocab_file=vocab_file,
                              max_length=self.args.max_length,
-                             config_path=os.path.join(self.args.bert_path,
-                                                      "config"),
                              file_name=self.args.file_name,
                              lower_case=self.args.lower_case,
                              language=self.args.language,
@@ -245,7 +313,7 @@ class NERTask(pl.LightningModule):
         """return {train/dev/test} dataloader"""
         dataset = self._load_dataset(prefix=prefix)
 
-        if prefix == "train":
+        if prefix.endswith("train"):
             batch_size = self.args.train_batch_size
             # small dataset like weibo ner, define data_generator will help experiment reproducibility.
             data_generator = torch.Generator()
@@ -256,56 +324,76 @@ class NERTask(pl.LightningModule):
             data_sampler = SequentialSampler(dataset)
 
         # sampler option is mutually exclusive with shuffle
-        dataloader = DataLoader(dataset=dataset,
-                                sampler=data_sampler,
-                                batch_size=batch_size,
-                                num_workers=self.args.workers,
-                                collate_fn=partial(collate_to_max_length,
-                                                   fill_values=[0, 0, 0]),
-                                drop_last=False)
+        dataloader = DataLoader(
+            dataset=dataset,
+            sampler=data_sampler,
+            batch_size=batch_size,
+            num_workers=3,
+            collate_fn=partial(collate_to_max_length, fill_values=[0, 0, 0]),
+            drop_last=False,
+            persistent_workers=False,
+            pin_memory=True,
+        )
 
         return dataloader
 
     def test_dataloader(self, ) -> DataLoader:
-        return self.get_dataloader("test")
+        return self.get_dataloader(self.args.data_prefix + "test")
+
+    def val_train_dataloader(self, ) -> DataLoader:
+        dataset = self._load_dataset(prefix=self.args.data_prefix + "train")
+
+        batch_size = self.args.eval_batch_size
+        data_sampler = SequentialSampler(dataset)
+
+        # sampler option is mutually exclusive with shuffle
+        dataloader = DataLoader(
+            dataset=dataset,
+            sampler=data_sampler,
+            batch_size=batch_size,
+            num_workers=3,
+            collate_fn=partial(collate_to_max_length, fill_values=[0, 0, 0]),
+            drop_last=False,
+            persistent_workers=False,
+            pin_memory=True,
+        )
+
+        return dataloader
+
+    def on_test_epoch_start(self) -> None:
+        super().on_test_epoch_start()
+        self.test_metrics.reset()
 
     def test_step(self, batch, batch_idx):
-        input_ids, gold_labels = batch
+        idxs, word_maps, input_ids, gold_labels = batch
         sequence_mask = (input_ids != 0).long()
         batch_size, seq_len = input_ids.shape
-        bert_classifiaction_outputs = self.forward(input_ids=input_ids)
+        bert_classification_outputs = self.forward(input_ids=input_ids,
+                                                   word_maps=word_maps,
+                                                   labels=gold_labels)
         probabilities, argmax_labels = self.postprocess_logits_to_labels(
-            bert_classifiaction_outputs.logits.view(batch_size, seq_len, -1))
-        confusion_matrix = self.ner_evaluation_metric(
-            argmax_labels, gold_labels, sequence_mask=sequence_mask)
-        return {"confusion_matrix": confusion_matrix}
+            bert_classification_outputs.logits)
+        self.test_metrics.update(idxs, word_maps, argmax_labels, gold_labels)
 
-    def test_epoch_end(self, outputs):
-        confusion_matrix = torch.stack(
-            [x["confusion_matrix"] for x in outputs]).sum(0)
-        all_true_positive, all_false_positive, all_false_negative = confusion_matrix
-        if self.args.save_ner_prediction:
-            precision, recall, f1, entity_tuple = self.ner_evaluation_metric.compute_f1_using_confusion_matrix(
-                all_true_positive,
-                all_false_positive,
-                all_false_negative,
-                prefix="test")
-            gold_entity_lst, pred_entity_lst = entity_tuple
-            self.save_predictions_to_file(gold_entity_lst, pred_entity_lst)
-        else:
-            precision, recall, f1, _ = self.ner_evaluation_metric.compute_f1_using_confusion_matrix(
-                all_true_positive, all_false_positive, all_false_negative)
-
-        tensorboard_logs = {"test_f1": f1}
-        self.result_logger.info(
-            f"TEST RESULT -> TEST F1: {f1}, Precision: {precision}, Recall: {recall} "
-        )
-        return {
-            "test_log": tensorboard_logs,
-            "test_f1": f1,
-            "test_precision": precision,
-            "test_recall": recall
-        }
+    def on_test_epoch_end(self) -> None:
+        errors = self.test_metrics.metrics.errors()
+        f1 = self.test_metrics.metrics.f1()
+        precision = self.test_metrics.metrics.precision()
+        recall = self.test_metrics.metrics.recall()
+        self.log_dict(
+            {
+                "test_f1": f1,
+                "test_precision": precision,
+                "test_recall": recall,
+                "test_error_type1": errors[0],
+                "test_error_type2": errors[1],
+                "test_error_type3": errors[2],
+                "test_error_type4": errors[3],
+                "test_error_type5": errors[4],
+            },
+            logger=True,
+            on_epoch=True)
+        super().on_test_epoch_end()
 
     def postprocess_logits_to_labels(self, logits):
         """input logits should in the shape [batch_size, seq_len, num_labels]"""
@@ -314,25 +402,6 @@ class NERTask(pl.LightningModule):
         argmax_labels = torch.argmax(
             probabilities, 2, keepdim=False)  # shape of [batch_size, seq_len]
         return probabilities, argmax_labels
-
-    def save_predictions_to_file(self,
-                                 gold_entity_lst,
-                                 pred_entity_lst,
-                                 prefix="test"):
-        dataset = self._load_dataset(prefix=prefix)
-        data_items = dataset.data_items
-
-        save_file_path = os.path.join(self.args.save_path,
-                                      "test_predictions.txt")
-        print(f"INFO -> write predictions to {save_file_path}")
-        with open(save_file_path, "w") as f:
-            for gold_label_item, pred_label_item, data_item in zip(
-                    gold_entity_lst, pred_entity_lst, data_items):
-                data_tokens = data_item[0]
-                f.write("=!" * 20 + "\n")
-                f.write("".join(data_tokens) + "\n")
-                f.write(gold_label_item + "\n")
-                f.write(pred_label_item + "\n")
 
 
 def get_parser():
@@ -419,95 +488,178 @@ def get_parser():
 
 
 def experiment01():
-    parser = get_parser()
-    args = parser.parse_args()
-    model = NERTask(args)
+    seeds = [1, 2, 3]
+    # use same config as flair
+    for seed in seeds:
+        if "PL_GLOBAL_SEED" in os.environ:
+            del os.environ["PL_GLOBAL_SEED"]
+        pl.seed_everything(seed)
+        config = {
+            "lr":
+            5e-6,
+            "max_epochs":
+            20,
+            "max_length":
+            512,
+            "adam_epsilon":
+            1e-8,
+            "weight_decay":
+            0.01,
+            "hidden_dropout_prob":
+            0.2,
+            "warmup_proportion":
+            0.1,
+            "train_batch_size":
+            40,
+            "eval_batch_size":
+            120,
+            "accumulate_grad_batches":
+            1,
+            "precision":
+            "bf16-mixed",
+            "bert_path":
+            "xlm-roberta-large",
+            "file_name":
+            "bmes",
+            "data_prefix":
+            "lowner_",
+            "data_dir":
+            os.path.join(thesis_path, "data", "mlowner"),
+            "save_ner_prediction":
+            True,
+            "classifier":
+            "multi",
+            "en_roberta":
+            True,
+            "gpus":
+            1,
+            "seed":
+            seed,
+            "language":
+            "en",
+            "lower_case":
+            False,
+            "data_path":
+            os.path.join(thesis_path, "experiments", "01_performance", "data"),
+            "fused":
+            True,
+            "name":
+            "knn_ner"
+        }
+        grad_accum_steps = factors(config["train_batch_size"])
+        with open(os.path.join(thesis_path, "data", "mlowner",
+                               "lowner_types.json"),
+                  "r",
+                  encoding="utf-8") as file:
+            config["types"] = list(json.load(file)["entities"].keys())
 
-    checkpoint_callback = ModelCheckpoint(
-        filepath=os.path.join(
-            args.save_path,
-            "checkpoint",
-            "{epoch}",
-        ),
-        save_top_k=1,
-        save_last=False,
-        monitor="val_f1",
-        mode="max",
-        verbose=True,
-    )
+        torch.set_float32_matmul_precision("medium")
+        torch.backends.cuda.matmul.allow_tf32 = True  # type: ignore
+        torch.backends.cudnn.allow_tf32 = True  # type: ignore
 
-    logger = TensorBoardLogger(save_dir=args.save_path, name='log')
+        train_config = copy.deepcopy(config)
 
-    # save args
-    with open(os.path.join(args.save_path, "checkpoint", "args.json"),
-              "w") as f:
-        args_dict = args.__dict__
-        del args_dict["tpu_cores"]
-        json.dump(args_dict, f, indent=4)
+        checkpoint_base_path = os.path.join(config["data_path"],
+                                            f"seed_{str(seed)}",
+                                            "03_checkpoints", config["name"])
+        checkpoint_best = ModelCheckpoint(dirpath=checkpoint_base_path,
+                                          filename="best",
+                                          save_top_k=1,
+                                          monitor="val_f1",
+                                          mode="max")
 
-    trainer = Trainer.from_argparse_args(
-        args, checkpoint_callback=checkpoint_callback, logger=logger)
-    trainer.fit(model)
+        tb_logger = TensorBoardLogger(
+            save_dir=os.path.join(thesis_path, "experiments", "01_performance",
+                                  "lightning_logs"),
+            name="_".join([str(seed), config["name"]]),
+        )
 
-    # after training, use the model checkpoint which achieves the best f1 score on dev set to compute the f1 on test set.
-    best_f1_on_dev, path_to_best_checkpoint = find_best_checkpoint_on_dev(
-        args.save_path)
-    model.result_logger.info("=&" * 20)
-    model.result_logger.info(f"Best F1 on DEV is {best_f1_on_dev}")
-    model.result_logger.info(
-        f"Best checkpoint on DEV set is {path_to_best_checkpoint}")
-    checkpoint = torch.load(path_to_best_checkpoint)
-    model.load_state_dict(checkpoint['state_dict'])
-    trainer.test(model)
-    model.result_logger.info("=&" * 20)
+        trained = False
+
+        while not trained:
+            try:
+
+                #model = NERTask(argparse.Namespace(**train_config))
+                model = NERTask.load_from_checkpoint(
+                    os.path.join(checkpoint_base_path, "last.ckpt"))
+
+                trainer = pl.Trainer(
+                    accelerator="gpu",
+                    logger=tb_logger,
+                    devices=1,
+                    log_every_n_steps=train_config["train_batch_size"] *
+                    train_config["accumulate_grad_batches"],
+                    accumulate_grad_batches=train_config[
+                        "accumulate_grad_batches"],
+                    precision=train_config["precision"],
+                    max_epochs=train_config["max_epochs"],
+                    check_val_every_n_epoch=1,
+                    num_sanity_val_steps=0,
+                    enable_checkpointing=True,
+                    enable_progress_bar=True,
+                    callbacks=[checkpoint_best])
+                #trainer.fit(model)
+                #trainer.save_checkpoint(
+                #    os.path.join(checkpoint_base_path, "last.ckpt"))
+
+                metrics_base_path = os.path.join(train_config["data_path"],
+                                                 f"seed_{str(seed)}",
+                                                 "04_metrics",
+                                                 train_config["name"])
+                os.makedirs(metrics_base_path, exist_ok=True)
+
+                def save_metrics(dataset, checkpoint):
+                    with open(
+                            os.path.join(metrics_base_path,
+                                         f"{checkpoint}_{dataset}.pkl"),
+                            "wb") as file:
+                        pickle.dump(model.test_metrics.metrics, file)
+
+                # test last model
+                trainer.test(model, model.val_train_dataloader())
+                save_metrics("lowner_train", "last")
+                trainer.test(model, model.val_dataloader())
+                save_metrics("lowner_dev", "last")
+                trainer.test(model, model.test_dataloader())
+                save_metrics("lowner_test", "last")
+
+                # test best model
+                trainer.test(model,
+                             model.val_train_dataloader(),
+                             ckpt_path=checkpoint_best.best_model_path)
+                save_metrics("lowner_train", "best")
+                trainer.test(model,
+                             model.val_dataloader(),
+                             ckpt_path=checkpoint_best.best_model_path)
+                save_metrics("lowner_dev", "best")
+                trainer.test(model,
+                             model.test_dataloader(),
+                             ckpt_path=checkpoint_best.best_model_path)
+                save_metrics("lowner_test", "best")
+                trained = True
+            except RuntimeError as e:
+                print(e)
+                train_config["accumulate_grad_batches"] = grad_accum_steps[
+                    grad_accum_steps.index(
+                        train_config["accumulate_grad_batches"]) + 1]
+                train_config["train_batch_size"] = train_config[
+                    "train_batch_size"] // train_config[
+                        "accumulate_grad_batches"]
 
 
-def find_best_checkpoint_on_dev(output_dir: str,
-                                log_file: str = "eval_result_log.txt"):
-    with open(os.path.join(output_dir, log_file)) as f:
-        log_lines = f.readlines()
-
-    F1_PATTERN = re.compile(r"val_f1 reached \d+\.\d* \(best")
-    # val_f1 reached 0.00000 (best 0.00000)
-    CKPT_PATTERN = re.compile(r"saving model to \S+ as top")
-    checkpoint_info_lines = []
-    for log_line in log_lines:
-        if "saving model to" in log_line:
-            checkpoint_info_lines.append(log_line)
-    # example of log line
-    # Epoch 00000: val_f1 reached 0.00000 (best 0.00000), saving model to /data/xiaoya/outputs/glyce/0117/debug_5_12_2e-5_0.001_0.001_275_0.1_1_0.25/checkpoint/epoch=0.ckpt as top 20
-    best_f1_on_dev = 0
-    best_checkpoint_on_dev = 0
-    for checkpoint_info_line in checkpoint_info_lines:
-        current_f1 = float(
-            re.findall(F1_PATTERN, checkpoint_info_line)[0].replace(
-                "val_f1 reached ", "").replace(" (best", ""))
-        current_ckpt = re.findall(CKPT_PATTERN,
-                                  checkpoint_info_line)[0].replace(
-                                      "saving model to ",
-                                      "").replace(" as top", "")
-
-        if current_f1 >= best_f1_on_dev:
-            best_f1_on_dev = current_f1
-            best_checkpoint_on_dev = current_ckpt
-
-    return best_f1_on_dev, best_checkpoint_on_dev
-
-
-def evaluate():
-    parser = get_parser()
-    parser = Trainer.add_argparse_args(parser)
-    args = parser.parse_args()
-
-    model = NERTask.load_from_checkpoint(
-        checkpoint_path=args.checkpoint_path,
-        hparams_file=args.path_to_model_hparams_file,
-        map_location=None,
-        batch_size=1)
-    trainer = Trainer.from_argparse_args(args, deterministic=True)
-
-    trainer.test(model)
-
+# def evaluate():
+#     parser = get_parser()
+#     parser = Trainer.add_argparse_args(parser)
+#     args = parser.parse_args()
+#
+#     model = NERTask.load_from_checkpoint(
+#         checkpoint_path=args.checkpoint_path,
+#         hparams_file=args.path_to_model_hparams_file,
+#         map_location=None,
+#         batch_size=1)
+#     trainer = Trainer.from_argparse_args(args, deterministic=True)
+#
+#     trainer.test(model)
 
 if __name__ == "__main__":
     from multiprocessing import freeze_support

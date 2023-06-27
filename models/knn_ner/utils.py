@@ -12,7 +12,7 @@ import random
 import torch
 import numpy as np
 from lightning import seed_everything
-from typing import List
+from typing import List, Tuple
 
 
 def set_random_seed(seed: int):
@@ -27,7 +27,7 @@ def set_random_seed(seed: int):
 
 
 def collate_to_max_length(
-        batch: List[List[torch.Tensor]],
+        batch: List[Tuple[str, torch.Tensor, torch.Tensor, torch.Tensor]],
         max_len: int = None,
         fill_values: List[float] = None) -> List[torch.Tensor]:
     """
@@ -40,8 +40,10 @@ def collate_to_max_length(
         output: list of field batched data, which shape is [batch, max_length]
     """
     # [batch, num_fields]
+    doc_keys = [item[0] for item in batch]
+    tensors = [item[1:] for item in batch]
     lengths = np.array([[len(field_data) for field_data in sample]
-                        for sample in batch])
+                        for sample in tensors])
     batch_size, num_fields = lengths.shape
     fill_values = fill_values or [0.0] * num_fields
     # [num_fields]
@@ -50,15 +52,17 @@ def collate_to_max_length(
         assert max_lengths.max() <= max_len
         max_lengths = np.ones_like(max_lengths) * max_len
 
-    output = [
+    output = []
+    output.append(doc_keys)
+    output.extend([
         torch.full([batch_size, max_lengths[field_idx]],
                    fill_value=fill_values[field_idx],
-                   dtype=batch[0][field_idx].dtype)
+                   dtype=tensors[0][field_idx].dtype)
         for field_idx in range(num_fields)
-    ]
+    ])
     for sample_idx in range(batch_size):
         for field_idx in range(num_fields):
             # seq_length
-            data = batch[sample_idx][field_idx]
-            output[field_idx][sample_idx][:data.shape[0]] = data
+            data = tensors[sample_idx][field_idx]
+            output[field_idx + 1][sample_idx][:data.shape[0]] = data
     return output

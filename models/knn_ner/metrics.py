@@ -9,38 +9,43 @@
 @desc  :
 """
 
+import sys
+import os
+
+thesis_path = "/" + os.path.join(
+    *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-2])
+sys.path.append(thesis_path)
+
 import torch
-from typing import Any, List
-from pytorch_lightning.metrics.metric import TensorMetric
+from typing import Any, List, Optional
+from torchmetrics import Metric
+from models.metrics import ASPMetrics
 
 
-class SpanF1ForNER(TensorMetric):
+class SpanF1ForNER(Metric):
     """
     compute span-level F1 scores for named entity recognition task.
     """
-    def __init__(self,
-                 entity_labels: List[str] = None,
-                 reduce_group: Any = None,
-                 reduce_op: Any = None,
-                 save_prediction=False):
-        super(SpanF1ForNER, self).__init__(name="span_f1_for_ner",
-                                           reduce_group=reduce_group,
-                                           reduce_op=reduce_op)
+    higher_is_better = True
+    is_differentiable = False
+    full_state_update = False
+
+    def __init__(self, entity_labels: List[str]):
+        super().__init__()
         self.num_labels = len(entity_labels)
         self.entity_labels = entity_labels
         self.tags2label = {
             label_idx: label_item
             for label_idx, label_item in enumerate(entity_labels)
         }
-        self.save_prediction = save_prediction
-        if save_prediction:
-            self.pred_entity_lst = []
-            self.gold_entity_lst = []
+        self.metrics = ASPMetrics()
 
-    def forward(self,
-                pred_sequence_labels,
-                gold_sequence_labels,
-                sequence_mask=None):
+    def update(self,
+               ids,
+               word_maps,
+               pred_sequence_labels,
+               gold_sequence_labels,
+               sequence_mask=None):
         """
         Args:
             pred_sequence_labels: torch.LongTensor, shape of [batch_size, sequence_len]
@@ -48,15 +53,17 @@ class SpanF1ForNER(TensorMetric):
             sequence_mask: Optional[torch.LongTensor], shape of [batch_size, sequence_len].
                         1 for non-[PAD] tokens; 0 for [PAD] tokens
         """
-        true_positive, false_positive, true_negative, false_negative = 0, 0, 0, 0
         pred_sequence_labels = pred_sequence_labels.to("cpu").numpy().tolist()
         gold_sequence_labels = gold_sequence_labels.to("cpu").numpy().tolist()
+        word_maps = word_maps.to("cpu").numpy().tolist()
         if sequence_mask is not None:
             sequence_mask = sequence_mask.to("cpu").numpy().tolist()
             # [1, 1, 1, 0, 0, 0]
 
-        for item_idx, (pred_label_item, gold_label_item) in enumerate(
-                zip(pred_sequence_labels, gold_sequence_labels)):
+        for item_idx, (doc_id, subword_map, pred_label_item,
+                       gold_label_item) in enumerate(
+                           zip(ids, word_maps, pred_sequence_labels,
+                               gold_sequence_labels)):
             if sequence_mask is not None:
                 sequence_mask_item = sequence_mask[item_idx]
                 try:
@@ -68,12 +75,10 @@ class SpanF1ForNER(TensorMetric):
                 token_end_pos = len(gold_label_item)
 
             pred_label_item = [
-                self.tags2label[tmp]
-                for tmp in pred_label_item[1:token_end_pos]
+                self.tags2label[tmp] for tmp in pred_label_item[:token_end_pos]
             ]
             gold_label_item = [
-                self.tags2label[tmp]
-                for tmp in gold_label_item[1:token_end_pos]
+                self.tags2label[tmp] for tmp in gold_label_item[:token_end_pos]
             ]
 
             pred_entities = transform_entity_bmes_labels_to_spans(
@@ -81,42 +86,14 @@ class SpanF1ForNER(TensorMetric):
             gold_entities = transform_entity_bmes_labels_to_spans(
                 gold_label_item)
 
-            if self.save_prediction:
-                self.pred_entity_lst.append(pred_entities)
-                self.gold_entity_lst.append(gold_entities)
+            self.metrics.update(doc_id, pred_entities, gold_entities)
 
-            tp, fp, fn = count_confusion_matrix(pred_entities, gold_entities)
-            true_positive += tp
-            false_positive += fp
-            false_negative += fn
+    def compute(self):
+        return self.metrics.compute()
 
-        batch_confusion_matrix = torch.LongTensor(
-            [true_positive, false_positive, false_negative])
-        return batch_confusion_matrix
-
-    def compute_f1_using_confusion_matrix(self,
-                                          true_positive,
-                                          false_positive,
-                                          false_negative,
-                                          prefix="dev"):
-        """
-        compute f1 scores.
-        Description:
-            f1: 2 * precision * recall / (precision + recall)
-                - precision = true_positive / true_positive + false_positive
-                - recall = true_positive / true_positive + false_negative
-        Returns:
-            precision, recall, f1
-        """
-        precision = true_positive / (true_positive + false_positive + 1e-13)
-        recall = true_positive / (true_positive + false_negative + 1e-13)
-        f1 = 2 * precision * recall / (precision + recall + 1e-13)
-
-        if self.save_prediction and prefix == "test":
-            entity_tuple = (self.gold_entity_lst, self.pred_entity_lst)
-            return precision, recall, f1, entity_tuple
-
-        return precision, recall, f1, (None, None)
+    def reset(self):
+        super().reset()
+        self.metrics.reset()
 
 
 def count_confusion_matrix(pred_entities, gold_entities):
@@ -145,7 +122,7 @@ def transform_entity_bmes_labels_to_spans(label_sequence,
     while index < len(label_sequence):
         label = label_sequence[index]
         if label[0] == "S":
-            spans.append((label.split("-")[1], (index, index)))
+            spans.append((index, index, label.split("-")[1]))
         elif label[0] == "B":
             sign = 1
             start = index
@@ -153,22 +130,65 @@ def transform_entity_bmes_labels_to_spans(label_sequence,
             while label[0] != "E":
                 index += 1
                 if index >= len(label_sequence):
-                    spans.append((start_cate, (start, start)))
+                    spans.append((start, start, start_cate))
                     sign = 0
                     break
                 label = label_sequence[index]
                 if not (label[0] == "M" or label[0] == "E"):
-                    spans.append((start_cate, (start, start)))
+                    spans.append((start, start, start_cate))
                     sign = 0
                     break
                 if label.split("-")[1] != start_cate:
-                    spans.append((start_cate, (start, start)))
+                    spans.append((start, start, start_cate))
                     sign = 0
                     break
             if sign == 1:
-                spans.append((start_cate, (start, index)))
+                spans.append((start, index, start_cate))
         else:
             if label != "O":
                 pass
         index += 1
-    return [span for span in spans if span[0] not in classes_to_ignore]
+    return [span for span in spans if span[2] not in classes_to_ignore]
+
+
+def transform_entity_bio_labels_to_spans(label_sequence,
+                                         classes_to_ignore=None):
+    """
+    Given a sequence of BMES-{entity type} labels, extracts spans.
+    """
+    spans = []
+    classes_to_ignore = classes_to_ignore or []
+    index = 0
+    while index < len(label_sequence):
+        label = label_sequence[index]
+        if label[0] == "B":
+            sign = 1
+            start = index
+            start_type = label.split("-")[1]
+            while label[0] != "O":
+                index += 1
+                if index >= len(label_sequence):
+                    spans.append((start, start, start_type))
+                    sign = 0
+                    break
+                label = label_sequence[index]
+                if not label[0] == "I":
+                    spans.append((start, index, start_type))
+                    sign = 0
+                    break
+                if label.split("-")[1] != start_type:
+                    spans.append((start, start, start_type))
+                    sign = 0
+                    break
+            if sign == 1:
+                spans.append((start, index, start_type))
+        else:
+            if label != "O":
+                pass
+        index += 1
+    return [span for span in spans if span[2] not in classes_to_ignore]
+
+
+def token_span_to_word_span(token_entities, word_map):
+    return [(word_map[start], word_map[end], t)
+            for (start, end, t) in token_entities]
