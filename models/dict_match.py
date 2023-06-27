@@ -21,6 +21,7 @@ from lightning.pytorch.loggers import TensorBoardLogger
 
 
 class DictMatchDataset(Dataset):
+
     def __init__(self, json_path: str) -> None:
         super().__init__()
         with open(json_path, "r") as file:
@@ -42,6 +43,7 @@ def collate_dict_batch(batch: List[dict]):
 
 
 class DictMatch(pl.LightningModule):
+
     def __init__(self, gazetteer_paths: List[str], seed: int) -> None:
         super().__init__()
         gazetteer = []
@@ -51,17 +53,18 @@ class DictMatch(pl.LightningModule):
         gaz_init = defaultdict(set)
         for gaz in gazetteer:
             if "entity" in gaz:
-                gaz_init[" ".join(gaz["entity"].split(" "))].add(gaz["type"])
+                gaz_init[" ".join(gaz["entity"].strip().split(" ")).lower()].add(
+                    gaz["type"])
             elif "entities" in gaz:
                 for ent in gaz["entities"]:
                     gaz_init[" ".join(
-                        gaz["tokens"][ent["start"]:ent["end"]])].add(
+                        gaz["tokens"][ent["start"]:ent["end"]]).lower()].add(
                             ent["type"])
             elif "content" in gaz:
                 for ent in gaz["meta"]["entities"]:
-                    gaz_init[" ".join(gaz["content"].split(
-                        " ")[ent["start"]:ent["end"]])].add(ent["type"])
-        self.gaz = dict(gaz_init)
+                    gaz_init[" ".join(gaz["content"].strip().split(
+                        " ")[ent["start"]:ent["end"]]).lower()].add(ent["type"])
+            self.gaz = dict(gaz_init)
         self.test_metrics = ASPMetrics()
         self.seed = seed
 
@@ -78,7 +81,7 @@ class DictMatch(pl.LightningModule):
                 for n_gram in n_grams:
                     start = n_gram[0][0]
                     end = n_gram[-1][0]
-                    n_gram_tokens = " ".join(t[1] for t in n_gram)
+                    n_gram_tokens = " ".join(t[1] for t in n_gram).lower()
                     if n_gram_tokens in self.gaz and not (start, end) in [
                         (pred[0], pred[1]) for pred in predictions
                     ]:
@@ -208,13 +211,13 @@ def experiment01(gazetteer_name: str, gazetteer_paths: List[str]):
 
 
 if __name__ == "__main__":
-    experiment01("sent", [
-        "/home/loebbert/projects/thesis/data/multiconer/multiconer_sent.json"
-    ])
+    experiment01(
+        "sent",
+        [os.path.join(thesis_path, "data/multiconer/multiconer_sent.json")])
     experiment01(
         "lownergaz",
-        ["/home/loebbert/projects/thesis/data/mlowner/lowner_gazetteer.json"])
+        [os.path.join(thesis_path, "data/mlowner/lowner_gazetteer.json")])
     experiment01("lownergaz_sent", [
-        "/home/loebbert/projects/thesis/data/mlowner/lowner_gazetteer.json",
-        "/home/loebbert/projects/thesis/data/multiconer/multiconer_sent.json"
+        os.path.join(thesis_path, "data/multiconer/multiconer_sent.json"),
+        os.path.join(thesis_path, "data/mlowner/lowner_gazetteer.json")
     ])
