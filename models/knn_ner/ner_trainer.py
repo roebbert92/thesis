@@ -579,9 +579,9 @@ def experiment01():
         while not trained:
             try:
 
-                #model = NERTask(argparse.Namespace(**train_config))
-                model = NERTask.load_from_checkpoint(
-                    os.path.join(checkpoint_base_path, "last.ckpt"))
+                model = NERTask(argparse.Namespace(**train_config))
+                # model = NERTask.load_from_checkpoint(
+                #     os.path.join(checkpoint_base_path, "last.ckpt"))
 
                 trainer = pl.Trainer(
                     accelerator="gpu",
@@ -598,9 +598,9 @@ def experiment01():
                     enable_checkpointing=True,
                     enable_progress_bar=True,
                     callbacks=[checkpoint_best])
-                #trainer.fit(model)
-                #trainer.save_checkpoint(
-                #    os.path.join(checkpoint_base_path, "last.ckpt"))
+                trainer.fit(model)
+                trainer.save_checkpoint(
+                    os.path.join(checkpoint_base_path, "last.ckpt"))
 
                 metrics_base_path = os.path.join(train_config["data_path"],
                                                  f"seed_{str(seed)}",
