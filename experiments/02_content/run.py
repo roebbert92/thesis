@@ -56,6 +56,15 @@ def train_model(seed: int, gazetteer_size: int, error_percent_ratio: int,
                                         f"size_{gazetteer_size}",
                                         f"error_ratio_{error_percent_ratio}",
                                         f"error_data_{erroneous_data}")
+    os.makedirs(checkpoint_base_path, exist_ok=True)
+
+    if os.path.exists(os.path.join(
+            checkpoint_base_path, "last.ckpt")) and os.path.exists(
+                os.path.join(checkpoint_base_path, "best.ckpt")):
+        return os.path.join(checkpoint_base_path,
+                            "last.ckpt"), os.path.join(checkpoint_base_path,
+                                                       "best.ckpt")
+
     checkpoint_best = ModelCheckpoint(dirpath=checkpoint_base_path,
                                       filename="best",
                                       monitor="val_f1",
@@ -132,36 +141,41 @@ def test_model(config, best_ckpt_path, last_ckpt_path, dataset: Dataset, name):
                                      f"error_ratio_{error_percent_ratio}",
                                      f"error_data_{erroneous_data}")
     os.makedirs(metrics_base_path, exist_ok=True)
-    tb_logger = TensorBoardLogger(save_dir=os.path.join(
-        os.getcwd(), "lightning_logs"),
-                                  name="_".join([
-                                      str(seed), f"size_{gazetteer_size}",
-                                      f"error_ratio_{error_percent_ratio}",
-                                      f"error_data_{erroneous_data}"
-                                  ]),
-                                  version=0)
-    tokenizer = get_tokenizer(config)
-    model = ASPT5Model(config, tokenizer)
-    trainer = pl.Trainer(accelerator="gpu",
-                         logger=tb_logger,
-                         devices=1,
-                         precision=config["precision"],
-                         num_sanity_val_steps=0,
-                         enable_checkpointing=False,
-                         enable_progress_bar=True)
-    val_loader = get_validation_dataloader(config, dataset)
+    if not os.path.exists(
+            os.path.join(metrics_base_path,
+                         f"last_{dataset}.pkl")) and not os.path.exists(
+                             os.path.join(metrics_base_path,
+                                          f"best_{dataset}.pkl")):
+        tb_logger = TensorBoardLogger(save_dir=os.path.join(
+            os.getcwd(), "lightning_logs"),
+                                      name="_".join([
+                                          str(seed), f"size_{gazetteer_size}",
+                                          f"error_ratio_{error_percent_ratio}",
+                                          f"error_data_{erroneous_data}"
+                                      ]),
+                                      version=0)
+        tokenizer = get_tokenizer(config)
+        model = ASPT5Model(config, tokenizer)
+        trainer = pl.Trainer(accelerator="gpu",
+                             logger=tb_logger,
+                             devices=1,
+                             precision=config["precision"],
+                             num_sanity_val_steps=0,
+                             enable_checkpointing=False,
+                             enable_progress_bar=True)
+        val_loader = get_validation_dataloader(config, dataset)
 
-    def save_metrics(dataset, checkpoint):
-        with open(
-                os.path.join(metrics_base_path, f"{checkpoint}_{dataset}.pkl"),
-                "wb") as file:
-            pickle.dump(model.test_metrics, file)
+        def save_metrics(dataset, checkpoint):
+            with open(
+                    os.path.join(metrics_base_path,
+                                 f"{checkpoint}_{dataset}.pkl"), "wb") as file:
+                pickle.dump(model.test_metrics, file)
 
-    # test model
-    trainer.test(model, val_loader, ckpt_path=last_ckpt_path)
-    save_metrics(name, "last")
-    trainer.test(model, val_loader, ckpt_path=best_ckpt_path)
-    save_metrics(name, "best")
+        # test model
+        trainer.test(model, val_loader, ckpt_path=last_ckpt_path)
+        save_metrics(name, "last")
+        trainer.test(model, val_loader, ckpt_path=best_ckpt_path)
+        save_metrics(name, "best")
 
 
 if __name__ == "__main__":
@@ -207,7 +221,7 @@ if __name__ == "__main__":
                     seed_everything(seed)
                     error_ratio = error_percent_ratio / 100
                     tokenized_files = experiment_data["02_tokenized_dataset"][
-                        f"{seed}_{gazetteer_size}_{error_percent_ratio}_{erroneous_data}"]
+                        f"{seed}_{gazetteer_size}_{error_percent_ratio}"]
 
                     if erroneous_data == "both":
                         processor = NERDataProcessor(
