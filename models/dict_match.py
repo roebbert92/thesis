@@ -21,6 +21,7 @@ from lightning.pytorch.loggers import TensorBoardLogger
 
 
 class DictMatchDataset(Dataset):
+
     def __init__(self, json_path: str) -> None:
         super().__init__()
         with open(json_path, "r") as file:
@@ -42,28 +43,34 @@ def collate_dict_batch(batch: List[dict]):
 
 
 class DictMatch(pl.LightningModule):
+
     def __init__(self, gazetteer_paths: List[str], seed: int) -> None:
         super().__init__()
         gazetteer = []
         for gazetteer_path in gazetteer_paths:
             with open(gazetteer_path, "r") as file:
                 gazetteer.extend(json.load(file))
-        gaz_init = defaultdict(set)
+        gaz_init = defaultdict(lambda: defaultdict(int))
         for gaz in gazetteer:
             if "entity" in gaz:
-                gaz_init[" ".join(
-                    gaz["entity"].strip().split(" ")).lower()].add(gaz["type"])
+                gaz_init[" ".join(gaz["entity"].strip().split(" ")).lower()][
+                    gaz["type"]] += 1
             elif "entities" in gaz:
                 for ent in gaz["entities"]:
                     gaz_init[" ".join(
-                        gaz["tokens"][ent["start"]:ent["end"]]).lower()].add(
-                            ent["type"])
+                        gaz["tokens"][ent["start"]:ent["end"]]).lower()][
+                            ent["type"]] += 1
             elif "content" in gaz:
                 for ent in gaz["meta"]["entities"]:
-                    gaz_init[" ".join(gaz["content"].strip().split(" ")
-                                      [ent["start"]:ent["end"]]).lower()].add(
-                                          ent["type"])
-        self.gaz = dict(gaz_init)
+                    gaz_init[" ".join(
+                        gaz["content"].strip().split(" ")
+                        [ent["start"]:ent["end"]]).lower()][ent["type"]] += 1
+        self.gaz = {}
+        for gaz, types in gaz_init.items():
+            total = sum(types.values())
+            keys = list(types.keys())
+            self.gaz[gaz] = (keys, [types[key] / total for key in keys])
+
         self.test_metrics = ASPMetrics()
         self.seed = seed
 
@@ -84,9 +91,10 @@ class DictMatch(pl.LightningModule):
                     if n_gram_tokens in self.gaz and not (start, end) in [
                         (pred[0], pred[1]) for pred in predictions
                     ]:
-                        predictions.append(
-                            (start, end,
-                             random.choice(list(self.gaz[n_gram_tokens]))))
+                        labels, weights = self.gaz[n_gram_tokens]
+                        choosen_label = random.choices(labels,
+                                                       weights=weights)[0]
+                        predictions.append((start, end, choosen_label))
                 not_predicted = [[]]
                 current_prediction_idx = -1
                 start_predictions = [pred[0] for pred in predictions]
