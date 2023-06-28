@@ -232,11 +232,13 @@ def prep_tokenized_dataset(config, files, dataset_paths, search_results_paths,
             config, files, dataset_paths[f"error_lowner_{part}"],
             error_search_results_error_part, tokenized_data_path,
             f"error_search_error_{part}")
-    with open(search_results_paths["error_search_results_test"], "rb") as file:
-        error_search_results_test = pickle.load(file)
-    tokenized_files["error_search_test"] = get_tokenized_filepath(
-        config, files, files["test"], error_search_results_test,
-        tokenized_data_path, "error_search_test")
+    for part in ["train", "dev", "test"]:
+        with open(search_results_paths[f"error_search_results_{part}"],
+                  "rb") as file:
+            error_search_results_part = pickle.load(file)
+        tokenized_files[f"error_search_{part}"] = get_tokenized_filepath(
+            config, files, files[part], error_search_results_part,
+            tokenized_data_path, f"error_search_{part}")
 
     # prep sampled clean lowner train, dev, test
     for part in ["train", "dev", "test"]:
@@ -246,6 +248,16 @@ def prep_tokenized_dataset(config, files, dataset_paths, search_results_paths,
         tokenized_files[f"sampled_search_{part}"] = get_tokenized_filepath(
             config, files, files[part], error_search_results_error_part,
             tokenized_data_path, f"sampled_search_{part}")
+
+    for part in ["train", "dev"]:
+        with open(search_results_paths[f"sampled_search_results_error_{part}"],
+                  "rb") as file:
+            error_search_results_error_part = pickle.load(file)
+        tokenized_files[
+            f"sampled_search_error_{part}"] = get_tokenized_filepath(
+                config, files, dataset_paths[f"error_lowner_{part}"],
+                error_search_results_error_part, tokenized_data_path,
+                f"sampled_search_error_{part}")
 
     # prep full clean lowner train, dev, test
     for part in ["train", "dev", "test"]:
@@ -272,12 +284,15 @@ def get_search_results(config, files, dataset_paths, seed: int,
         search_results_paths[
             f"error_search_results_error_{part}"] = os.path.join(
                 search_base_path, f"error_search_results_error_{part}.pkl")
-    search_results_paths["error_search_results_test"] = os.path.join(
-        search_base_path, "error_search_results_test.pkl")
+    for part in ["train", "dev", "test"]:
+        search_results_paths[f"error_search_results_{part}"] = os.path.join(
+            search_base_path, f"error_search_results_{part}.pkl")
 
     if any([
             not os.path.exists(path) for path in [
                 search_results_paths["error_search_results_test"],
+                search_results_paths["error_search_results_dev"],
+                search_results_paths["error_search_results_train"],
                 search_results_paths["error_search_results_error_train"],
                 search_results_paths["error_search_results_error_dev"],
             ]
@@ -307,20 +322,29 @@ def get_search_results(config, files, dataset_paths, seed: int,
                     "wb") as file:
                 pickle.dump(error_search_results_error_part, file)
 
-        error_search_results_test = get_search_results_for_file(
-            error_sampled_search, files["test"])
-        with open(search_results_paths["error_search_results_test"],
-                  "wb") as file:
-            pickle.dump(error_search_results_test, file)
+        for part in ["train", "dev", "test"]:
+            error_search_results_test = get_search_results_for_file(
+                error_sampled_search, files[part])
+            with open(search_results_paths[f"error_search_results_{part}"],
+                      "wb") as file:
+                pickle.dump(error_search_results_test, file)
 
     # setup database for sampled multiconer + lownergaz
     for part in ["train", "dev", "test"]:
         search_results_paths[f"sampled_search_results_{part}"] = os.path.join(
             search_base_path, f"sampled_search_results_{part}.pkl")
+    for part in ["train", "dev"]:
+        search_results_paths[
+            f"sampled_search_results_error_{part}"] = os.path.join(
+                search_base_path, f"sampled_search_results_error_{part}.pkl")
     if any([
             not os.path.exists(
                 search_results_paths[f"sampled_search_results_{part}"])
             for part in ["train", "dev", "test"]
+    ]) or any([
+            not os.path.exists(
+                search_results_paths[f"sampled_search_results_error_{part}"])
+            for part in ["train", "dev"]
     ]):
         with open(dataset_paths["clean_sampled_multiconer"]) as file:
             sampled_multiconer = json.load(file)
@@ -343,6 +367,14 @@ def get_search_results(config, files, dataset_paths, seed: int,
                 sampled_search, files[part])
             with open(search_results_paths[f"sampled_search_results_{part}"],
                       "wb") as file:
+                pickle.dump(sampled_search_results_part, file)
+
+        for part in ["train", "dev"]:
+            sampled_search_results_part = get_search_results_for_file(
+                sampled_search, dataset_paths[f"error_lowner_{part}"])
+            with open(
+                    search_results_paths[
+                        f"sampled_search_results_error_{part}"], "wb") as file:
                 pickle.dump(sampled_search_results_part, file)
 
     return seed, gazetteer_size, error_percent_ratio, search_results_paths
@@ -469,8 +501,11 @@ if __name__ == "__main__":
     seeds = [1, 2, 3]
     gazetteer_sizes = [2000, 4000, 6000, 8000]
     error_percent_ratios = [0, 5, 10, 15]
-    experiment_data = generate_experiment_data(seeds, gazetteer_sizes,
-                                               error_percent_ratios)
+    experiment_data = generate_experiment_data(
+        seeds,
+        gazetteer_sizes,
+        error_percent_ratios,
+    )
     with open("experiment_data_paths.json", "w") as file:
         json.dump(experiment_data, file)
     print("done")
