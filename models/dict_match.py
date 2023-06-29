@@ -21,7 +21,6 @@ from lightning.pytorch.loggers import TensorBoardLogger
 
 
 class DictMatchDataset(Dataset):
-
     def __init__(self, json_path: str) -> None:
         super().__init__()
         with open(json_path, "r") as file:
@@ -36,14 +35,13 @@ class DictMatchDataset(Dataset):
 
 def collate_dict_batch(batch: List[dict]):
     return [item["doc_id"]
-            for item in batch], [item["tokens"] for item in batch
-                                 ], [[(ent["start"], ent["end"] -1, ent["type"])
-                                      for ent in item["entities"]]
-                                     for item in batch]
+            for item in batch], [item["tokens"] for item in batch], [[
+                (ent["start"], ent["end"] - 1, ent["type"])
+                for ent in item["entities"]
+            ] for item in batch]
 
 
 class DictMatch(pl.LightningModule):
-
     def __init__(self, gazetteer_paths: List[str], seed: int) -> None:
         super().__init__()
         gazetteer = []
@@ -61,10 +59,14 @@ class DictMatch(pl.LightningModule):
                         gaz["tokens"][ent["start"]:ent["end"]]).lower()][
                             ent["type"]] += 1
             elif "content" in gaz:
-                for ent in gaz["meta"]["entities"]:
-                    gaz_init[" ".join(
-                        gaz["content"].strip().split(" ")
-                        [ent["start"]:ent["end"]]).lower()][ent["type"]] += 1
+                if "entities" in gaz["meta"]:
+                    for ent in gaz["meta"]["entities"]:
+                        gaz_init[" ".join(gaz["content"].strip().split(" ")
+                                          [ent["start"]:ent["end"]]).lower()][
+                                              ent["type"]] += 1
+                else:
+                    gaz_init[" ".join(gaz["content"].strip().split(
+                        " ")).lower()][gaz["meta"]["type"]] += 1
         self.gaz = {}
         for gaz, types in gaz_init.items():
             total = sum(types.values())
@@ -222,9 +224,16 @@ if __name__ == "__main__":
         "sent",
         [os.path.join(thesis_path, "data/multiconer/multiconer_sent.json")])
     experiment01(
+        "gaz",
+        [os.path.join(thesis_path, "data/multiconer/multiconer_gaz.json")])
+    experiment01(
         "lownergaz",
-        [os.path.join(thesis_path, "data/mlowner/lowner_gazetteer.json")])
+        [os.path.join(thesis_path, "data/mlowner/lowner_gazetteer_db.json")])
     experiment01("lownergaz_sent", [
         os.path.join(thesis_path, "data/multiconer/multiconer_sent.json"),
-        os.path.join(thesis_path, "data/mlowner/lowner_gazetteer.json")
+        os.path.join(thesis_path, "data/mlowner/lowner_gazetteer_db.json")
+    ])
+    experiment01("gaz_sent", [
+        os.path.join(thesis_path, "data/multiconer/multiconer_sent.json"),
+        os.path.join(thesis_path, "data/multiconer/multiconer_gaz.json")
     ])
