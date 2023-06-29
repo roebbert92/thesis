@@ -21,6 +21,8 @@ from data_preprocessing.tensorize import NERCollator, NERDataProcessor, ner_coll
 from models.asp_t5 import ASPT5Model, get_tokenizer
 from pipelines.evaluation import factors
 from configs.asp_t5 import T5_ASP_LOWNERGAZ_SENT
+import shutil
+from glob import glob
 
 
 def get_validation_dataloader(config, dataset: Dataset):
@@ -57,10 +59,11 @@ def train_model(seed: int, gazetteer_size: int, error_percent_ratio: int,
                                         f"error_ratio_{error_percent_ratio}",
                                         f"error_data_{erroneous_data}")
     os.makedirs(checkpoint_base_path, exist_ok=True)
-
+    ckpt_files = list(glob(os.path.join(checkpoint_base_path, "*.ckpt")))
     if os.path.exists(os.path.join(
             checkpoint_base_path, "last.ckpt")) and os.path.exists(
-                os.path.join(checkpoint_base_path, "best.ckpt")):
+                os.path.join(checkpoint_base_path,
+                             "best.ckpt")) and len(ckpt_files) == 2:
         return os.path.join(checkpoint_base_path,
                             "last.ckpt"), os.path.join(checkpoint_base_path,
                                                        "best.ckpt")
@@ -70,6 +73,9 @@ def train_model(seed: int, gazetteer_size: int, error_percent_ratio: int,
                                       monitor="val_f1",
                                       mode="max",
                                       save_top_k=1)
+
+    for ckpt_path in ckpt_files:
+        os.remove(ckpt_path)
 
     tb_logger = TensorBoardLogger(
         save_dir=os.path.join(os.getcwd(), "lightning_logs"),
@@ -141,41 +147,48 @@ def test_model(config, best_ckpt_path, last_ckpt_path, dataset: Dataset, name):
                                      f"error_ratio_{error_percent_ratio}",
                                      f"error_data_{erroneous_data}")
     os.makedirs(metrics_base_path, exist_ok=True)
-    if not os.path.exists(
-            os.path.join(metrics_base_path,
-                         f"last_{dataset}.pkl")) and not os.path.exists(
-                             os.path.join(metrics_base_path,
-                                          f"best_{dataset}.pkl")):
-        tb_logger = TensorBoardLogger(save_dir=os.path.join(
-            os.getcwd(), "lightning_logs"),
-                                      name="_".join([
-                                          str(seed), f"size_{gazetteer_size}",
-                                          f"error_ratio_{error_percent_ratio}",
-                                          f"error_data_{erroneous_data}"
-                                      ]),
-                                      version=0)
-        tokenizer = get_tokenizer(config)
-        model = ASPT5Model(config, tokenizer)
-        trainer = pl.Trainer(accelerator="gpu",
-                             logger=tb_logger,
-                             devices=1,
-                             precision=config["precision"],
-                             num_sanity_val_steps=0,
-                             enable_checkpointing=False,
-                             enable_progress_bar=True)
-        val_loader = get_validation_dataloader(config, dataset)
+    if os.path.exists(os.path.join(
+            metrics_base_path, f"last_{name}.pkl")) and os.path.exists(
+                os.path.join(metrics_base_path, f"best_{name}.pkl")):
+        return
+    tb_logger = TensorBoardLogger(save_dir=os.path.join(
+        os.getcwd(), "lightning_logs"),
+                                  name="_".join([
+                                      str(seed), f"size_{gazetteer_size}",
+                                      f"error_ratio_{error_percent_ratio}",
+                                      f"error_data_{erroneous_data}"
+                                  ]),
+                                  version=0)
+    tokenizer = get_tokenizer(config)
+    model = ASPT5Model(config, tokenizer)
+    trainer = pl.Trainer(accelerator="gpu",
+                         logger=tb_logger,
+                         devices=1,
+                         precision=config["precision"],
+                         num_sanity_val_steps=0,
+                         enable_checkpointing=False,
+                         enable_progress_bar=True)
+    val_loader = get_validation_dataloader(config, dataset)
 
-        def save_metrics(dataset, checkpoint):
-            with open(
-                    os.path.join(metrics_base_path,
-                                 f"{checkpoint}_{dataset}.pkl"), "wb") as file:
-                pickle.dump(model.test_metrics, file)
+    def save_metrics(dataset, checkpoint):
+        with open(
+                os.path.join(metrics_base_path, f"{checkpoint}_{dataset}.pkl"),
+                "wb") as file:
+            pickle.dump(model.test_metrics, file)
 
-        # test model
-        trainer.test(model, val_loader, ckpt_path=last_ckpt_path)
-        save_metrics(name, "last")
+    # check if ckpts are the same
+    last_ckpt_epoch = torch.load(last_ckpt_path)["epoch"]
+    best_ckpt_epoch = torch.load(best_ckpt_path)["epoch"]
+
+    # test model
+    trainer.test(model, val_loader, ckpt_path=last_ckpt_path)
+    save_metrics(name, "last")
+    if last_ckpt_epoch != best_ckpt_epoch:
         trainer.test(model, val_loader, ckpt_path=best_ckpt_path)
         save_metrics(name, "best")
+    else:
+        shutil.copy(os.path.join(metrics_base_path, f"last_{name}.pkl"),
+                    os.path.join(metrics_base_path, f"best_{name}.pkl"))
 
 
 if __name__ == "__main__":
@@ -201,7 +214,8 @@ if __name__ == "__main__":
         os.path.join(thesis_path, "experiments", "02_content", "data")
     })
 
-    data_path = "experiment_data_paths.json"
+    data_path = os.path.join(thesis_path, "experiments", "02_content",
+                             "experiment_data_paths.json")
     if os.path.exists(data_path):
         with open(data_path) as file:
             experiment_data = json.load(file)
