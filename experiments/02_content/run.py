@@ -181,7 +181,7 @@ def test_model(config, best_ckpt_path, last_ckpt_path, dataset: Dataset, name):
             pickle.dump(model.test_metrics, file)
 
     # check if ckpts are the same
-    last_ckpt_epoch = torch.load(last_ckpt_path)["epoch"]
+    last_ckpt_epoch = torch.load(last_ckpt_path)["epoch"] - 1
     best_ckpt_epoch = torch.load(best_ckpt_path)["epoch"]
 
     # test model
