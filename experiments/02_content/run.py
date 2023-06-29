@@ -136,6 +136,10 @@ def train_model(seed: int, gazetteer_size: int, error_percent_ratio: int,
                 "batch_size"] // train_config["gradient_accumulation_steps"]
             train_loader, dev_val_loader = get_dataloaders()
             model, trainer = get_model_trainer()
+            ckpt_files = list(
+                glob(os.path.join(checkpoint_base_path, "*.ckpt")))
+            for ckpt_path in ckpt_files:
+                os.remove(ckpt_path)
     return os.path.join(checkpoint_base_path,
                         "last.ckpt"), os.path.join(checkpoint_base_path,
                                                    "best.ckpt")
