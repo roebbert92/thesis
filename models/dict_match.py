@@ -37,7 +37,7 @@ class DictMatchDataset(Dataset):
 def collate_dict_batch(batch: List[dict]):
     return [item["doc_id"]
             for item in batch], [item["tokens"] for item in batch
-                                 ], [[(ent["start"], ent["end"], ent["type"])
+                                 ], [[(ent["start"], ent["end"] -1, ent["type"])
                                       for ent in item["entities"]]
                                      for item in batch]
 
@@ -86,7 +86,7 @@ class DictMatch(pl.LightningModule):
                         n_grams.extend(ngrams(available, n_gram_len))
                 for n_gram in n_grams:
                     start = n_gram[0][0]
-                    end = n_gram[-1][0] + 1
+                    end = n_gram[-1][0]
                     n_gram_tokens = " ".join(t[1] for t in n_gram).lower()
                     if n_gram_tokens in self.gaz and not (start, end) in [
                         (pred[0], pred[1]) for pred in predictions
