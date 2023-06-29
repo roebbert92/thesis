@@ -228,6 +228,9 @@ if __name__ == "__main__":
     for gazetteer_size in gazetteer_sizes:
         for error_percent_ratio in error_percent_ratios:
             for erroneous_data in erroneous_data_parts:
+                if erroneous_data in ["train", "gazetteer"
+                                      ] and error_percent_ratio == 0:
+                    continue
                 for seed in seeds:
                     # seed
                     if "PL_GLOBAL_SEED" in os.environ:
