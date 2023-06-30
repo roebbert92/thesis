@@ -18,6 +18,15 @@ from collections import defaultdict
 from data_metrics.entity_coverage_ratio import entity_coverage_ratio, entity_coverage_ratio_precounted, count_entities
 from data_metrics.search_sample_similarity import get_search_sample_similarity
 from tqdm import tqdm
+from evaluations.utils import MODEL_ORDER, PLOT_MODEL_NAMES
+import matplotlib.pyplot as plt
+
+plt.rcParams.update({
+    'mathtext.default': 'regular',
+    "mathtext.fontset":"cm",
+    "font.family": "serif",
+    "font.size": 14
+})
 
 
 def init_process_metrics_file(d, t):
@@ -432,6 +441,10 @@ def aggregate_per_sample_eecr_metrics(metrics_df: pd.DataFrame):
                                   index=["model", "dataset"],
                                   aggfunc="mean").reset_index()
 
+def aggregate_per_sample_ecr_classes(metrics_df: pd.DataFrame):
+    ECR_CLASSES_ORDER = ["ρ=1", "ρ ∈ (0.5,1)", "ρ ∈ (0,0.5]", "ρ=0∧C≠0", "ρ=0∧C=0"]
+    return metrics_df.pivot_table(values=ECR_CLASSES_ORDER, index=["model", "dataset"], aggfunc="sum")[ECR_CLASSES_ORDER].reset_index()
+
 def get_entity_coverages(dataset: str):
     # combine to one table
     labeled_data_eecr_df = get_labeled_data_entity_coverage()
@@ -442,7 +455,13 @@ def get_entity_coverages(dataset: str):
     
     eecr_table = labeled_data_eecr_df[["model", "dataset", "eecr"]].set_index(["model", "dataset"]).join(agg_labeled_data_eecr_sample_df.set_index(["model", "dataset"]), on=["model", "dataset"], lsuffix="_labeled_data").join(agg_search_results_data_eecr.set_index(["model", "dataset"]), on=["model", "dataset"], lsuffix="_labeled_data_per_sample", rsuffix="_search_results").reset_index()
     return eecr_table[eecr_table["dataset"]==dataset][["model", "eecr_labeled_data", "eecr_labeled_data_per_sample", "eecr_search_results"]]
-    
+
+def get_ecr_plotable_table(ecr_df: pd.DataFrame, dataset: str):
+    plt_ecr_df = ecr_df[ecr_df["dataset"]==dataset].loc[:, ~ecr_df.columns.isin(["eecr", "dataset"])]
+    plt_ecr_df = plt_ecr_df.sort_values("model", key=lambda x: x.apply(lambda y: MODEL_ORDER.get(y, 1000)))
+    plt_ecr_df["Models"] = plt_ecr_df["model"].apply(lambda x: PLOT_MODEL_NAMES[x])
+    plt_ecr_df = plt_ecr_df.set_index("Models")
+    return plt_ecr_df.loc[:, ~plt_ecr_df.columns.isin(["model"])].T
 
 
 def get_search_results_data_ccr_metrics():

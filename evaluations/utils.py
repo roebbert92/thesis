@@ -2,11 +2,7 @@ from typing import Dict, List
 import pandas as pd
 from itertools import product
 
-
-def get_correct_latex_format(df: pd.DataFrame, columns: List[str],
-                             column_names: Dict[str, str]):
-    # sort by model name
-    model_order = {
+MODEL_ORDER = {
         key: idx
         for idx, key in enumerate([
             "flair_roberta", "t5_asp", "dict_match_gaz", "dict_match_sent",
@@ -15,11 +11,7 @@ def get_correct_latex_format(df: pd.DataFrame, columns: List[str],
             "t5_asp_lownergaz", "t5_asp_gaz_sent", "t5_asp_lownergaz_sent"
         ])
     }
-    sorted_df = df[["model", *columns]].sort_values(
-        "model", key=lambda x: x.apply(lambda y: model_order.get(y, 1000)))
-
-    # rename models to latex names
-    model_names = {
+LATEX_MODEL_NAMES = {
         "flair_roberta": "FLAIR\textsubscript{RoBERTa-Large}",
         "t5_asp": "T5-ASP",
         "dict_match_gaz": "DictMatch\textsubscript{Gaz}",
@@ -33,7 +25,30 @@ def get_correct_latex_format(df: pd.DataFrame, columns: List[str],
         "t5_asp_gaz_sent": "T5-ASP\textsubscript{Gaz+Sent}",
         "t5_asp_lownergaz_sent": "T5-ASP\textsubscript{LownerGaz+Sent}"
     }
-    sorted_df["Models"] = sorted_df["model"].apply(lambda x: model_names[x])
+
+PLOT_MODEL_NAMES = {
+        "flair_roberta": r"FLAIR$_{RoBERTa-Large}$",
+        "t5_asp": r"T5-ASP",
+        "dict_match_gaz": r"DictMatch$_{Gaz}$",
+        "dict_match_sent": r"DictMatch$_{Sent}$",
+        "dict_match_lownergaz": r"DictMatch$_{LownerGaz}$",
+        "dict_match_lownergaz_sent": r"DictMatch$_{LownerGaz+Sent}$",
+        "dict_match_gaz_sent": r"DictMatch$_{Gaz+Sent}$",
+        "t5_asp_gaz": r"T5-ASP$_{Gaz}$",
+        "t5_asp_sent": r"T5-ASP$_{Sent}$",
+        "t5_asp_lownergaz": r"T5-ASP$_{LownerGaz}$",
+        "t5_asp_gaz_sent": r"T5-ASP$_{Gaz+Sent}$",
+        "t5_asp_lownergaz_sent": r"T5-ASP$_{LownerGaz+Sent}$"
+    }
+
+def get_correct_latex_format(df: pd.DataFrame, columns: List[str],
+                             column_names: Dict[str, str]):
+    # sort by model name
+    sorted_df = df[["model", *columns]].sort_values(
+        "model", key=lambda x: x.apply(lambda y: MODEL_ORDER.get(y, 1000)))
+
+    # rename models to latex names
+    sorted_df["Models"] = sorted_df["model"].apply(lambda x: LATEX_MODEL_NAMES[x])
     # combine mean + std in one column
     column_depth = sorted_df.columns.nlevels
     if column_depth == 1:
