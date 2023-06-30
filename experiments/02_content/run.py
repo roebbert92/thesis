@@ -181,7 +181,7 @@ def test_model(config, best_ckpt_path, last_ckpt_path, dataset: Dataset, name):
             pickle.dump(model.test_metrics, file)
 
     # check if ckpts are the same
-    last_ckpt_epoch = torch.load(last_ckpt_path)["epoch"]
+    last_ckpt_epoch = torch.load(last_ckpt_path)["epoch"] - 1
     best_ckpt_epoch = torch.load(best_ckpt_path)["epoch"]
 
     # test model
@@ -207,6 +207,14 @@ if __name__ == "__main__":
                               "lowner_types.json"),
     }
 
+    already_computed_path = os.path.join(thesis_path, "experiments",
+                                         "02_content",
+                                         "already_computed_runs.json")
+    already_computed = []
+    if os.path.exists(already_computed_path):
+        with open(already_computed_path, "r") as file:
+            already_computed = json.load(file)
+
     seeds = [1, 2, 3]
     gazetteer_sizes = [2000, 4000, 6000, 8000]
     error_percent_ratios = [0, 5, 10, 15]
@@ -226,116 +234,132 @@ if __name__ == "__main__":
     else:
         experiment_data = generate_experiment_data(seeds, gazetteer_sizes,
                                                    error_percent_ratios)
-    with open("experiment_data_paths.json", "w") as file:
+    with open(data_path, "w") as file:
         json.dump(experiment_data, file)
 
-    for gazetteer_size in gazetteer_sizes:
-        for error_percent_ratio in error_percent_ratios:
-            for erroneous_data in erroneous_data_parts:
-                if erroneous_data in ["train", "gazetteer"
-                                      ] and error_percent_ratio == 0:
-                    continue
-                for seed in seeds:
-                    # seed
-                    if "PL_GLOBAL_SEED" in os.environ:
-                        del os.environ["PL_GLOBAL_SEED"]
-                    seed_everything(seed)
-                    error_ratio = error_percent_ratio / 100
-                    tokenized_files = experiment_data["02_tokenized_dataset"][
-                        f"{seed}_{gazetteer_size}_{error_percent_ratio}"]
+    try:
+        for gazetteer_size in gazetteer_sizes:
+            for error_percent_ratio in error_percent_ratios:
+                for erroneous_data in erroneous_data_parts:
+                    for seed in seeds:
+                        if [
+                                gazetteer_size, error_percent_ratio,
+                                erroneous_data, seed
+                        ] in already_computed:
+                            continue
+                        # seed
+                        if "PL_GLOBAL_SEED" in os.environ:
+                            del os.environ["PL_GLOBAL_SEED"]
+                        seed_everything(seed)
+                        error_ratio = error_percent_ratio / 100
+                        tokenized_files = experiment_data[
+                            "02_tokenized_dataset"][
+                                f"{seed}_{gazetteer_size}_{error_percent_ratio}"]
 
-                    if erroneous_data == "both":
+                        if erroneous_data == "both":
+                            processor = NERDataProcessor(
+                                config,
+                                get_tokenizer(config),
+                                tokenized_files["error_search_error_train"],
+                                tokenized_files["error_search_error_dev"],
+                                tokenized_files["error_search_test"],
+                                files["types"],
+                                use_cache=False)
+                        elif erroneous_data == "gazetteer":
+                            processor = NERDataProcessor(
+                                config,
+                                get_tokenizer(config),
+                                tokenized_files["error_search_train"],
+                                tokenized_files["error_search_dev"],
+                                tokenized_files["error_search_test"],
+                                files["types"],
+                                use_cache=False)
+                        else:
+                            processor = NERDataProcessor(
+                                config,
+                                get_tokenizer(config),
+                                tokenized_files["sampled_search_error_train"],
+                                tokenized_files["sampled_search_error_dev"],
+                                tokenized_files["sampled_search_test"],
+                                files["types"],
+                                use_cache=False)
+
+                        config["num_labels"] = len(processor.labels)
+
+                        error_search_error_train, error_search_error_dev, error_search_test = processor.get_tensor_samples(
+                        )
+                        config["train_len"] = len(error_search_error_train)
+
+                        # train model on erroneous lowner train + validate on erroneous lowner dev
+                        last_ckpt, best_ckpt = train_model(
+                            seed, gazetteer_size, error_percent_ratio,
+                            erroneous_data, config, error_search_error_train,
+                            error_search_error_dev)
+
+                        # test model on erroneous lowner train, dev + clean lowner test
+                        test_model(config, best_ckpt, last_ckpt,
+                                   error_search_error_train,
+                                   "error_search_error_train")
+                        test_model(config, best_ckpt, last_ckpt,
+                                   error_search_error_dev,
+                                   "error_search_error_dev")
+                        test_model(config, best_ckpt, last_ckpt,
+                                   error_search_test, "error_search_test")
+
+                        # test model on clean lowner train, dev, test with clean sampled search
                         processor = NERDataProcessor(
                             config,
                             get_tokenizer(config),
-                            tokenized_files["error_search_error_train"],
-                            tokenized_files["error_search_error_dev"],
-                            tokenized_files["error_search_test"],
-                            files["types"],
-                            use_cache=False)
-                    elif erroneous_data == "gazetteer":
-                        processor = NERDataProcessor(
-                            config,
-                            get_tokenizer(config),
-                            tokenized_files["error_search_train"],
-                            tokenized_files["error_search_dev"],
-                            tokenized_files["error_search_test"],
-                            files["types"],
-                            use_cache=False)
-                    else:
-                        processor = NERDataProcessor(
-                            config,
-                            get_tokenizer(config),
-                            tokenized_files["sampled_search_error_train"],
-                            tokenized_files["sampled_search_error_dev"],
+                            tokenized_files["sampled_search_train"],
+                            tokenized_files["sampled_search_dev"],
                             tokenized_files["sampled_search_test"],
                             files["types"],
                             use_cache=False)
+                        config["num_labels"] = len(processor.labels)
 
-                    config["num_labels"] = len(processor.labels)
+                        sampled_search_train, sampled_search_dev, sampled_search_test = processor.get_tensor_samples(
+                        )
+                        config["train_len"] = len(sampled_search_train)
 
-                    error_search_error_train, error_search_error_dev, error_search_test = processor.get_tensor_samples(
-                    )
-                    config["train_len"] = len(error_search_error_train)
+                        # test model on clean train, dev, test
+                        test_model(config, best_ckpt, last_ckpt,
+                                   sampled_search_train,
+                                   "sampled_search_train")
+                        test_model(config, best_ckpt, last_ckpt,
+                                   sampled_search_dev, "sampled_search_dev")
+                        test_model(config, best_ckpt, last_ckpt,
+                                   sampled_search_test, "sampled_search_test")
 
-                    # train model on erroneous lowner train + validate on erroneous lowner dev
-                    last_ckpt, best_ckpt = train_model(
-                        seed, gazetteer_size, error_percent_ratio,
-                        erroneous_data, config, error_search_error_train,
-                        error_search_error_dev)
+                        # prep clean lowner train, dev, test
+                        processor = NERDataProcessor(
+                            config,
+                            get_tokenizer(config),
+                            tokenized_files["full_search_train"],
+                            tokenized_files["full_search_dev"],
+                            tokenized_files["full_search_test"],
+                            files["types"],
+                            use_cache=False)
+                        config["num_labels"] = len(processor.labels)
 
-                    # test model on erroneous lowner train, dev + clean lowner test
-                    test_model(config, best_ckpt, last_ckpt,
-                               error_search_error_train,
-                               "error_search_error_train")
-                    test_model(config, best_ckpt, last_ckpt,
-                               error_search_error_dev,
-                               "error_search_error_dev")
-                    test_model(config, best_ckpt, last_ckpt, error_search_test,
-                               "error_search_test")
+                        full_search_train, full_search_dev, full_search_test = processor.get_tensor_samples(
+                        )
+                        config["train_len"] = len(full_search_train)
 
-                    # test model on clean lowner train, dev, test with clean sampled search
-                    processor = NERDataProcessor(
-                        config,
-                        get_tokenizer(config),
-                        tokenized_files["sampled_search_train"],
-                        tokenized_files["sampled_search_dev"],
-                        tokenized_files["sampled_search_test"],
-                        files["types"],
-                        use_cache=False)
-                    config["num_labels"] = len(processor.labels)
-
-                    sampled_search_train, sampled_search_dev, sampled_search_test = processor.get_tensor_samples(
-                    )
-                    config["train_len"] = len(sampled_search_train)
-
-                    # test model on clean train, dev, test
-                    test_model(config, best_ckpt, last_ckpt,
-                               sampled_search_train, "sampled_search_train")
-                    test_model(config, best_ckpt, last_ckpt,
-                               sampled_search_dev, "sampled_search_dev")
-                    test_model(config, best_ckpt, last_ckpt,
-                               sampled_search_test, "sampled_search_test")
-
-                    # prep clean lowner train, dev, test
-                    processor = NERDataProcessor(
-                        config,
-                        get_tokenizer(config),
-                        tokenized_files["full_search_train"],
-                        tokenized_files["full_search_dev"],
-                        tokenized_files["full_search_test"],
-                        files["types"],
-                        use_cache=False)
-                    config["num_labels"] = len(processor.labels)
-
-                    full_search_train, full_search_dev, full_search_test = processor.get_tensor_samples(
-                    )
-                    config["train_len"] = len(full_search_train)
-
-                    # test model on clean train, dev, test
-                    test_model(config, best_ckpt, last_ckpt, full_search_train,
-                               "full_search_train")
-                    test_model(config, best_ckpt, last_ckpt, full_search_dev,
-                               "full_search_dev")
-                    test_model(config, best_ckpt, last_ckpt, full_search_test,
-                               "full_search_test")
+                        # test model on clean train, dev, test
+                        test_model(config, best_ckpt, last_ckpt,
+                                   full_search_train, "full_search_train")
+                        test_model(config, best_ckpt, last_ckpt,
+                                   full_search_dev, "full_search_dev")
+                        test_model(config, best_ckpt, last_ckpt,
+                                   full_search_test, "full_search_test")
+                        # done
+                        already_computed.append([
+                            gazetteer_size, error_percent_ratio,
+                            erroneous_data, seed
+                        ])
+                        with open(already_computed_path, "w",
+                                  encoding="utf-8") as file:
+                            json.dump(already_computed, file)
+    finally:
+        with open(already_computed_path, "w", encoding="utf-8") as file:
+            json.dump(already_computed, file)
