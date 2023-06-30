@@ -357,6 +357,9 @@ if __name__ == "__main__":
                             gazetteer_size, error_percent_ratio,
                             erroneous_data, seed
                         ])
+                        with open(already_computed_path, "w",
+                                  encoding="utf-8") as file:
+                            json.dump(already_computed, file)
     finally:
         with open(already_computed_path, "w", encoding="utf-8") as file:
             json.dump(already_computed, file)
