@@ -61,7 +61,7 @@ class SearchSampleSimilarity(torch.nn.Module):
                     search_score = torch.sum(
                         torch.tensor(entity_count_per_samples[idx]).to(
                             self.model.device) * full_contexts_cosine
-                    ) / torch.tensor(total_entity_count)
+                    )
                     # calculate max + distribution
                     res.update({
                         "total entities":

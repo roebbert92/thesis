@@ -92,6 +92,16 @@ def get_per_sample_metrics():
     return metrics_df
 
 
+def aggregate_error_rate(metrics_df: pd.DataFrame, checkpoint: str,
+                         dataset: str):
+    agg_df = metrics_df.pivot_table(
+        index=["seed", "model", "checkpoint", "dataset"],
+        values=["tp", "fp", "fn"],
+        aggfunc="sum")
+    agg_df["total errors"] = agg_df["fp"] + agg_df["fn"]
+    return agg_df
+
+
 def aggregate_performance_metrics(metrics_df: pd.DataFrame):
     agg_df = metrics_df.pivot_table(
         index=["seed", "model", "checkpoint", "dataset"],
@@ -103,6 +113,18 @@ def aggregate_performance_metrics(metrics_df: pd.DataFrame):
         agg_df["precision"] + agg_df["recall"])
 
     return agg_df
+
+
+def get_micro_f1_precision_recall(metrics_df: pd.DataFrame, checkpoint: str,
+                                  dataset: str):
+    agg_df = aggregate_performance_metrics(metrics_df)
+
+    avg_df = agg_df.pivot_table(index=["model", "checkpoint", "dataset"],
+                                values=["f1", "precision", "recall"],
+                                aggfunc=("mean", "std")).reset_index()
+
+    return avg_df[(avg_df["checkpoint"] == checkpoint)
+                  & (avg_df["dataset"] == dataset)]
 
 
 def get_precision(metrics_df: pd.DataFrame, checkpoint: str, dataset: str):
@@ -128,7 +150,7 @@ def get_recall(metrics_df: pd.DataFrame, checkpoint: str, dataset: str):
                       & (avg_recall["dataset"] == dataset)]
 
 
-def get_f1(metrics_df: pd.DataFrame, checkpoint: str, dataset: str):
+def get_micro_f1(metrics_df: pd.DataFrame, checkpoint: str, dataset: str):
     agg_df = aggregate_performance_metrics(metrics_df)
 
     avg_f1 = agg_df.pivot_table(index=["model", "checkpoint", "dataset"],
@@ -277,51 +299,80 @@ def get_search_results_data():
     return search_results, dataset
 
 
-def get_labeled_data_eecr():
-    labeled_data, models_to_labeled_data, dataset = get_labeled_data()
-    eecr_metrics = []
-    with tqdm(total=len(models_to_labeled_data) * len(dataset),
-              desc="EECR labeled data") as pbar:
-        for model, data_parts in models_to_labeled_data.items():
-            data = [item for part in data_parts for item in labeled_data[part]]
-            for dataset_name, d in dataset.items():
-                _, _, eecr, _ = entity_coverage_ratio(data, d)
-                eecr_metrics.append({
-                    "model": model,
-                    "dataset": dataset_name,
-                    "eecr": eecr
-                })
-                pbar.update(1)
-
-    eecr_df = pd.DataFrame.from_records(eecr_metrics)
-    return eecr_df
-
-
-def get_labeled_data_eecr_per_sample():
-    labeled_data, models_to_labeled_data, dataset = get_labeled_data()
-    eecr_metrics = []
-    with tqdm(total=len(models_to_labeled_data) * len(dataset),
-              desc="EECR labeled data per sample") as pbar:
-        for model, data_parts in models_to_labeled_data.items():
-            data = [item for part in data_parts for item in labeled_data[part]]
-            data_counted = count_entities(data)
-            for dataset_name, d in dataset.items():
-                for sample in d:
-                    sample_counted = count_entities([sample])
-                    _, _, eecr, _ = entity_coverage_ratio_precounted(
-                        data_counted, sample_counted)
+def get_labeled_data_entity_coverage():
+    eecr_labeled_data_path = os.path.join(
+        thesis_path, "evaluations", "metrics",
+        "01_performance_labeled_data_eecr_metrics.pkl")
+    if os.path.exists(eecr_labeled_data_path):
+        eecr_df = pd.read_pickle(eecr_labeled_data_path)
+    else:
+        os.makedirs(os.path.dirname(eecr_labeled_data_path), exist_ok=True)
+        labeled_data, models_to_labeled_data, dataset = get_labeled_data()
+        eecr_metrics = []
+        with tqdm(total=len(models_to_labeled_data) * len(dataset),
+                  desc="EECR labeled data") as pbar:
+            for model, data_parts in models_to_labeled_data.items():
+                data = [
+                    item for part in data_parts for item in labeled_data[part]
+                ]
+                for dataset_name, d in dataset.items():
+                    ratio, c, eecr, _ = entity_coverage_ratio(data, d)
+                    ecr_classes = calc_ecr_classes(ratio, c)
                     eecr_metrics.append({
                         "model": model,
                         "dataset": dataset_name,
-                        "doc_id": sample["doc_id"],
-                        "targets": len(sample["entities"]),
-                        "eecr": eecr
+                        "eecr": eecr,
+                        **{
+                            key: len(value)
+                            for key, value in ecr_classes.items()
+                        }
                     })
-                pbar.update(1)
+                    pbar.update(1)
 
-    eecr_df = pd.DataFrame.from_records(eecr_metrics).pivot_table(
-        values="eecr", index=["model",
-                              "dataset"], aggfunc="mean").reset_index()
+        eecr_df = pd.DataFrame.from_records(eecr_metrics)
+        eecr_df.to_pickle(eecr_labeled_data_path)
+    return eecr_df
+
+
+def get_labeled_data_entity_coverage_per_sample():
+    eecr_labeled_data_per_sample_path = os.path.join(
+        thesis_path, "evaluations", "metrics",
+        "01_performance_labeled_data_eecr_per_sample_metrics.pkl")
+    if os.path.exists(eecr_labeled_data_per_sample_path):
+        eecr_df = pd.read_pickle(eecr_labeled_data_per_sample_path)
+    else:
+        os.makedirs(os.path.dirname(eecr_labeled_data_per_sample_path),
+                    exist_ok=True)
+        labeled_data, models_to_labeled_data, dataset = get_labeled_data()
+        eecr_metrics = []
+        with tqdm(total=len(models_to_labeled_data) * len(dataset),
+                  desc="EECR labeled data per sample") as pbar:
+            for model, data_parts in models_to_labeled_data.items():
+                data = [
+                    item for part in data_parts for item in labeled_data[part]
+                ]
+                data_counted = count_entities(data)
+                for dataset_name, d in dataset.items():
+                    for sample in d:
+                        sample_counted = count_entities([sample])
+                        ratio, c, eecr, _ = entity_coverage_ratio_precounted(
+                            data_counted, sample_counted)
+                        ecr_classes = calc_ecr_classes(ratio, c)
+                        eecr_metrics.append({
+                            "model": model,
+                            "dataset": dataset_name,
+                            "doc_id": sample["doc_id"],
+                            "targets": len(sample["entities"]),
+                            "eecr": eecr,
+                            **{
+                                key: len(value)
+                                for key, value in ecr_classes.items()
+                            }
+                        })
+                    pbar.update(1)
+
+        eecr_df = pd.DataFrame.from_records(eecr_metrics)
+        eecr_df.to_pickle(eecr_labeled_data_per_sample_path)
     return eecr_df
 
 
@@ -339,113 +390,59 @@ def calc_ecr_classes(ratio: dict, c: dict):
     }
 
 
-def get_labeled_data_ecr():
-    labeled_data, models_to_labeled_data, dataset = get_labeled_data()
-    ecr_metrics = []
-    with tqdm(total=len(models_to_labeled_data) * len(dataset),
-              desc="ECR classes labeled data") as pbar:
-        for model, data_parts in models_to_labeled_data.items():
-            data = [item for part in data_parts for item in labeled_data[part]]
-            for dataset_name, d in dataset.items():
-                ratio, c, _, _ = entity_coverage_ratio(data, d)
-                ecr_classes = calc_ecr_classes(ratio, c)
-                ecr_metrics.append({
-                    "model": model,
-                    "dataset": dataset_name,
-                    **{key: len(value)
-                       for key, value in ecr_classes.items()}
-                })
-                pbar.update(1)
+def get_search_results_entity_coverage_per_sample():
+    eecr_search_results_data_path = os.path.join(
+        thesis_path, "evaluations", "metrics",
+        "01_performance_search_results_eecr_metrics.pkl")
+    if os.path.exists(eecr_search_results_data_path):
+        eecr_df = pd.read_pickle(eecr_search_results_data_path)
+    else:
+        os.makedirs(os.path.dirname(eecr_search_results_data_path),
+                    exist_ok=True)
+        search_results, dataset = get_search_results_data()
+        eecr_metrics = []
+        with tqdm(total=len(search_results) * len(dataset),
+                  desc="EECR search results") as pbar:
+            for model, search_result in search_results.items():
+                for dataset_name, search in search_result.items():
+                    for idx, sample in enumerate(dataset[dataset_name]):
+                        ratio, c, eecr, _ = entity_coverage_ratio(
+                            search[idx], [sample])
+                        ecr_classes = calc_ecr_classes(ratio, c)
+                        eecr_metrics.append({
+                            "model": model,
+                            "dataset": dataset_name,
+                            "doc_id": sample["doc_id"],
+                            "targets": len(sample["entities"]),
+                            "eecr": eecr,
+                            **{
+                                key: len(value)
+                                for key, value in ecr_classes.items()
+                            }
+                        })
+                    pbar.update(1)
 
-    ecr_df = pd.DataFrame.from_records(ecr_metrics)
-    return ecr_df
-
-
-def get_labeled_data_ecr_per_sample():
-    labeled_data, models_to_labeled_data, dataset = get_labeled_data()
-    ecr_metrics = []
-    ecr_class_labels = sorted(list(calc_ecr_classes({}, {}).keys()))
-    with tqdm(total=len(models_to_labeled_data) * len(dataset),
-              desc="ECR classes labeled data per sample") as pbar:
-        for model, data_parts in models_to_labeled_data.items():
-            data = [item for part in data_parts for item in labeled_data[part]]
-            data_counted = count_entities(data)
-            for dataset_name, d in dataset.items():
-                for sample in d:
-                    sample_counted = count_entities([sample])
-                    ratio, c, _, _ = entity_coverage_ratio_precounted(
-                        data_counted, sample_counted)
-                    ecr_classes = calc_ecr_classes(ratio, c)
-                    ecr_metrics.append({
-                        "model": model,
-                        "dataset": dataset_name,
-                        "doc_id": sample["doc_id"],
-                        **{
-                            key: len(value)
-                            for key, value in ecr_classes.items()
-                        }
-                    })
-                pbar.update(1)
-
-    ecr_df = pd.DataFrame.from_records(ecr_metrics).pivot_table(
-        values=ecr_class_labels, index=["model", "dataset"],
-        aggfunc="sum").reset_index()
-    return ecr_df
-
-
-def get_search_results_data_eecr():
-    search_results, dataset = get_search_results_data()
-    eecr_metrics = []
-    with tqdm(total=len(search_results) * len(dataset),
-              desc="EECR search results") as pbar:
-        for model, search_result in search_results.items():
-            for dataset_name, search in search_result.items():
-                for idx, sample in enumerate(dataset[dataset_name]):
-                    _, _, eecr, _ = entity_coverage_ratio(
-                        search[idx], [sample])
-                    eecr_metrics.append({
-                        "model": model,
-                        "dataset": dataset_name,
-                        "doc_id": sample["doc_id"],
-                        "targets": len(sample["entities"]),
-                        "eecr": eecr
-                    })
-                pbar.update(1)
-
-    eecr_df = pd.DataFrame.from_records(eecr_metrics).pivot_table(
-        values="eecr", index=["model",
-                              "dataset"], aggfunc="mean").reset_index()
+        eecr_df = pd.DataFrame.from_records(eecr_metrics)
+        eecr_df.to_pickle(eecr_search_results_data_path)
     return eecr_df
 
 
-def get_search_results_data_ecr():
-    search_results, dataset = get_search_results_data()
-    ecr_metrics = []
-    ecr_class_labels = sorted(list(calc_ecr_classes({}, {}).keys()))
-    with tqdm(total=len(search_results) * len(dataset),
-              desc="ECR classes search results") as pbar:
-        for model, search_result in search_results.items():
-            for dataset_name, search in search_result.items():
-                for idx, sample in enumerate(dataset[dataset_name]):
-                    ratio, c, _, _ = entity_coverage_ratio(
-                        search[idx], [sample])
-                    ecr_classes = calc_ecr_classes(ratio, c)
-                    ecr_metrics.append({
-                        "model": model,
-                        "dataset": dataset_name,
-                        "doc_id": sample["doc_id"],
-                        "targets": len(sample["entities"]),
-                        **{
-                            key: len(value)
-                            for key, value in ecr_classes.items()
-                        }
-                    })
-                pbar.update(1)
+def aggregate_per_sample_eecr_metrics(metrics_df: pd.DataFrame):
+    return metrics_df.pivot_table(values="eecr",
+                                  index=["model", "dataset"],
+                                  aggfunc="mean").reset_index()
 
-    ecr_df = pd.DataFrame.from_records(ecr_metrics).pivot_table(
-        values=ecr_class_labels, index=["model", "dataset"],
-        aggfunc="sum").reset_index()
-    return ecr_df
+def get_entity_coverages(dataset: str):
+    # combine to one table
+    labeled_data_eecr_df = get_labeled_data_entity_coverage()
+    labeled_data_eecr_sample_df = get_labeled_data_entity_coverage_per_sample()
+    agg_labeled_data_eecr_sample_df = aggregate_per_sample_eecr_metrics(labeled_data_eecr_sample_df)
+    search_results_data_eecr = get_search_results_entity_coverage_per_sample()
+    agg_search_results_data_eecr = aggregate_per_sample_eecr_metrics(search_results_data_eecr)
+    
+    eecr_table = labeled_data_eecr_df[["model", "dataset", "eecr"]].set_index(["model", "dataset"]).join(agg_labeled_data_eecr_sample_df.set_index(["model", "dataset"]), on=["model", "dataset"], lsuffix="_labeled_data").join(agg_search_results_data_eecr.set_index(["model", "dataset"]), on=["model", "dataset"], lsuffix="_labeled_data_per_sample", rsuffix="_search_results").reset_index()
+    return eecr_table[eecr_table["dataset"]==dataset][["model", "eecr_labeled_data", "eecr_labeled_data_per_sample", "eecr_search_results"]]
+    
 
 
 def get_search_results_data_ccr_metrics():
