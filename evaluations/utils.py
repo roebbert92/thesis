@@ -42,7 +42,7 @@ PLOT_MODEL_NAMES = {
     }
 
 def get_correct_latex_format(df: pd.DataFrame, columns: List[str],
-                             column_names: Dict[str, str]):
+                             column_names: Dict[str, str], round_last_digits=2):
     # sort by model name
     sorted_df = df[["model", *columns]].sort_values(
         "model", key=lambda x: x.apply(lambda y: MODEL_ORDER.get(y, 1000)))
@@ -53,15 +53,14 @@ def get_correct_latex_format(df: pd.DataFrame, columns: List[str],
     column_depth = sorted_df.columns.nlevels
     if column_depth == 1:
         for column, new_column in column_names.items():
-            sorted_df[new_column] = sorted_df[column].map('{:,.4f}'.format)
+            sorted_df[new_column] = sorted_df[column].map(lambda x: '{:,.{prec}f}'.format(x, prec=round_last_digits))
         result_df = sorted_df[["Models", *list(column_names.values())
                                    ]].set_index("Models")
     elif column_depth == 2:
         for column, new_column in column_names.items():
-            sorted_df[new_column] = sorted_df[column]['mean'].map(
-                '{:,.2f}'.format) + " (" + (round(
+            sorted_df[new_column] = sorted_df[column]['mean'].map(lambda x: '{:,.{prec}f}'.format(x, prec=round_last_digits)) + " (" + (round(
                     sorted_df[column]['std'] *
-                    100)).astype(int).astype(str) + ")"
+                    10**round_last_digits)).astype(int).astype(str) + ")"
         result_df = sorted_df[["Models", *list(column_names.values())
                                ]].set_index("Models")
         result_df.columns = ["".join(col) for col in result_df.columns.values]
@@ -86,7 +85,7 @@ def get_correct_latex_format(df: pd.DataFrame, columns: List[str],
             for column, new_column in column_names.items():
                 sorted_df[ent_name, new_column,
                           ""] = sorted_df[level_0_col][column]['mean'].map(
-                              '{:,.2f}'.format) + " (" + (round(
+                              lambda x: '{:,.{prec}f}'.format(x, prec=round_last_digits)) + " (" + (round(
                                   sorted_df[level_0_col][column]['std'] *
                                   100)).astype(int).astype(str) + ")"
         result_df = sorted_df[[

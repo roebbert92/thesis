@@ -437,9 +437,9 @@ def get_search_results_entity_coverage_per_sample():
 
 
 def aggregate_per_sample_eecr_metrics(metrics_df: pd.DataFrame):
-    return metrics_df.pivot_table(values="eecr",
+    return metrics_df.pivot_table(values=["eecr"],
                                   index=["model", "dataset"],
-                                  aggfunc="mean").reset_index()
+                                  aggfunc=["mean", "std"]).swaplevel(0, 1, 1).reset_index()
 
 def aggregate_per_sample_ecr_classes(metrics_df: pd.DataFrame):
     ECR_CLASSES_ORDER = ["ρ=1", "ρ ∈ (0.5,1)", "ρ ∈ (0,0.5]", "ρ=0∧C≠0", "ρ=0∧C=0"]
