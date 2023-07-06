@@ -494,7 +494,7 @@ def query_database_with_filter(instances: List,
     chunk_size = 50
     cpu_count = 4
     with tqdm(desc="Querying database", total=len(instances)) as pbar:
-        with mp.Pool(cpu_count, init_query_filter_db, (
+        with mp.get_context("spawn").Pool(cpu_count, init_query_filter_db, (
                 instances,
                 search_func,
                 chunk_size,

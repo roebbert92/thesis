@@ -179,13 +179,21 @@ T5_ASP.update({
 })
 
 WNUT_T5_ASP = T5_ASP.copy()
-WNUT_T5_ASP.update({"name": "wnut_t5_asp"})
+WNUT_T5_ASP.update({
+    "asp_dropout_rate": 0.4540625,
+    "adam_weight_decay": 0.008067866817204384,
+    "num_epochs": 40,
+    "plm_learning_rate": 0.00012035795477287743,
+    "task_learning_rate": 0.0074485651615560184,
+    "warmup_ratio": 0.37917808219178084,
+    "name": "t5_asp"
+})
 
-BEST_WNUT_T5_ASP = T5_ASP.copy()
+BEST_WNUT_T5_ASP = WNUT_T5_ASP.copy()
 BEST_WNUT_T5_ASP.update({
     "ckpt_path":
     "/home/loebbert/projects/thesis/experiments/01_performance/data/seed_1/03_checkpoints/t5_asp/last.ckpt",
-    "name": "best_wnut_t5_asp"
+    "name": "t5_asp"
 })
 
 WNUT_T5_ASP_LOWNERGAZ_SENT = T5_ASP_LOWNERGAZ_SENT.copy()
@@ -197,35 +205,37 @@ WNUT_T5_ASP_LOWNERGAZ_SENT.update({
     "search_topk": 16,
     "sent_search_topk": 6,
     "task_learning_rate": 0.0074485651615560184,
-    "name": "wnut_t5_asp_lownergaz_sent"
+    "name": "t5_asp_lownergaz_sent"
 })
 
-BEST_WNUT_T5_ASP_LOWNERGAZ_SENT = T5_ASP_LOWNERGAZ_SENT.copy()
+BEST_WNUT_T5_ASP_LOWNERGAZ_SENT = WNUT_T5_ASP_LOWNERGAZ_SENT.copy()
 BEST_WNUT_T5_ASP_LOWNERGAZ_SENT.update({
-    "adam_weight_decay":
-    0.01805954081911936,
-    "asp_dropout_rate":
-    0.22760117960387666,
-    "gaz_search_topk":
-    6,
-    "plm_learning_rate":
-    0.00025950985292715387,
-    "sent_search_topk":
-    5,
-    "search_topk":
-    11,
-    "task_learning_rate":
-    0.0021225113190029856,
-    "train_search_dropout":
-    0.029444504313170923,
-    "warmup_ratio":
-    0.36693271098631797,
-    "num_epochs":
-    15,
+    #"adam_weight_decay":
+    #0.01805954081911936,
+    #"asp_dropout_rate":
+    #0.22760117960387666,
+    ##"gaz_search_topk": 6,
+    #"gaz_search_topk":
+    #6,
+    #"plm_learning_rate":
+    #0.00025950985292715387,
+    ##"sent_search_topk": 5,
+    #"sent_search_topk":
+    #6,
+    ##"search_topk": 11,
+    #"search_topk":
+    #8,
+    #"task_learning_rate":
+    #0.0021225113190029856,
+    #"train_search_dropout":
+    #0.029444504313170923,
+    #"warmup_ratio":
+    #0.36693271098631797,
+    #"num_epochs":
+    #15,
     "ckpt_path":
     "/home/loebbert/projects/thesis/experiments/01_performance/data/seed_1/03_checkpoints/t5_asp_lownergaz_sent/last.ckpt",
-    "name":
-    "best_wnut_t5_asp_lownergaz_sent"
+    "name": "t5_asp_lownergaz_sent"
 })
 
 WORST_WNUT_T5_ASP_LOWNERGAZ_SENT = T5_ASP_LOWNERGAZ_SENT.copy()

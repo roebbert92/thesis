@@ -1,8 +1,9 @@
 import gc
+from glob import glob
 import pickle
 import sys
 import os
-from typing import List
+from typing import List, Optional
 
 thesis_path = "/" + os.path.join(
     *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-1])
@@ -26,46 +27,67 @@ from data_preparation.flair_evaluation import read_flair_predictions_to_asp, asp
 
 
 def get_lowner_dataset():
-    columns = {0: 'text', 1: '', 2: '', 3: 'ner'}
+    columns = {0: 'text', 1: 'ner'}
     lowner_folder = os.path.join(thesis_path, "data", "mlowner")
-    corpus: Corpus = ColumnCorpus(lowner_folder,
-                                  columns,
-                                  train_file="train_lower.txt",
-                                  dev_file="dev_lower.txt",
-                                  test_file="test_lower.txt",
-                                  label_name_map=wnut_types)
+    corpus: Corpus = ColumnCorpus(
+        lowner_folder,
+        columns,
+        train_file="lowner_train.bio",
+        dev_file="lowner_dev.bio",
+        test_file="lowner_test.bio",
+        #label_name_map=wnut_types
+    )
     return corpus
 
 
-def train_model(data_path: str, corpus: Corpus, seed: int,
-                evaluation_dataset_names: List[str]):
-    label_type = "ner"
-    label_dict = corpus.make_label_dictionary(label_type=label_type,
-                                              add_unk=False)
-    embeddings = TransformerWordEmbeddings(
-        model='xlm-roberta-large',
-        layers="-1",
-        subtoken_pooling="first",
-        fine_tune=True,
-        use_context=True,
+def get_wnut_dataset():
+    columns = {0: 'text', 1: 'ner'}
+    wnut_folder = os.path.join(thesis_path, "data", "wnut")
+    corpus: Corpus = ColumnCorpus(
+        wnut_folder,
+        columns,
+        train_file="wnut_train.bio",
+        dev_file="wnut_dev.bio",
+        test_file="wnut_test.bio",
+        #label_name_map=wnut_types
     )
-    tagger = SequenceTagger(
-        hidden_size=256,
-        embeddings=embeddings,
-        tag_dictionary=label_dict,
-        tag_type='ner',
-        tag_format="BIO",
-        use_crf=False,
-        use_rnn=False,
-        reproject_embeddings=False,
-    )
+    return corpus
+
+
+def train_model(corpus: Corpus,
+                seed: int,
+                evaluation_dataset_names: List[str],
+                tensorboard_logdir: str,
+                model_output_path: str,
+                metrics_base_path: str,
+                ckpt_path: Optional[str] = None,
+                num_epochs: int = 20):
+    if ckpt_path is None:
+        label_type = "ner"
+        label_dict = corpus.make_label_dictionary(label_type=label_type,
+                                                  add_unk=False)
+        embeddings = TransformerWordEmbeddings(
+            model='xlm-roberta-large',
+            layers="-1",
+            subtoken_pooling="first",
+            fine_tune=True,
+            use_context=True,
+        )
+        tagger = SequenceTagger(
+            hidden_size=256,
+            embeddings=embeddings,
+            tag_dictionary=label_dict,
+            tag_type='ner',
+            tag_format="BIO",
+            use_crf=False,
+            use_rnn=False,
+            reproject_embeddings=False,
+        )
+    else:
+        tagger = SequenceTagger.load(ckpt_path)
     trainer = ModelTrainer(tagger, corpus)
-    model_output_path = os.path.join(data_path, f"seed_{seed}",
-                                     "03_checkpoints", "flair_roberta")
     os.makedirs(model_output_path, exist_ok=True)
-    tensorboard_logdir = os.path.sep + os.path.join(
-        os.path.join(*data_path.split(os.path.sep)[:-1]), "lightning_logs",
-        f"{seed}_flair_roberta")
+
     os.makedirs(tensorboard_logdir, exist_ok=True)
     # seed
     if "PL_GLOBAL_SEED" in os.environ:
@@ -78,7 +100,7 @@ def train_model(data_path: str, corpus: Corpus, seed: int,
         learning_rate=5e-6,
         mini_batch_size=40,
         eval_batch_size=120,
-        max_epochs=20,  # 20
+        max_epochs=num_epochs,  # 20
         mini_batch_chunk_size=15,
         num_workers=3,
         optimizer=AdamW,
@@ -105,9 +127,6 @@ def train_model(data_path: str, corpus: Corpus, seed: int,
     torch.cuda.empty_cache()
 
     # metrics
-    metrics_base_path = os.path.join(data_path, f"seed_{seed}", "04_metrics",
-                                     "flair_roberta")
-
     # get metrics for last ckpt
     last_ckpt_path = os.path.join(model_output_path, "final-model.pt")
     get_asp_metrics_from_flair(metrics_base_path, evaluation_dataset_names,
@@ -157,17 +176,89 @@ def get_asp_metrics_from_flair(metrics_base_path: str, dataset_names: list,
     torch.cuda.empty_cache()
 
 
-if __name__ == "__main__":
+def experiment_01():
     seeds = [1, 2, 3]
     dataset = get_lowner_dataset()
-    datapath = os.path.join("/home/loebbert/projects/thesis", "experiments",
-                            "01_performance", "data")
+    datapath = os.path.join(thesis_path, "experiments", "01_performance",
+                            "data")
     dataset_names = ["lowner_train", "lowner_dev", "lowner_test"]
     for seed in seeds:
         trained = False
         while not trained:
             try:
-                train_model(datapath, dataset, seed, dataset_names)
+                model_output_path = os.path.join(datapath, f"seed_{seed}",
+                                                 "03_checkpoints",
+                                                 "flair_roberta")
+                ckpt_files = list(glob(os.path.join(model_output_path, "*")))
+                for ckpt_file in ckpt_files:
+                    os.remove(ckpt_file)
+                metrics_base_path = os.path.join(datapath, f"seed_{seed}",
+                                                 "04_metrics", "flair_roberta")
+                tensorboard_logdir = os.path.sep + os.path.join(
+                    os.path.join(*datapath.split(os.path.sep)[:-1]),
+                    "lightning_logs", f"{seed}_flair_roberta")
+                train_model(dataset, seed, dataset_names, tensorboard_logdir,
+                            model_output_path, metrics_base_path)
                 trained = True
             except RuntimeError:
                 torch.cuda.empty_cache()
+
+
+def experiment_03():
+    seeds = [1, 2, 3]
+    dataset = get_wnut_dataset()
+    datapath = os.path.join(thesis_path, "experiments",
+                            "03_adaptation_emerging_entities", "data")
+    dataset_names = ["wnut_train", "wnut_dev", "wnut_test"]
+    best_model_path = os.path.join(thesis_path, "experiments",
+                                   "01_performance", "data", "seed_2",
+                                   "03_checkpoints", "flair_roberta",
+                                   "best-model.pt")
+    configs = [
+        # (Gazetteer?, Finetuning?, Pretrained?, config)
+        (False, "full", False, {
+            "name": "flair_roberta"
+        }),
+        (False, "full", True, {
+            "name": "best_flair_roberta",
+            "ckpt_path": best_model_path
+        }),
+        (False, "no", True, {
+            "name": "best_flair_roberta",
+            "ckpt_path": best_model_path
+        }),
+    ]
+    for seed in seeds:
+        for gaz, finetuning, pretrained, config in configs:
+            trained = False
+            while not trained:
+                try:
+                    model_output_path = os.path.join(
+                        config["data_path"], f"seed_{str(seed)}",
+                        "03_checkpoints",
+                        f"{gaz}_{finetuning}_{pretrained}_{config['name']}")
+                    ckpt_files = list(
+                        glob(os.path.join(model_output_path, "*")))
+                    for ckpt_file in ckpt_files:
+                        os.remove(ckpt_file)
+                    metrics_base_path = os.path.join(
+                        config["data_path"], f"seed_{str(seed)}", "04_metrics",
+                        f"{gaz}_{finetuning}_{pretrained}_{config['name']}",
+                        "-1_0")
+                    tensorboard_logdir = os.path.sep + os.path.join(
+                        os.path.join(*datapath.split(os.path.sep)[:-1]),
+                        "lightning_logs",
+                        f"{seed}_{gaz}_{finetuning}_{pretrained}_{config['name']}_-1"
+                    )
+                    train_model(dataset, seed, dataset_names,
+                                tensorboard_logdir, model_output_path,
+                                metrics_base_path,
+                                config["ckpt_path"] if pretrained else None,
+                                40)
+                    trained = True
+                except RuntimeError:
+                    torch.cuda.empty_cache()
+
+
+if __name__ == "__main__":
+    experiment_03()

@@ -22,7 +22,6 @@ from lightning.pytorch.loggers import TensorBoardLogger
 
 
 class SearchMatchDataset(Dataset):
-
     def __init__(self, dataset_path: str, search_result_path: str) -> None:
         super().__init__()
         with open(dataset_path, "r") as file:
@@ -30,7 +29,9 @@ class SearchMatchDataset(Dataset):
         with open(search_result_path, "rb") as file:
             search_results = pickle.load(file)
         for item_idx, item in enumerate(self.items):
-            item["search_results"] =  [doc.to_dict() for doc in search_results[item_idx]]
+            item["search_results"] = [
+                doc.to_dict() for doc in search_results[item_idx]
+            ]
 
     def __len__(self):
         return len(self.items)
@@ -48,7 +49,6 @@ def collate_search_batch(batch: List[dict]):
 
 
 class SearchMatch(pl.LightningModule):
-
     def __init__(self, seed: int) -> None:
         super().__init__()
 
@@ -175,82 +175,184 @@ class SearchMatch(pl.LightningModule):
         return dataloader
 
 
-def experiment01(gazetteer_name: str):
+def experiment_01():
+    seeds = [1, 2, 3]
+    for gazetteer_name in [
+            "sent", "gaz", "lownergaz", "lownergaz_sent", "gaz_sent"
+    ]:
+        config = {
+            "name":
+            f"search_match_{gazetteer_name}",
+            "batch_size":
+            40,
+            "data_path":
+            os.path.join(thesis_path, "experiments", "01_performance", "data"),
+        }
+
+        files = {
+            "types":
+            os.path.join(thesis_path, "data", "mlowner", "lowner_types.json"),
+            "train":
+            os.path.join(thesis_path, "data", "mlowner", "lowner_train.json"),
+            "dev":
+            os.path.join(thesis_path, "data", "mlowner", "lowner_dev.json"),
+            "test":
+            os.path.join(thesis_path, "data", "mlowner", "lowner_test.json"
+                         #"lowner_dev.json"
+                         ),
+            "search_train":
+            os.path.join(thesis_path, "experiments", "01_performance", "data",
+                         "01_search_results", f"t5_asp_{gazetteer_name}",
+                         "lowner_train.pkl"),
+            "search_dev":
+            os.path.join(thesis_path, "experiments", "01_performance", "data",
+                         "01_search_results", f"t5_asp_{gazetteer_name}",
+                         "lowner_dev.pkl"),
+            "search_test":
+            os.path.join(thesis_path, "experiments", "01_performance", "data",
+                         "01_search_results", f"t5_asp_{gazetteer_name}",
+                         "lowner_test.pkl"),
+        }
+
+        for seed in seeds:
+            tb_logger = TensorBoardLogger(
+                save_dir=os.path.join(thesis_path, "experiments",
+                                      "01_performance", "lightning_logs"),
+                name="_".join([str(seed), config["name"]]),
+            )
+            model = SearchMatch(seed)
+            trainer = pl.Trainer(accelerator="cpu", logger=tb_logger)
+            metrics_base_path = os.path.join(config["data_path"],
+                                             f"seed_{str(seed)}", "04_metrics",
+                                             config["name"])
+            os.makedirs(metrics_base_path, exist_ok=True)
+
+            def save_metrics(dataset):
+                with open(
+                        os.path.join(metrics_base_path, f"last_{dataset}.pkl"),
+                        "wb") as file:
+                    pickle.dump(model.test_metrics, file)
+                shutil.copy(
+                    os.path.join(metrics_base_path, f"last_{dataset}.pkl"),
+                    os.path.join(metrics_base_path, f"best_{dataset}.pkl"))
+
+            trainer.test(
+                model,
+                model.get_dataloader(files["train"], files["search_train"],
+                                     config["batch_size"]))
+            save_metrics("lowner_train")
+            trainer.test(
+                model,
+                model.get_dataloader(files["dev"], files["search_dev"],
+                                     config["batch_size"]))
+            save_metrics("lowner_dev")
+            trainer.test(
+                model,
+                model.get_dataloader(files["test"], files["search_test"],
+                                     config["batch_size"]))
+            save_metrics("lowner_test")
+
+
+def experiment_03():
     seeds = [1, 2, 3]
     config = {
         "name":
-        f"search_match_{gazetteer_name}",
+        f"search_match",
         "batch_size":
         40,
         "data_path":
-        os.path.join(thesis_path, "experiments", "01_performance", "data"),
+        os.path.join(thesis_path, "experiments",
+                     "03_adaptation_emerging_entities", "data"),
     }
 
-    files = {
-        "types":
-        os.path.join(thesis_path, "data", "mlowner", "lowner_types.json"),
-        "train":
-        os.path.join(thesis_path, "data", "mlowner", "lowner_train.json"),
-        "dev":
-        os.path.join(thesis_path, "data", "mlowner", "lowner_dev.json"),
-        "test":
-        os.path.join(thesis_path, "data", "mlowner", "lowner_test.json"
-                     #"lowner_dev.json"
-                     ),
-        "search_train":
-        os.path.join(thesis_path, "experiments", "01_performance", "data",
-                     "01_search_results", f"t5_asp_{gazetteer_name}",
-                     "lowner_train.pkl"),
-        "search_dev":
-        os.path.join(thesis_path, "experiments", "01_performance", "data",
-                     "01_search_results", f"t5_asp_{gazetteer_name}",
-                     "lowner_dev.pkl"),
-        "search_test":
-        os.path.join(thesis_path, "experiments", "01_performance", "data",
-                     "01_search_results", f"t5_asp_{gazetteer_name}",
-                     "lowner_test.pkl"),
-    }
+    gazetteer_content = [
+        [
+            ("lownergaz_sent", ),
+            ("lownergaz_sent", "wnut_train"),
+            ("lownergaz_sent", "wnut_train", "wnut_dev"),
+            ("lownergaz_sent", "wnut_train", "wnut_dev", "wnut_test"),
+        ],
+        [
+            ("wnut_train", ),
+            ("wnut_train", ),
+            ("wnut_train", "wnut_dev"),
+            ("wnut_train", "wnut_dev", "wnut_test"),
+        ],
+        [
+            ("lownergaz_sent", "wnut_train"),
+            ("lownergaz_sent", "wnut_train"),
+            ("lownergaz_sent", "wnut_train", "wnut_dev"),
+            ("lownergaz_sent", "wnut_train", "wnut_dev", "wnut_test"),
+        ],
+    ]
+    for comb_idx, database_combinations in enumerate(gazetteer_content):
+        for db_idx, database_comb in enumerate(database_combinations):
+            files = {
+                "types":
+                os.path.join(thesis_path, "data", "wnut", "wnut_types.json"),
+                "train":
+                os.path.join(thesis_path, "data", "wnut", "wnut_train.json"),
+                "dev":
+                os.path.join(thesis_path, "data", "wnut", "wnut_dev.json"),
+                "test":
+                os.path.join(thesis_path, "data", "wnut", "wnut_test.json"),
+                "search_train":
+                os.path.join(thesis_path, "experiments",
+                             "03_adaptation_emerging_entities", "data",
+                             "01_search_results",
+                             "ann_6_bm25_6_reciprocal_rank_fusion_8",
+                             f"{comb_idx}_{db_idx}", "wnut_train.pkl"),
+                "search_dev":
+                os.path.join(thesis_path, "experiments",
+                             "03_adaptation_emerging_entities", "data",
+                             "01_search_results",
+                             "ann_6_bm25_6_reciprocal_rank_fusion_8",
+                             f"{comb_idx}_{db_idx}", "wnut_dev.pkl"),
+                "search_test":
+                os.path.join(thesis_path, "experiments",
+                             "03_adaptation_emerging_entities", "data",
+                             "01_search_results",
+                             "ann_6_bm25_6_reciprocal_rank_fusion_8",
+                             f"{comb_idx}_{db_idx}", "wnut_test.pkl"),
+            }
 
-    for seed in seeds:
-        tb_logger = TensorBoardLogger(
-            save_dir=os.path.join(thesis_path, "experiments", "01_performance",
-                                  "lightning_logs"),
-            name="_".join([str(seed), config["name"]]),
-        )
-        model = SearchMatch(seed)
-        trainer = pl.Trainer(accelerator="cpu", logger=tb_logger)
-        metrics_base_path = os.path.join(config["data_path"],
-                                         f"seed_{str(seed)}", "04_metrics",
-                                         config["name"])
-        os.makedirs(metrics_base_path, exist_ok=True)
+            for seed in seeds:
+                model = SearchMatch(seed)
+                metrics_base_path = os.path.join(
+                    config["data_path"], f"seed_{str(seed)}", "04_metrics",
+                    f"True_no_False_{config['name']}", f"{comb_idx}_{db_idx}")
+                os.makedirs(metrics_base_path, exist_ok=True)
 
-        def save_metrics(dataset):
-            with open(os.path.join(metrics_base_path, f"last_{dataset}.pkl"),
-                      "wb") as file:
-                pickle.dump(model.test_metrics, file)
-            shutil.copy(os.path.join(metrics_base_path, f"last_{dataset}.pkl"),
+                def save_metrics(dataset):
+                    with open(
+                            os.path.join(metrics_base_path,
+                                         f"last_{dataset}.pkl"), "wb") as file:
+                        pickle.dump(model.test_metrics, file)
+                    shutil.copy(
+                        os.path.join(metrics_base_path, f"last_{dataset}.pkl"),
                         os.path.join(metrics_base_path, f"best_{dataset}.pkl"))
 
-        trainer.test(
-            model,
-            model.get_dataloader(files["train"], files["search_train"],
-                                 config["batch_size"]))
-        save_metrics("lowner_train")
-        trainer.test(
-            model,
-            model.get_dataloader(files["dev"], files["search_dev"],
-                                 config["batch_size"]))
-        save_metrics("lowner_dev")
-        trainer.test(
-            model,
-            model.get_dataloader(files["test"], files["search_test"],
-                                 config["batch_size"]))
-        save_metrics("lowner_test")
+                for part in ["train", "dev", "test"]:
+                    tb_logger = TensorBoardLogger(
+                        save_dir=os.path.join(
+                            thesis_path, "experiments",
+                            "03_adaptation_emerging_entities",
+                            "lightning_logs"),
+                        name="_".join([
+                            str(seed), f"True_no_False_{config['name']}",
+                            str(comb_idx)
+                        ]),
+                        version=f"{db_idx}" + "_" + part,
+                    )
+                    trainer = pl.Trainer(accelerator="cpu", logger=tb_logger)
+
+                    trainer.test(
+                        model,
+                        model.get_dataloader(files[part],
+                                             files[f"search_{part}"],
+                                             config["batch_size"]))
+                    save_metrics(part)
 
 
 if __name__ == "__main__":
-    experiment01("sent")
-    experiment01("gaz")
-    experiment01("lownergaz")
-    experiment01("lownergaz_sent")
-    experiment01("gaz_sent")
+    experiment_03()

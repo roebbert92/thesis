@@ -16,6 +16,7 @@ def to_bio(paths: dict):
         paths[part] = json_to_bio(path)
     return paths
 
+
 def to_bmes(paths: dict):
     for part, path in list(paths.items()):
         paths[part] = json_to_bmes(path)
@@ -98,3 +99,8 @@ def get_multiconer_test_bio():
             json.dump(items, file)
 
     return to_bio({"test": output_path})
+
+
+if __name__ == "__main__":
+    get_wnut_bio()
+    get_lowner_bio()
