@@ -1,6 +1,8 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 import pandas as pd
 from itertools import product
+from pandas.io.formats.style import Styler
+import matplotlib
 
 MODEL_ORDER = {
     key: idx
@@ -9,30 +11,32 @@ MODEL_ORDER = {
         "dict_match_lownergaz", "dict_match_gaz_sent",
         "dict_match_lownergaz_sent", "search_match_gaz", "search_match_sent",
         "search_match_lownergaz", "search_match_gaz_sent",
-        "search_match_lownergaz_sent", "t5_asp_gaz", "t5_asp_sent",
-        "t5_asp_lownergaz", "t5_asp_gaz_sent", "t5_asp_lownergaz_sent"
+        "search_match_lownergaz_sent", "search_match_overall", "t5_asp_gaz",
+        "t5_asp_sent", "t5_asp_lownergaz", "t5_asp_gaz_sent",
+        "t5_asp_lownergaz_sent", "t5_asp_overall"
     ])
 }
 LATEX_MODEL_NAMES = {
-    "flair_roberta": "FLAIR\textsubscript{RoBERTa-Large}",
+    "flair_roberta": "FLAIR\\textsubscript{RoBERTa-Large}",
     "t5_asp": "T5-ASP",
-    "dict_match_gaz": "DictMatch\textsubscript{Gaz}",
-    "dict_match_sent": "DictMatch\textsubscript{Sent}",
-    "dict_match_lownergaz": "DictMatch\textsubscript{LownerGaz}",
-    "dict_match_lownergaz_sent": "DictMatch\textsubscript{LownerGaz+Sent}",
-    "dict_match_gaz_sent": "DictMatch\textsubscript{Gaz+Sent}",
-    "search_match_gaz": "SearchMatch\textsubscript{Gaz}",
-    "search_match_sent": "SearchMatch\textsubscript{Sent}",
-    "search_match_lownergaz": "SearchMatch\textsubscript{LownerGaz}",
-    "search_match_lownergaz_sent": "SearchMatch\textsubscript{LownerGaz+Sent}",
-    "search_match_gaz_sent": "SearchMatch\textsubscript{Gaz+Sent}",
-    "t5_asp_gaz": "T5-ASP\textsubscript{Gaz}",
-    "t5_asp_sent": "T5-ASP\textsubscript{Sent}",
-    "t5_asp_lownergaz": "T5-ASP\textsubscript{LownerGaz}",
-    "t5_asp_gaz_sent": "T5-ASP\textsubscript{Gaz+Sent}",
-    "t5_asp_lownergaz_sent": "T5-ASP\textsubscript{LownerGaz+Sent}",
-    "search_match_overall": "SearchMatch\textsubscript{Overall}",
-    "t5_asp_overall": "T5-ASP\textsubscript{Overall}"
+    "dict_match_gaz": "DictMatch\\textsubscript{Gaz}",
+    "dict_match_sent": "DictMatch\\textsubscript{Sent}",
+    "dict_match_lownergaz": "DictMatch\\textsubscript{LownerGaz}",
+    "dict_match_lownergaz_sent": "DictMatch\\textsubscript{LownerGaz+Sent}",
+    "dict_match_gaz_sent": "DictMatch\\textsubscript{Gaz+Sent}",
+    "search_match_gaz": "SearchMatch\\textsubscript{Gaz}",
+    "search_match_sent": "SearchMatch\\textsubscript{Sent}",
+    "search_match_lownergaz": "SearchMatch\\textsubscript{LownerGaz}",
+    "search_match_lownergaz_sent":
+    "SearchMatch\\textsubscript{LownerGaz+Sent}",
+    "search_match_gaz_sent": "SearchMatch\\textsubscript{Gaz+Sent}",
+    "t5_asp_gaz": "T5-ASP\\textsubscript{Gaz}",
+    "t5_asp_sent": "T5-ASP\\textsubscript{Sent}",
+    "t5_asp_lownergaz": "T5-ASP\\textsubscript{LownerGaz}",
+    "t5_asp_gaz_sent": "T5-ASP\\textsubscript{Gaz+Sent}",
+    "t5_asp_lownergaz_sent": "T5-ASP\\textsubscript{LownerGaz+Sent}",
+    "search_match_overall": "SearchMatch\\textsubscript{Overall}",
+    "t5_asp_overall": "T5-ASP\\textsubscript{Overall}"
 }
 
 METRIC_ORDER = {
@@ -92,6 +96,63 @@ PLOT_SEARCH_NAMES = {
     "t5_asp_gaz_sent": "Gaz+Sent",
     "t5_asp_lownergaz_sent": "LownerGaz+Sent"
 }
+
+
+def highlight_correlations(styler: Styler):
+    ranges = [(0.0, 0.3), (0.3, 0.5), (0.5, 0.7), (0.7, 0.9), (0.9, 1.0)]
+    cm_blue = matplotlib.colormaps["Blues"].resampled(len(ranges))
+    for i, (left, right) in enumerate(ranges):
+        color = matplotlib.colors.rgb2hex(cm_blue(i))[1:].upper()
+        if i > 0:
+            is_last = i >= len(ranges) - 2
+            styler.highlight_between(
+                left=left,
+                right=right,
+                inclusive="left",
+                props="cellcolor:[HTML]{" + color +
+                "};color:{white}" if is_last else "cellcolor:[HTML]{" + color +
+                "};")
+            styler.highlight_between(
+                left=-right,
+                right=-left,
+                inclusive="right",
+                props="cellcolor:[HTML]{" + color +
+                "};color:{white}" if is_last else "cellcolor:[HTML]{" + color +
+                "};")
+    return styler
+
+
+def get_correlations_correct_latex_format(df: pd.DataFrame,
+                                          model_names: Optional[dict] = None):
+    def index_order(x: pd.Index):
+        if x.name == "perf_metric":
+            return x.map(METRIC_ORDER)
+        elif x.name == "model":
+            return x.map(MODEL_ORDER)
+        return x
+
+    def column_order(x: pd.Index):
+        if x.name == "data_metric":
+            return x.map(METRIC_ORDER)
+        return x
+
+    if model_names is None:
+        model_names = LATEX_MODEL_NAMES
+
+    df.sort_index(axis=0, inplace=True, key=index_order)
+    df.sort_index(axis=1, inplace=True, key=column_order)
+    df.index = df.index.map(lambda x:
+                            (LATEX_METRIC_NAMES[x[0]], model_names[x[1]]))
+    df.columns = df.columns.map(LATEX_METRIC_NAMES)
+    df.index.rename(["Performance Metric", "Model type"], inplace=True)
+    df.columns.rename("Input Data Metric", inplace=True)
+
+    return df.style.pipe(highlight_correlations).format('{:.4f}').to_latex(
+        siunitx=True,
+        hrules=True,
+        multirow_align="t",
+        column_format=
+        "@{} ll*4{S[table-format = 1.4, group-minimum-digits=5]}@{} ")
 
 
 def get_correct_latex_format(df: pd.DataFrame,
