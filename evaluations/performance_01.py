@@ -18,7 +18,7 @@ from collections import defaultdict
 from data_metrics.entity_coverage_ratio import entity_coverage_ratio, entity_coverage_ratio_precounted, count_entities
 from data_metrics.search_sample_similarity import get_search_sample_similarity
 from tqdm import tqdm
-from evaluations.utils import MODEL_ORDER, PLOT_MODEL_NAMES
+from evaluations.utils import MODEL_ORDER, PLOT_MODEL_NAMES, PLOT_SEARCH_NAMES
 import matplotlib.pyplot as plt
 
 plt.rcParams.update({
@@ -62,7 +62,7 @@ def process_metrics_file(metrics_filepath):
 
 def get_per_sample_metrics():
     metrics_file_path = os.path.join(thesis_path, "evaluations", "metrics",
-                                     "01_performance_per_sample_metrics.pkl")
+                                     "01_performance_per_sample_metrics.pkl.tar.gz")
     if not os.path.exists(metrics_file_path):
         datasets: Dict[str, List[dict]] = {}
         for dataset_name, dataset_path in [
@@ -179,8 +179,9 @@ def get_error_types(metrics_df: pd.DataFrame, checkpoint: str, dataset: str):
         index=["seed", "model", "checkpoint", "dataset"],
         values=error_types,
         aggfunc="sum")
+    agg_df["sum"] = agg_df[error_types].sum(axis=1)
     avg_errors = agg_df.pivot_table(index=["model", "checkpoint", "dataset"],
-                                    values=error_types,
+                                    values=[ "sum", *error_types],
                                     aggfunc=("mean", "std")).reset_index()
 
     return avg_errors[(avg_errors["checkpoint"] == checkpoint)
@@ -459,8 +460,8 @@ def get_entity_coverages(dataset: str):
 def get_ecr_plotable_table(ecr_df: pd.DataFrame, dataset: str):
     plt_ecr_df = ecr_df[ecr_df["dataset"]==dataset].loc[:, ~ecr_df.columns.isin(["eecr", "dataset"])]
     plt_ecr_df = plt_ecr_df.sort_values("model", key=lambda x: x.apply(lambda y: MODEL_ORDER.get(y, 1000)))
-    plt_ecr_df["Models"] = plt_ecr_df["model"].apply(lambda x: PLOT_MODEL_NAMES[x])
-    plt_ecr_df = plt_ecr_df.set_index("Models")
+    plt_ecr_df["Search"] = plt_ecr_df["model"].apply(lambda x: PLOT_SEARCH_NAMES[x])
+    plt_ecr_df = plt_ecr_df.set_index("Search")
     return plt_ecr_df.loc[:, ~plt_ecr_df.columns.isin(["model"])].T
 
 

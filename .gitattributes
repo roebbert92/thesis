@@ -2,3 +2,4 @@
 /data_similarity/conll_wnut_lowner_sim.csv filter=lfs diff=lfs merge=lfs -text
 /data_similarity/cross_sim.csv filter=lfs diff=lfs merge=lfs -text
 *.pkl filter=lfs diff=lfs merge=lfs -text
+*.tar.gz filter=lfs diff=lfs merge=lfs -text
