@@ -62,6 +62,9 @@ def train_model(corpus: Corpus,
                 metrics_base_path: str,
                 ckpt_path: Optional[str] = None,
                 num_epochs: int = 20):
+    if "PL_GLOBAL_SEED" in os.environ:
+        del os.environ["PL_GLOBAL_SEED"]
+    pl.seed_everything(seed)
     if ckpt_path is None:
         label_type = "ner"
         label_dict = corpus.make_label_dictionary(label_type=label_type,
@@ -85,44 +88,51 @@ def train_model(corpus: Corpus,
         )
     else:
         tagger = SequenceTagger.load(ckpt_path)
-    trainer = ModelTrainer(tagger, corpus)
-    os.makedirs(model_output_path, exist_ok=True)
-
-    os.makedirs(tensorboard_logdir, exist_ok=True)
     # seed
-    if "PL_GLOBAL_SEED" in os.environ:
-        del os.environ["PL_GLOBAL_SEED"]
-    pl.seed_everything(seed)
-    trainer.fine_tune(
-        model_output_path,
-        #device="cuda:0",
-        use_amp=True,
-        learning_rate=5e-6,
-        mini_batch_size=40,
-        eval_batch_size=120,
-        max_epochs=num_epochs,  # 20
-        mini_batch_chunk_size=15,
-        num_workers=3,
-        optimizer=AdamW,
-        scheduler=OneCycleLR,  # type: ignore
-        embeddings_storage_mode='none',
-        weight_decay=0.,
-        shuffle_first_epoch=True,
-        param_selection_mode=False,
-        use_final_model_for_eval=False,
-        monitor_train=False,
-        monitor_test=False,
-        save_final_model=True,
-        exclude_labels=["O"],
-        main_evaluation_metric=("macro avg", "f1-score"),
-        use_tensorboard=True,
-        tensorboard_log_dir=tensorboard_logdir,
-        tensorboard_comment=f"{seed}_flair_roberta",
-        metrics_for_tensorboard=[("macro avg", "f1-score"),
-                                 ("macro avg", "precision"),
-                                 ("macro avg", "recall")])
-    del tagger
-    del trainer
+    mini_batch_chunk_size = 6
+    try:
+        trainer = ModelTrainer(tagger, corpus)
+        trainer.fine_tune(
+            model_output_path,
+            #device="cuda:0",
+            use_amp=True,
+            learning_rate=5e-6,
+            mini_batch_size=40,
+            eval_batch_size=40,
+            max_epochs=num_epochs,  # 20
+            mini_batch_chunk_size=mini_batch_chunk_size,
+            num_workers=3,
+            optimizer=AdamW,
+            scheduler=OneCycleLR,  # type: ignore
+            embeddings_storage_mode='none',
+            weight_decay=0.,
+            shuffle_first_epoch=True,
+            param_selection_mode=False,
+            use_final_model_for_eval=False,
+            monitor_train=False,
+            monitor_test=False,
+            save_final_model=True,
+            exclude_labels=["O"],
+            main_evaluation_metric=("macro avg", "f1-score"),
+            use_tensorboard=True,
+            tensorboard_log_dir=tensorboard_logdir,
+            tensorboard_comment=f"{seed}_flair_roberta",
+            metrics_for_tensorboard=[("macro avg", "f1-score"),
+                                     ("macro avg", "precision"),
+                                     ("macro avg", "recall")])
+    except RuntimeError:
+        mini_batch_chunk_size = mini_batch_chunk_size - 1 if mini_batch_chunk_size > 1 else 1
+        try:
+            del trainer
+        except:
+            pass
+        gc.collect()
+        torch.cuda.empty_cache()
+
+    try:
+        del trainer
+    except:
+        pass
     gc.collect()
     torch.cuda.empty_cache()
 
@@ -155,12 +165,17 @@ def get_asp_metrics_from_flair(metrics_base_path: str, dataset_names: list,
             flair_data = flair_dataset.dev
         elif dataset_part == "test":
             flair_data = flair_dataset.test
-        tagger.evaluate(
-            flair_data,  # type: ignore
-            "ner",
-            out_path=temp_path,
-            return_loss=False,
-            mini_batch_size=120)
+        mini_batch_size = 40
+        try:
+            tagger.evaluate(
+                flair_data,  # type: ignore
+                "ner",
+                out_path=temp_path,
+                return_loss=False,
+                mini_batch_size=mini_batch_size)
+        except RuntimeError:
+            mini_batch_size = mini_batch_size - 1 if mini_batch_size > 1 else 1
+            torch.cuda.empty_cache()
         # init metrics
         metrics = ASPMetrics()
         metrics.predictions = asp_dataset_to_asp_predictions(
@@ -189,14 +204,17 @@ def experiment_01():
                 model_output_path = os.path.join(datapath, f"seed_{seed}",
                                                  "03_checkpoints",
                                                  "flair_roberta")
+                os.makedirs(model_output_path, exist_ok=True)
                 ckpt_files = list(glob(os.path.join(model_output_path, "*")))
                 for ckpt_file in ckpt_files:
                     os.remove(ckpt_file)
                 metrics_base_path = os.path.join(datapath, f"seed_{seed}",
                                                  "04_metrics", "flair_roberta")
+                os.makedirs(metrics_base_path, exist_ok=True)
                 tensorboard_logdir = os.path.sep + os.path.join(
                     os.path.join(*datapath.split(os.path.sep)[:-1]),
                     "lightning_logs", f"{seed}_flair_roberta")
+                os.makedirs(tensorboard_logdir, exist_ok=True)
                 train_model(dataset, seed, dataset_names, tensorboard_logdir,
                             model_output_path, metrics_base_path)
                 trained = True
@@ -217,19 +235,25 @@ def experiment_03():
     configs = [
         # (Gazetteer?, Finetuning?, Pretrained?, config)
         (False, "full", False, {
-            "name": "flair_roberta"
+            "name": "flair_roberta",
+            "data_path": datapath
         }),
         (False, "full", True, {
             "name": "best_flair_roberta",
-            "ckpt_path": best_model_path
+            "ckpt_path": best_model_path,
+            "data_path": datapath
         }),
         (False, "no", True, {
             "name": "best_flair_roberta",
-            "ckpt_path": best_model_path
+            "ckpt_path": best_model_path,
+            "data_path": datapath
         }),
     ]
     for seed in seeds:
         for gaz, finetuning, pretrained, config in configs:
+            if (1, False, "full", False) == (seed, gaz, finetuning,
+                                             pretrained):
+                continue
             trained = False
             while not trained:
                 try:
@@ -237,6 +261,7 @@ def experiment_03():
                         config["data_path"], f"seed_{str(seed)}",
                         "03_checkpoints",
                         f"{gaz}_{finetuning}_{pretrained}_{config['name']}")
+                    os.makedirs(model_output_path, exist_ok=True)
                     ckpt_files = list(
                         glob(os.path.join(model_output_path, "*")))
                     for ckpt_file in ckpt_files:
@@ -245,11 +270,13 @@ def experiment_03():
                         config["data_path"], f"seed_{str(seed)}", "04_metrics",
                         f"{gaz}_{finetuning}_{pretrained}_{config['name']}",
                         "-1_0")
+                    os.makedirs(metrics_base_path, exist_ok=True)
                     tensorboard_logdir = os.path.sep + os.path.join(
                         os.path.join(*datapath.split(os.path.sep)[:-1]),
                         "lightning_logs",
                         f"{seed}_{gaz}_{finetuning}_{pretrained}_{config['name']}_-1"
                     )
+                    os.makedirs(tensorboard_logdir, exist_ok=True)
                     train_model(dataset, seed, dataset_names,
                                 tensorboard_logdir, model_output_path,
                                 metrics_base_path,
