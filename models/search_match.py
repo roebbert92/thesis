@@ -300,19 +300,19 @@ def experiment_03():
                 os.path.join(thesis_path, "experiments",
                              "03_adaptation_emerging_entities", "data",
                              "01_search_results",
-                             "ann_6_bm25_6_reciprocal_rank_fusion_8",
+                             "ann_6_bm25_12_reciprocal_rank_fusion_16",
                              f"{comb_idx}_{db_idx}", "wnut_train.pkl"),
                 "search_dev":
                 os.path.join(thesis_path, "experiments",
                              "03_adaptation_emerging_entities", "data",
                              "01_search_results",
-                             "ann_6_bm25_6_reciprocal_rank_fusion_8",
+                             "ann_6_bm25_12_reciprocal_rank_fusion_16",
                              f"{comb_idx}_{db_idx}", "wnut_dev.pkl"),
                 "search_test":
                 os.path.join(thesis_path, "experiments",
                              "03_adaptation_emerging_entities", "data",
                              "01_search_results",
-                             "ann_6_bm25_6_reciprocal_rank_fusion_8",
+                             "ann_6_bm25_12_reciprocal_rank_fusion_16",
                              f"{comb_idx}_{db_idx}", "wnut_test.pkl"),
             }
 
