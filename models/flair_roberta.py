@@ -262,12 +262,12 @@ def experiment_03():
             "data_path": datapath
         }),
         (False, "full", True, {
-            "name": "best_flair_roberta",
+            "name": "flair_roberta",
             "ckpt_path": best_model_path,
             "data_path": datapath
         }),
         (False, "no", True, {
-            "name": "best_flair_roberta",
+            "name": "flair_roberta",
             "ckpt_path": best_model_path,
             "data_path": datapath
         }),
