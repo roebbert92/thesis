@@ -2,7 +2,14 @@ from typing import Dict, List, Optional
 import pandas as pd
 from itertools import product
 from pandas.io.formats.style import Styler
-import matplotlib
+import matplotlib as plt
+
+plt.rcParams.update({
+    'mathtext.default': 'regular',
+    "mathtext.fontset": "cm",
+    "font.family": "serif",
+    "font.size": 14
+})
 
 MODEL_ORDER = {
     key: idx
@@ -37,6 +44,36 @@ LATEX_MODEL_NAMES = {
     "t5_asp_lownergaz_sent": "T5-ASP\\textsubscript{LownerGaz+Sent}",
     "search_match_overall": "SearchMatch\\textsubscript{Overall}",
     "t5_asp_overall": "T5-ASP\\textsubscript{Overall}"
+}
+
+DATASET_ORDER = {
+    key: idx
+    for idx, key in enumerate([
+        'lowner_train', 'lowner_dev', 'lowner_test', 'lowner_gazetteer',
+        'multiconer_test', 'wnut_train', 'wnut_dev', 'wnut_test'
+    ])
+}
+
+LATEX_DATASET_NAMES = {
+    'lowner_train': "LOWNER\\textsubscript{train}",
+    'lowner_dev': "LOWNER\\textsubscript{dev}",
+    'lowner_test': "LOWNER\\textsubscript{test}",
+    'lowner_gazetteer': "LOWNER\\textsubscript{gazetteer}",
+    'multiconer_test': "MultiCoNER\\textsubscript{test}",
+    'wnut_train': "WNUT-17\\textsubscript{train}",
+    'wnut_dev': "WNUT-17\\textsubscript{dev}",
+    'wnut_test': "WNUT-17\\textsubscript{test}"
+}
+
+PLOT_DATASET_NAMES = {
+    'lowner_train': r"LOWNER$_{train}$",
+    'lowner_dev': r"LOWNER$_{dev}$",
+    'lowner_test': r"LOWNER$_{test}$",
+    'lowner_gazetteer': r"LOWNER$_{gazetteer}$",
+    'multiconer_test': r"MultiCoNER$_{test}$",
+    'wnut_train': r"WNUT-17$_{train}$",
+    'wnut_dev': r"WNUT-17$_{dev}$",
+    'wnut_test': r"WNUT-17$_{test}$"
 }
 
 METRIC_ORDER = {
@@ -97,12 +134,21 @@ PLOT_SEARCH_NAMES = {
     "t5_asp_lownergaz_sent": "LownerGaz+Sent"
 }
 
+ENTITY_NAMES = {
+    "person": "Person",
+    "location": "Location",
+    "group": "Group",
+    "corporation": "Corporation",
+    "creative-work": "Creative Work",
+    "product": "Product"
+}
+
 
 def highlight_correlations(styler: Styler):
     ranges = [(0.0, 0.3), (0.3, 0.5), (0.5, 0.7), (0.7, 0.9), (0.9, 1.0)]
-    cm_blue = matplotlib.colormaps["Blues"].resampled(len(ranges))
+    cm_blue = plt.colormaps["Blues"].resampled(len(ranges))
     for i, (left, right) in enumerate(ranges):
-        color = matplotlib.colors.rgb2hex(cm_blue(i))[1:].upper()
+        color = plt.colors.rgb2hex(cm_blue(i))[1:].upper()
         if i > 0:
             is_last = i >= len(ranges) - 2
             styler.highlight_between(
@@ -185,22 +231,7 @@ def get_correct_latex_format(df: pd.DataFrame,
         result_df.columns = ["".join(col) for col in result_df.columns.values]
     elif column_depth == 3:
         # iterate over column names - entities
-        entity_order = {
-            key: idx
-            for idx, key in enumerate([
-                "person", "location", "group", "corporation", "creative-work",
-                "product"
-            ])
-        }
-        entity_names = {
-            "person": "Person",
-            "location": "Location",
-            "group": "Group",
-            "corporation": "Corporation",
-            "creative-work": "Creative Work",
-            "product": "Product"
-        }
-        for level_0_col, ent_name in entity_names.items():
+        for level_0_col, ent_name in ENTITY_NAMES.items():
             for column, new_column in column_names.items():
                 sorted_df[ent_name, new_column,
                           ""] = sorted_df[level_0_col][column]['mean'].map(
@@ -210,7 +241,7 @@ def get_correct_latex_format(df: pd.DataFrame,
                                       100)).astype(int).astype(str) + ")"
         result_df = sorted_df[[
             ("Models", "", ""),
-            *list(product(entity_names.values(), column_names.values(), [""]))
+            *list(product(ENTITY_NAMES.values(), column_names.values(), [""]))
         ]].set_index("Models")
         if len(column_names) == 1:
             result_df.columns = [col[0] for col in result_df.columns.values]

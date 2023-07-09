@@ -178,7 +178,7 @@ def compute_similarity(fn: torch.nn.Module,
                                first_to_second, len(first), set_batch_size)
         return first_to_second
 
-    if first_embed is second_embed:
+    if first_name == second_name:
         sims = compute(first_name, first_embed, second_name, second_embed,
                        device, batch_size,
                        max_set_size).cpu().numpy().tolist()
@@ -201,15 +201,21 @@ def get_embeddings(cache: Dict[str, Tensor], model: SentenceTransformer,
         first_embed = cache[first_name].to(device=device)
     else:
         first_embed: Tensor = model.encode(
-            first, convert_to_numpy=False,
-            convert_to_tensor=True)  # type: ignore
+            first,
+            convert_to_numpy=False,
+            convert_to_tensor=True,
+            show_progress_bar=True).to(  # type: ignore
+                torch.bfloat16)  # type: ignore
         cache[first_name] = first_embed.cpu()
     if second_name in cache:
         second_embed = cache[second_name].to(device=device)
     else:
         second_embed: Tensor = model.encode(
-            second, convert_to_numpy=False,
-            convert_to_tensor=True)  # type: ignore
+            second,
+            convert_to_numpy=False,
+            convert_to_tensor=True,
+            show_progress_bar=True).to(  # type: ignore
+                torch.bfloat16)  # type: ignore
         cache[second_name] = second_embed.cpu()
     return first_embed, second_embed
 
@@ -254,7 +260,7 @@ def get_windowed_context(dataset: List[dict], window_size=3):
 def get_full_context(dataset: List[dict]):
     sentences = []
     sentence_ids = []
-    for item in dataset:
+    for item_idx, item in enumerate(dataset):
         if "tokens" in item:
             sentence_ids.append(item["doc_id"])
             sentences.append(" ".join(item["tokens"]))
@@ -265,6 +271,9 @@ def get_full_context(dataset: List[dict]):
                 sentences.append(f"{item['meta']['type']}: {item['content']}")
             else:
                 sentences.append(item["content"])
+        elif "entity" in item:
+            sentence_ids.append(item_idx)
+            sentences.append(f"{item['entity']}")
     return sentence_ids, sentences
 
 
@@ -282,24 +291,24 @@ def sample_similarity(first_name: str,
     cosine = torch.nn.CosineSimilarity(dim=-1)
 
     # build database (gazetteers (entities), sentences) if not exists for each path
-    first_gaz_ids, first_gazetteers = get_windowed_context(first)
+    #first_gaz_ids, first_gazetteers = get_windowed_context(first)
     first_sent_ids, first_sentences = get_full_context(first)
-    second_gaz_ids, second_gazetteers = get_windowed_context(second)
+    #second_gaz_ids, second_gazetteers = get_windowed_context(second)
     second_sent_ids, second_sentences = get_full_context(second)
 
     with torch.no_grad():
-        first_gaz_embed, second_gaz_embed = get_embeddings(
-            cache, model, first_name + "_gaz", first_gazetteers,
-            second_name + "_gaz", second_gazetteers, device)
-        for direction, gaz_sims in compute_similarity(
-                cosine, first_name + "_gaz", first_gaz_embed,
-                second_name + "_gaz", second_gaz_embed, device):
-            if direction == "first_to_second":
-                yield "first", "windowed", second_gaz_ids, gaz_sims
-            if direction == "second_to_first":
-                yield "second", "windowed", first_gaz_ids, gaz_sims
-        del first_gaz_embed
-        del second_gaz_embed
+        # first_gaz_embed, second_gaz_embed = get_embeddings(
+        #     cache, model, first_name + "_gaz", first_gazetteers,
+        #     second_name + "_gaz", second_gazetteers, device)
+        # for direction, gaz_sims in compute_similarity(
+        #         cosine, first_name + "_gaz", first_gaz_embed,
+        #         second_name + "_gaz", second_gaz_embed, device):
+        #     if direction == "first_to_second":
+        #         yield "first", "windowed", second_gaz_ids, gaz_sims
+        #     if direction == "second_to_first":
+        #         yield "second", "windowed", first_gaz_ids, gaz_sims
+        # del first_gaz_embed
+        # del second_gaz_embed
 
         first_sent_embed, second_sent_embed = get_embeddings(
             cache, model, first_name + "_sent", first_sentences,
