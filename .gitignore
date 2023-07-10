@@ -19,3 +19,4 @@ search/lownergaz/*.faiss
 03_checkpoints
 data_augmentation/models
 data/mlowner/lowner_gazetteer_db.json
+*.tar.gz

@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 
 plt.rcParams.update({
     'mathtext.default': 'regular',
-    "mathtext.fontset":"cm",
+    "mathtext.fontset": "cm",
     "font.family": "serif",
     "font.size": 14
 })
@@ -61,8 +61,9 @@ def process_metrics_file(metrics_filepath):
 
 
 def get_per_sample_metrics():
-    metrics_file_path = os.path.join(thesis_path, "evaluations", "metrics",
-                                     "01_performance_per_sample_metrics.pkl.tar.gz")
+    metrics_file_path = os.path.join(
+        thesis_path, "evaluations", "metrics",
+        "01_performance_per_sample_metrics.pkl.tar.gz")
     if not os.path.exists(metrics_file_path):
         datasets: Dict[str, List[dict]] = {}
         for dataset_name, dataset_path in [
@@ -181,7 +182,7 @@ def get_error_types(metrics_df: pd.DataFrame, checkpoint: str, dataset: str):
         aggfunc="sum")
     agg_df["sum"] = agg_df[error_types].sum(axis=1)
     avg_errors = agg_df.pivot_table(index=["model", "checkpoint", "dataset"],
-                                    values=[ "sum", *error_types],
+                                    values=["sum", *error_types],
                                     aggfunc=("mean", "std")).reset_index()
 
     return avg_errors[(avg_errors["checkpoint"] == checkpoint)
@@ -235,7 +236,7 @@ def get_error_types_per_entity(metrics_df: pd.DataFrame, checkpoint: str,
 
 def get_labeled_data():
     labeled_data_path = os.path.join(thesis_path, "evaluations", "metrics",
-                                     "01_performance_labeled_data.pkl")
+                                     "01_performance_labeled_data.pkl.tar.gz")
     if os.path.exists(labeled_data_path):
         with open(labeled_data_path, "rb") as file:
             labeled_data, models_to_labeled_data, dataset = pickle.load(file)
@@ -243,12 +244,15 @@ def get_labeled_data():
         os.makedirs(os.path.dirname(labeled_data_path), exist_ok=True)
         labeled_data = defaultdict(list)
         for key in ["gaz", "lownergaz", "sent"]:
-            with open(
-                    os.path.join(thesis_path, "search", key,
-                                 "database_export.pkl"), "rb") as file:
-                for item in pickle.load(file):
-                    item: Document
-                    labeled_data[key].append(item.to_dict())
+            if key in ["gaz", "sent"]:
+                export_path = os.path.join(thesis_path, "data", "multiconer",
+                                           f"multiconer_{key}.json")
+            else:
+                export_path = os.path.join(thesis_path, "data", "mlowner",
+                                           "lowner_gazetteer_db.json")
+            with open(export_path, "r") as file:
+                for item in json.load(file):
+                    labeled_data[key].append(item)
 
         models_to_labeled_data = {
             't5_asp_lownergaz': ["lownergaz"],
@@ -274,7 +278,7 @@ def get_labeled_data():
 def get_search_results_data():
     search_results_data_path = os.path.join(
         thesis_path, "evaluations", "metrics",
-        "01_performance_search_results_data.pkl")
+        "01_performance_search_results_data.pkl.tar.gz")
     if os.path.exists(search_results_data_path):
         with open(search_results_data_path, "rb") as file:
             search_results, dataset = pickle.load(file)
@@ -289,6 +293,8 @@ def get_search_results_data():
             fp = data_path.split(os.path.sep)
             model_name = fp[-2]
             dataset_name = os.path.splitext(fp[-1])[0]
+            if not dataset_name.startswith("lowner"):
+                continue
             if model_name not in search_results:
                 search_results[model_name] = defaultdict(dict)
             with open(data_path, "rb") as file:
@@ -312,7 +318,7 @@ def get_search_results_data():
 def get_labeled_data_entity_coverage():
     eecr_labeled_data_path = os.path.join(
         thesis_path, "evaluations", "metrics",
-        "01_performance_labeled_data_eecr_metrics.pkl")
+        "01_performance_labeled_data_eecr_metrics.pkl.tar.gz")
     if os.path.exists(eecr_labeled_data_path):
         eecr_df = pd.read_pickle(eecr_labeled_data_path)
     else:
@@ -347,7 +353,7 @@ def get_labeled_data_entity_coverage():
 def get_labeled_data_entity_coverage_per_sample():
     eecr_labeled_data_per_sample_path = os.path.join(
         thesis_path, "evaluations", "metrics",
-        "01_performance_labeled_data_eecr_per_sample_metrics.pkl")
+        "01_performance_labeled_data_eecr_per_sample_metrics.pkl.tar.gz")
     if os.path.exists(eecr_labeled_data_per_sample_path):
         eecr_df = pd.read_pickle(eecr_labeled_data_per_sample_path)
     else:
@@ -403,7 +409,7 @@ def calc_ecr_classes(ratio: dict, c: dict):
 def get_search_results_entity_coverage_per_sample():
     eecr_search_results_data_path = os.path.join(
         thesis_path, "evaluations", "metrics",
-        "01_performance_search_results_eecr_metrics.pkl")
+        "01_performance_search_results_eecr_metrics.pkl.tar.gz")
     if os.path.exists(eecr_search_results_data_path):
         eecr_df = pd.read_pickle(eecr_search_results_data_path)
     else:
@@ -440,27 +446,53 @@ def get_search_results_entity_coverage_per_sample():
 def aggregate_per_sample_eecr_metrics(metrics_df: pd.DataFrame):
     return metrics_df.pivot_table(values=["eecr"],
                                   index=["model", "dataset"],
-                                  aggfunc=["mean", "std"]).swaplevel(0, 1, 1).reset_index()
+                                  aggfunc=["mean",
+                                           "std"]).swaplevel(0, 1,
+                                                             1).reset_index()
+
 
 def aggregate_per_sample_ecr_classes(metrics_df: pd.DataFrame):
-    ECR_CLASSES_ORDER = ["ρ=1", "ρ ∈ (0.5,1)", "ρ ∈ (0,0.5]", "ρ=0∧C≠0", "ρ=0∧C=0"]
-    return metrics_df.pivot_table(values=ECR_CLASSES_ORDER, index=["model", "dataset"], aggfunc="sum")[ECR_CLASSES_ORDER].reset_index()
+    ECR_CLASSES_ORDER = [
+        "ρ=1", "ρ ∈ (0.5,1)", "ρ ∈ (0,0.5]", "ρ=0∧C≠0", "ρ=0∧C=0"
+    ]
+    return metrics_df.pivot_table(
+        values=ECR_CLASSES_ORDER, index=["model", "dataset"],
+        aggfunc="sum")[ECR_CLASSES_ORDER].reset_index()
+
 
 def get_entity_coverages(dataset: str):
     # combine to one table
     labeled_data_eecr_df = get_labeled_data_entity_coverage()
     labeled_data_eecr_sample_df = get_labeled_data_entity_coverage_per_sample()
-    agg_labeled_data_eecr_sample_df = aggregate_per_sample_eecr_metrics(labeled_data_eecr_sample_df)
+    agg_labeled_data_eecr_sample_df = aggregate_per_sample_eecr_metrics(
+        labeled_data_eecr_sample_df)
     search_results_data_eecr = get_search_results_entity_coverage_per_sample()
-    agg_search_results_data_eecr = aggregate_per_sample_eecr_metrics(search_results_data_eecr)
-    
-    eecr_table = labeled_data_eecr_df[["model", "dataset", "eecr"]].set_index(["model", "dataset"]).join(agg_labeled_data_eecr_sample_df.set_index(["model", "dataset"]), on=["model", "dataset"], lsuffix="_labeled_data").join(agg_search_results_data_eecr.set_index(["model", "dataset"]), on=["model", "dataset"], lsuffix="_labeled_data_per_sample", rsuffix="_search_results").reset_index()
-    return eecr_table[eecr_table["dataset"]==dataset][["model", "eecr_labeled_data", "eecr_labeled_data_per_sample", "eecr_search_results"]]
+    agg_search_results_data_eecr = aggregate_per_sample_eecr_metrics(
+        search_results_data_eecr)
+
+    eecr_table = labeled_data_eecr_df[["model", "dataset", "eecr"]].set_index([
+        "model", "dataset"
+    ]).join(agg_labeled_data_eecr_sample_df.set_index(["model", "dataset"]),
+            on=["model", "dataset"],
+            lsuffix="_labeled_data").join(
+                agg_search_results_data_eecr.set_index(["model", "dataset"]),
+                on=["model", "dataset"],
+                lsuffix="_labeled_data_per_sample",
+                rsuffix="_search_results").reset_index()
+    return eecr_table[eecr_table["dataset"] == dataset][[
+        "model", "eecr_labeled_data", "eecr_labeled_data_per_sample",
+        "eecr_search_results"
+    ]]
+
 
 def get_ecr_plotable_table(ecr_df: pd.DataFrame, dataset: str):
-    plt_ecr_df = ecr_df[ecr_df["dataset"]==dataset].loc[:, ~ecr_df.columns.isin(["eecr", "dataset"])]
-    plt_ecr_df = plt_ecr_df.sort_values("model", key=lambda x: x.apply(lambda y: MODEL_ORDER.get(y, 1000)))
-    plt_ecr_df["Search"] = plt_ecr_df["model"].apply(lambda x: PLOT_SEARCH_NAMES[x])
+    plt_ecr_df = ecr_df[ecr_df["dataset"] ==
+                        dataset].loc[:,
+                                     ~ecr_df.columns.isin(["eecr", "dataset"])]
+    plt_ecr_df = plt_ecr_df.sort_values(
+        "model", key=lambda x: x.apply(lambda y: MODEL_ORDER.get(y, 1000)))
+    plt_ecr_df["Search"] = plt_ecr_df["model"].apply(
+        lambda x: PLOT_SEARCH_NAMES[x])
     plt_ecr_df = plt_ecr_df.set_index("Search")
     return plt_ecr_df.loc[:, ~plt_ecr_df.columns.isin(["model"])].T
 
@@ -468,7 +500,7 @@ def get_ecr_plotable_table(ecr_df: pd.DataFrame, dataset: str):
 def get_search_results_data_ccr_metrics():
     metrics_file_path = os.path.join(
         thesis_path, "evaluations", "metrics",
-        "01_performance_search_results_ccr_metrics.pkl")
+        "01_performance_search_results_ccr_metrics.pkl.tar.gz")
     if os.path.exists(metrics_file_path):
         ccr_metrics_df = pd.read_pickle(metrics_file_path)
     else:

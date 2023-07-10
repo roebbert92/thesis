@@ -80,9 +80,9 @@ METRIC_ORDER = {
     key: idx
     for idx, key in enumerate([
         "eecr_labeled_data", "eecr_search_results", "max", "score",
-        "error_type1", "error_type2", "error_type3", "error_type4",
-        "error_type5", "error rate", "tp", "fn", "fp", "precision", "recall",
-        "f1", "targets"
+        "search score", "error_type1", "error_type2", "error_type3",
+        "error_type4", "error_type5", "error rate", "tp", "fn", "fp",
+        "precision", "recall", "f1", "targets"
     ])
 }
 
@@ -103,7 +103,8 @@ LATEX_METRIC_NAMES = {
     "eecr_labeled_data": "EECR labeled data",
     "eecr_search_results": "EECR search results",
     "max": "Top-1 Cosine Similarity",
-    "score": "Search score"
+    "score": "Search score",
+    "search score": "Search score",
 }
 
 PLOT_MODEL_NAMES = {
@@ -142,6 +143,16 @@ ENTITY_NAMES = {
     "creative-work": "Creative Work",
     "product": "Product"
 }
+
+
+def merge_mean_std(dataframe: pd.DataFrame,
+                   mean_column,
+                   std_column,
+                   precision=2) -> pd.Series:
+    return dataframe[mean_column].map(
+        lambda x: '{:,.{prec}f}'.format(x, prec=precision)) + " (" + (round(
+            dataframe[std_column] *
+            10**precision)).astype(int).astype(str) + ")"
 
 
 def highlight_correlations(styler: Styler):

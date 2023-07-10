@@ -55,12 +55,8 @@ with open(files["test"], encoding="utf-8") as file:
 seeds = [1, 2, 3]
 datasets = {"train": lowner_train, "dev": lowner_dev, "test": lowner_test}
 configs = [
-    # T5_ASP_LOWNERGAZ_SENT,
-    # T5_ASP_LOWNERGAZ,
-    T5_ASP_GAZ_SENT,
-    T5_ASP_GAZ,
-    #T5_ASP_SENT,
-    #T5_ASP
+    T5_ASP_LOWNERGAZ_SENT, T5_ASP_LOWNERGAZ, T5_ASP_GAZ_SENT, T5_ASP_GAZ,
+    T5_ASP_SENT, T5_ASP
 ]
 for config in configs:
     config.update({
