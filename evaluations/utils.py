@@ -131,6 +131,7 @@ PLOT_SEARCH_NAMES = {
     "t5_asp_gaz": "Gaz",
     "t5_asp_sent": "Sent",
     "t5_asp_lownergaz": "LownerGaz",
+    "t5_asp_lownergaz_gaz": "LownerGaz+Gaz",
     "t5_asp_gaz_sent": "Gaz+Sent",
     "t5_asp_lownergaz_sent": "LownerGaz+Sent"
 }
@@ -177,6 +178,104 @@ def highlight_correlations(styler: Styler):
                 "};color:{white}" if is_last else "cellcolor:[HTML]{" + color +
                 "};")
     return styler
+
+
+def get_dataset_stats_totals_correct_latex_format(df: pd.DataFrame):
+    major_df = df[[
+        "dataset", "total samples", "sample len avg", "sample len std",
+        "total entities", "entity count avg", "entity count std"
+    ]]
+    round_last_digits = 2
+    major_df["Dataset"] = major_df["dataset"].apply(
+        lambda x: LATEX_DATASET_NAMES[x])
+    major_df["Total samples"] = major_df["total samples"]
+    major_df["Sample length"] = major_df["sample len avg"].map(
+        lambda x: '{:,.{prec}f}'.format(x, prec=round_last_digits)) + " (" + (
+            round(major_df["sample len std"] *
+                  10**round_last_digits)).astype(int).astype(str) + ")"
+    major_df["Total entities"] = major_df["total entities"]
+    major_df["Entity count"] = major_df["entity count avg"].map(
+        lambda x: '{:,.{prec}f}'.format(x, prec=round_last_digits)) + " (" + (
+            round(major_df["entity count std"] *
+                  10**round_last_digits)).astype(int).astype(str) + ")"
+
+    major_df.set_index("Dataset", inplace=True)
+    return major_df[[
+        "Total samples", "Sample length", "Total entities", "Entity count"
+    ]].style.to_latex(
+        siunitx=True,
+        hrules=True,
+        multirow_align="t",
+        column_format=
+        "@{}llS[table-format = 7]S[table-format = 2.2 (2)]S[table-format = 7]S[table-format = 2.2 (2)]@{} "
+    )
+
+
+def get_gazetteer_stats_totals_correct_latex_format(df: pd.DataFrame):
+    major_df = df[[
+        "gazetteer", "total samples", "sample len avg", "sample len std",
+        "total entities", "entity count avg", "entity count std",
+        "distinct entities"
+    ]]
+    round_last_digits = 2
+    major_df["Gazetteer"] = major_df["gazetteer"].apply(
+        lambda x: PLOT_SEARCH_NAMES[x])
+    major_df["Total samples"] = major_df["total samples"].copy(deep=True)
+    major_df["Sample length"] = major_df["sample len avg"].map(
+        lambda x: '{:,.{prec}f}'.format(x, prec=round_last_digits)) + " (" + (
+            round(major_df["sample len std"] *
+                  10**round_last_digits)).astype(int).astype(str) + ")"
+    major_df["Total entities"] = major_df["total entities"].copy(deep=True)
+    major_df["Distinct entities"] = major_df["distinct entities"].copy(
+        deep=True)
+    major_df["Entity count"] = major_df["entity count avg"].map(
+        lambda x: '{:,.{prec}f}'.format(x, prec=round_last_digits)) + " (" + (
+            round(major_df["entity count std"] *
+                  10**round_last_digits)).astype(int).astype(str) + ")"
+
+    major_df.set_index("Gazetteer", inplace=True)
+    return major_df[[
+        "Total samples", "Sample length", "Total entities", "Entity count",
+        "Distinct entities"
+    ]].style.to_latex(
+        siunitx=True,
+        hrules=True,
+        multirow_align="t",
+        column_format=
+        "@{}llS[table-format = 7]S[table-format = 2.2 (2)]S[table-format = 7]S[table-format = 2.2 (2)]S[table-format = 7]@{} "
+    )
+
+
+def get_gazetteer_stats_entity_types_correct_latex_format(df: pd.DataFrame):
+    type_df = df[["gazetteer", *ENTITY_NAMES.keys()]]
+    type_df["Gazetteer"] = type_df["gazetteer"].apply(
+        lambda x: PLOT_SEARCH_NAMES[x])
+    for entity_type, entity_name in ENTITY_NAMES.items():
+        type_df[entity_name] = type_df[entity_type]
+
+    type_df.set_index("Gazetteer", inplace=True)
+
+    return type_df[[*ENTITY_NAMES.values()
+                    ]].style.to_latex(siunitx=True,
+                                      hrules=True,
+                                      multirow_align="t",
+                                      column_format="@{}lSSSSSS@{}")
+
+
+def get_dataset_stats_entity_types_correct_latex_format(df: pd.DataFrame):
+    type_df = df[["dataset", *ENTITY_NAMES.keys()]]
+    type_df["Dataset"] = type_df["dataset"].apply(
+        lambda x: LATEX_DATASET_NAMES[x])
+    for entity_type, entity_name in ENTITY_NAMES.items():
+        type_df[entity_name] = type_df[entity_type].copy(deep=True)
+
+    type_df.set_index("Dataset", inplace=True)
+
+    return type_df[[*ENTITY_NAMES.values()
+                    ]].style.to_latex(siunitx=True,
+                                      hrules=True,
+                                      multirow_align="t",
+                                      column_format="@{}lSSSSSS@{}")
 
 
 def get_correlations_correct_latex_format(df: pd.DataFrame,

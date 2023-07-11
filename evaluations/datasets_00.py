@@ -15,6 +15,8 @@ from haystack import Document
 from tqdm import tqdm
 from data_metrics.entity_coverage_ratio import entity_coverage_ratio, count_entities, entity_coverage_ratio_precounted
 from data_metrics.search_sample_similarity import get_search_sample_similarity
+from collections import Counter
+from statistics import mean, stdev
 
 
 def calc_ecr_classes(ratio: dict, c: dict):
@@ -314,3 +316,104 @@ def get_search_results_data_ccr_metrics():
         os.makedirs(os.path.dirname(metrics_file_path), exist_ok=True)
         ccr_metrics_df.to_pickle(metrics_file_path)
     return ccr_metrics_df
+
+
+def get_dataset_stats_df(files: Dict[str, Dict[str, str]]):
+    dataset_stats = []
+    for dataset, split in files.items():
+        for part, filepath in split.items():
+            with open(filepath) as file:
+                samples = json.load(file)
+            total_samples = len(samples)
+            if "tokens" in samples[0]:
+                sample_lens = [len(sample["tokens"]) for sample in samples]
+                sample_entity_count = [
+                    len(sample["entities"]) for sample in samples
+                ]
+                entities = [
+                    ent["type"] for sample in samples
+                    for ent in sample["entities"]
+                ]
+            else:
+                sample_lens = [
+                    len(sample["entity"].split(" ")) for sample in samples
+                ]
+                sample_entity_count = [1 for _ in samples]
+                entities = [sample["type"] for sample in samples]
+            entity_count = dict(Counter(entities))
+            dataset_stats.append({
+                "dataset": "_".join([dataset, part]),
+                "total samples": total_samples,
+                "sample len avg": mean(sample_lens),
+                "sample len std": stdev(sample_lens),
+                "total entities": sum(sample_entity_count),
+                "entity count avg": mean(sample_entity_count),
+                "entity count std": stdev(sample_entity_count),
+                **entity_count
+            })
+
+    return pd.DataFrame.from_records(dataset_stats)
+
+
+def get_gazetteer_stats_df(files: Dict[str, List[str]]):
+    gazetteer_stats = []
+    for gazetteer_name, filepaths in files.items():
+        samples = []
+        for filepath in filepaths:
+            with open(filepath) as file:
+                samples.extend(json.load(file))
+        total_samples = len(samples)
+        sample_lens = []
+        sample_entity_count = []
+        entities = []
+        distinct_entities = []
+        for sample in samples:
+            if "entities" in sample:
+                sample_lens.append(len(sample["tokens"]))
+                sample_entity_count.append(len(sample["entities"]))
+                entities.extend([ent["type"] for ent in sample["entities"]])
+                distinct_entities.extend([
+                    frozenset([
+                        ent["type"],
+                        " ".join(sample["tokens"][ent["start"]:ent["end"]])
+                    ]) for ent in sample["entities"]
+                ])
+            elif "entity" in sample:
+                sample_lens.append(len(sample["entity"].split(" ")))
+                sample_entity_count.append(1)
+                entities.append(sample["type"])
+                distinct_entities.append(
+                    frozenset([sample["type"], sample["entity"]]))
+            elif "content" in sample:
+                tokens = sample["content"].strip().split(" ")
+                sample_lens.append(len(tokens))
+                if "entities" in sample["meta"]:
+                    sample_entity_count.append(len(sample["meta"]["entities"]))
+                    entities.extend(
+                        [ent["type"] for ent in sample["meta"]["entities"]])
+                    distinct_entities.extend([
+                        frozenset([
+                            ent["type"],
+                            " ".join(tokens[ent["start"]:ent["end"]])
+                        ]) for ent in sample["meta"]["entities"]
+                    ])
+                elif "type" in sample["meta"]:
+                    sample_entity_count.append(1)
+                    entities.append(sample["meta"]["type"])
+                    distinct_entities.append(
+                        frozenset([sample["meta"]["type"], sample["content"]]))
+        entity_count = dict(Counter(entities))
+        distinct_entity_count = dict(Counter(distinct_entities))
+        gazetteer_stats.append({
+            "gazetteer": gazetteer_name,
+            "total samples": total_samples,
+            "sample len avg": mean(sample_lens),
+            "sample len std": stdev(sample_lens),
+            "total entities": sum(sample_entity_count),
+            "distinct entities": len(distinct_entity_count),
+            "entity count avg": mean(sample_entity_count),
+            "entity count std": stdev(sample_entity_count),
+            **entity_count
+        })
+
+    return pd.DataFrame.from_records(gazetteer_stats)
