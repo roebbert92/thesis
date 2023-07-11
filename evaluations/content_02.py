@@ -147,3 +147,18 @@ def get_per_sample_metrics():
         metric_files_to_df(metrics_file_path, metrics_paths)
     metrics_df = pd.read_parquet(metrics_file_path)
     return metrics_df
+
+
+def aggregate_performance_metrics(metrics_df: pd.DataFrame):
+    agg_df = metrics_df.pivot_table(index=[
+        "seed", "gazetteer_size", "error_ratio", "error_part", "timestep",
+        "dataset"
+    ],
+                                    values=["tp", "fp", "fn"],
+                                    aggfunc="sum")
+    agg_df["precision"] = 100 * agg_df["tp"] / (agg_df["tp"] + agg_df["fp"])
+    agg_df["recall"] = 100 * agg_df["tp"] / (agg_df["tp"] + agg_df["fn"])
+    agg_df["f1"] = 2 * agg_df["precision"] * agg_df["recall"] / (
+        agg_df["precision"] + agg_df["recall"])
+
+    return agg_df
