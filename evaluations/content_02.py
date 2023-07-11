@@ -12,6 +12,9 @@ from glob import glob
 from itertools import product
 import os
 import multiprocessing as mp
+from tqdm import tqdm
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 
 def init_process_metrics_file(d, t):
@@ -31,12 +34,8 @@ def process_metrics_file(metrics_filepath):
 
     metrics_list = []
     fp = metrics_filepath.split(os.path.sep)
-    try:
-        with open(metrics_filepath, "rb") as file:
-            metrics: ASPMetrics = pickle.load(file).to("cpu")
-    except RuntimeError:
-        print(metrics_filepath)
-        return None
+    with open(metrics_filepath, "rb") as file:
+        metrics: ASPMetrics = pickle.load(file)
     name = os.path.splitext(fp[-1])[0].split("_")
     timestep = 0
     if name[1] == "sampled":
@@ -84,10 +83,25 @@ def process_metrics_file(metrics_filepath):
     return metrics_path
 
 
+def metric_files_to_df(metrics_file_path, files: List[str]) -> None:
+    pqwriter = None
+    # create a parquet write object giving it an output file
+    for file in tqdm(files):
+        df = pd.read_pickle(file)
+        is_last = "last" in list(df["checkpoint"].unique())
+        if not is_last:
+            continue
+        table = pa.Table.from_pandas(df)
+        if pqwriter is None:
+            pqwriter = pq.ParquetWriter(metrics_file_path, table.schema)
+        pqwriter.write_table(table)
+    if pqwriter is not None:
+        pqwriter.close()
+
+
 def get_per_sample_metrics():
-    metrics_file_path = os.path.join(
-        thesis_path, "evaluations", "metrics",
-        "02_content_per_sample_metrics.pkl.tar.gz")
+    metrics_file_path = os.path.join(thesis_path, "evaluations", "metrics",
+                                     "02_content_per_sample_metrics.parquet")
     if not os.path.exists(metrics_file_path):
         datasets: Dict[str, str] = {}
         seeds = [1, 2, 3]
@@ -115,7 +129,6 @@ def get_per_sample_metrics():
                               r"*.pkl.tar.gz"),
                  recursive=True))
         if len(metrics_paths) == 0:
-            all_metrics = []
             metrics_files = reversed(
                 list(
                     glob(os.path.join(thesis_path, "experiments", "02_content",
@@ -128,13 +141,9 @@ def get_per_sample_metrics():
                 for metrics_path in pool.map(process_metrics_file,
                                              metrics_files):
                     if metrics_path is not None:
-                        all_metrics.extend(
-                            pd.read_pickle(metrics_path).to_dict(
-                                orient="records"))
+                        metrics_paths.append(metrics_path)
 
-        metrics_df = pd.DataFrame.from_records(all_metrics)
         os.makedirs(os.path.dirname(metrics_file_path), exist_ok=True)
-        metrics_df.to_pickle(metrics_file_path)
-    else:
-        metrics_df = pd.read_pickle(metrics_file_path)
+        metric_files_to_df(metrics_file_path, metrics_paths)
+    metrics_df = pd.read_parquet(metrics_file_path)
     return metrics_df
