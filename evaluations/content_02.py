@@ -509,8 +509,7 @@ def get_ccr_init():
     collator = SearchSampleSimilarityCollator(model_name)
 
 
-def get_ccr_per_sample_df(key, search_result_path, labeled_data_path):
-    seed, size, error_ratio, error_part, timestep, part = key.split("_")
+def get_ccr_per_sample_df(search_result_path, labeled_data_path):
     search = {}
     with open(search_result_path, "rb") as file:
         for idx, items in pickle.load(file).items():
@@ -522,17 +521,8 @@ def get_ccr_per_sample_df(key, search_result_path, labeled_data_path):
 
     for ccr in get_search_sample_similarity_for_model(model, collator, dataset,
                                                       search):
-        ccr_metrics.append({
-            "seed": seed,
-            "gazetteer_size": size,
-            "error_ratio": error_ratio,
-            "error_part": error_part,
-            "timestep": timestep,
-            "dataset": "lowner_" + part,
-            **ccr
-        })
-    ccr_metrics_df = pd.DataFrame.from_records(ccr_metrics)
-    return ccr_metrics_df
+        ccr_metrics.append(ccr)
+    return ccr_metrics, (search_result_path, labeled_data_path)
 
 
 def get_search_results_data_ccr_metrics():
@@ -545,29 +535,47 @@ def get_search_results_data_ccr_metrics():
         pqwriter = None
         os.makedirs(os.path.dirname(metrics_file_path), exist_ok=True)
         search_results, datasets = get_search_results_data()
+        search_result_combs = defaultdict(list)
+        for key, search_result in search_results.items():
+            search_result_combs[(search_result, datasets[key])].append(key)
         with mp.get_context("spawn").Pool(1, get_ccr_init) as pool:
-            with tqdm(total=len(search_results),
+            global pbar
+            with tqdm(total=len(search_result_combs),
                       desc="CCR search results") as pbar:
-                results = pool.starmap_async(
-                    get_ccr_per_sample_df,
-                    [(key, search_result_path, datasets[key])
-                     for key, search_result_path in search_results.items()],
-                    callback=lambda _: pbar.update(1))
+                results = pool.starmap_async(get_ccr_per_sample_df,
+                                             list(search_result_combs.keys()),
+                                             callback=lambda _: pbar.update(1))
                 # for key, search_result_path, labeled_data_path in [
                 #     (key, search_result_path, labeled_data[key])
                 #         for key, search_result_path in search_results.items()
                 # ]:
                 #     ccr_df = get_ccr_per_sample_df(key, search_result_path,
                 #                                labeled_data_path)
-                for ccr_df in tqdm(results.get(),
-                                   total=len(search_results),
-                                   desc="Concat results to dataframe"):
-                    table = pa.Table.from_pandas(ccr_df)
-                    if pqwriter is None:
-                        pqwriter = pq.ParquetWriter(metrics_file_path,
-                                                    table.schema)
-                    pqwriter.write_table(table)
-                    pbar.update(1)
+                for ccr_result_list, params in tqdm(
+                        results.get(),
+                        total=len(search_results),
+                        desc="Concat results to dataframe"):
+                    for key in search_result_combs[params]:
+                        seed, size, error_ratio, error_part, timestep, part = key.split(
+                            "_")
+                        ccr_metrics = []
+                        for ccr in ccr_result_list:
+                            ccr_metrics.append({
+                                "seed": seed,
+                                "gazetteer_size": size,
+                                "error_ratio": error_ratio,
+                                "error_part": error_part,
+                                "timestep": timestep,
+                                "dataset": "lowner_" + part,
+                                **ccr
+                            })
+                        ccr_df = pd.DataFrame.from_records(ccr_metrics)
+                        table = pa.Table.from_pandas(ccr_df)
+                        if pqwriter is None:
+                            pqwriter = pq.ParquetWriter(
+                                metrics_file_path, table.schema)
+                        pqwriter.write_table(table)
+                        pbar.update(1)
         if pqwriter is not None:
             pqwriter.close()
 
