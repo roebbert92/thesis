@@ -37,7 +37,6 @@ def process_metrics_file(metrics_filepath):
     import os
     import json
     import pandas as pd
-    from uuid import uuid4
 
     metrics_list = []
     fp = metrics_filepath.split(os.path.sep)
@@ -84,32 +83,14 @@ def process_metrics_file(metrics_filepath):
                 })
     # save to file
     metrics_df = pd.DataFrame.from_records(metrics_list)
-    metrics_path = os.path.join(thesis_path, "evaluations", "metrics", "tmp",
-                                str(uuid4()) + ".pkl.tar.gz")
-    metrics_df.to_pickle(metrics_path)
-    return metrics_path
-
-
-def metric_files_to_df(metrics_file_path, files: List[str]) -> None:
-    pqwriter = None
-    # create a parquet write object giving it an output file
-    for file in tqdm(files):
-        df = pd.read_pickle(file)
-        is_last = "last" in list(df["checkpoint"].unique())
-        if not is_last:
-            continue
-        table = pa.Table.from_pandas(df)
-        if pqwriter is None:
-            pqwriter = pq.ParquetWriter(metrics_file_path, table.schema)
-        pqwriter.write_table(table)
-    if pqwriter is not None:
-        pqwriter.close()
+    return metrics_df
 
 
 def get_per_sample_metrics():
     metrics_file_path = os.path.join(thesis_path, "evaluations", "metrics",
                                      "02_content_per_sample_metrics.parquet")
     if not os.path.exists(metrics_file_path):
+        pqwriter = None
         datasets: Dict[str, str] = {}
         seeds = [1, 2, 3]
         sizes = [2000, 4000, 6000, 8000]
@@ -131,27 +112,25 @@ def get_per_sample_metrics():
             else:
                 datasets[f"{seed}_{size}_{error_ratio}_{part}"] = os.path.join(
                     thesis_path, "data", "mlowner", "lowner_test.json")
-        metrics_paths = list(
-            glob(os.path.join(thesis_path, "evaluations", "metrics", "tmp",
-                              r"*.pkl.tar.gz"),
-                 recursive=True))
-        if len(metrics_paths) == 0:
-            metrics_files = reversed(
-                list(
-                    glob(os.path.join(thesis_path, "experiments", "02_content",
-                                      "data", r"**", "04_metrics", "**",
-                                      r"*.pkl"),
-                         recursive=True)))
-            with mp.Pool(mp.cpu_count() - 1,
-                         initializer=init_process_metrics_file,
-                         initargs=(datasets, types)) as pool:
-                for metrics_path in pool.map(process_metrics_file,
-                                             metrics_files):
-                    if metrics_path is not None:
-                        metrics_paths.append(metrics_path)
 
-        os.makedirs(os.path.dirname(metrics_file_path), exist_ok=True)
-        metric_files_to_df(metrics_file_path, metrics_paths)
+        metrics_files = reversed(
+            list(
+                glob(os.path.join(thesis_path, "experiments", "02_content",
+                                  "data", r"**", "04_metrics", "**", r"*.pkl"),
+                     recursive=True)))
+        with mp.Pool(mp.cpu_count() - 1,
+                     initializer=init_process_metrics_file,
+                     initargs=(datasets, types)) as pool:
+            results = pool.map_async(process_metrics_file, metrics_files)
+            for metrics_df in results.get():
+                table = pa.Table.from_pandas(metrics_df)
+                if pqwriter is None:
+                    pqwriter = pq.ParquetWriter(metrics_file_path,
+                                                table.schema)
+                pqwriter.write_table(table)
+        if pqwriter is not None:
+            pqwriter.close()
+
     metrics_df = pd.read_parquet(metrics_file_path)
     return metrics_df
 
@@ -249,17 +228,17 @@ def get_labeled_data_entity_coverage():
         pqwriter = None
         os.makedirs(os.path.dirname(eecr_labeled_data_data_path),
                     exist_ok=True)
-        search_results, datasets = get_labeled_data()
+        labeled_data, datasets = get_labeled_data()
         with mp.Pool(mp.cpu_count() - 5) as pool:
-            with tqdm(total=len(search_results),
+            with tqdm(total=len(labeled_data),
                       desc="Compute EECR labeled data") as pbar:
                 results = pool.starmap_async(
                     get_ecr_labeled_data_df,
                     [(key, search_result_paths, datasets[key])
-                     for key, search_result_paths in search_results.items()],
+                     for key, search_result_paths in labeled_data.items()],
                     callback=lambda _: pbar.update(1))
                 for eecr_df in tqdm(results.get(),
-                                    total=len(search_results),
+                                    total=len(labeled_data),
                                     desc="Concat results to dataframe"):
                     table = pa.Table.from_pandas(eecr_df)
                     if pqwriter is None:
@@ -282,17 +261,17 @@ def get_labeled_data_entity_coverage_per_sample():
         pqwriter = None
         os.makedirs(os.path.dirname(eecr_labeled_data_data_path),
                     exist_ok=True)
-        search_results, datasets = get_labeled_data()
+        labeled_data, datasets = get_labeled_data()
         with mp.Pool(mp.cpu_count() - 5) as pool:
-            with tqdm(total=len(search_results),
+            with tqdm(total=len(labeled_data),
                       desc="Compute EECR labeled data") as pbar:
                 results = pool.starmap_async(
                     get_ecr_per_sample_labeled_data_df,
                     [(key, search_result_paths, datasets[key])
-                     for key, search_result_paths in search_results.items()],
+                     for key, search_result_paths in labeled_data.items()],
                     callback=lambda _: pbar.update(1))
                 for eecr_df in tqdm(results.get(),
-                                    total=len(search_results),
+                                    total=len(labeled_data),
                                     desc="Concat results to dataframe"):
                     table = pa.Table.from_pandas(eecr_df)
                     if pqwriter is None:
