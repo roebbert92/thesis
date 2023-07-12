@@ -8,6 +8,20 @@ from tqdm import tqdm
 import multiprocessing as mp
 
 
+def calc_ecr_classes(ratio: dict, c: dict):
+    return {
+        "ρ=1": [key for key, value in ratio.items() if value == 1.0],
+        "ρ ∈ (0.5,1)":
+        [key for key, value in ratio.items() if 0.5 < value < 1.0],
+        "ρ ∈ (0,0.5]":
+        [key for key, value in ratio.items() if 0.0 < value <= 0.5],
+        "ρ=0∧C≠0":
+        [key for key, value in ratio.items() if value == 0.0 and c[key] != 0],
+        "ρ=0∧C=0":
+        [key for key, value in ratio.items() if value == 0.0 and c[key] == 0]
+    }
+
+
 def count_entities(items: List[dict]):
     entity_type_count = []
     entity_count = []

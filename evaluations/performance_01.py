@@ -15,7 +15,7 @@ import json
 import pickle
 from haystack import Document
 from collections import defaultdict
-from data_metrics.entity_coverage_ratio import entity_coverage_ratio, entity_coverage_ratio_precounted, count_entities
+from data_metrics.entity_coverage_ratio import calc_ecr_classes, entity_coverage_ratio, entity_coverage_ratio_precounted, count_entities
 from data_metrics.search_sample_similarity import get_search_sample_similarity
 from tqdm import tqdm
 from evaluations.utils import MODEL_ORDER, PLOT_MODEL_NAMES, PLOT_SEARCH_NAMES
@@ -390,20 +390,6 @@ def get_labeled_data_entity_coverage_per_sample():
         eecr_df = pd.DataFrame.from_records(eecr_metrics)
         eecr_df.to_pickle(eecr_labeled_data_per_sample_path)
     return eecr_df
-
-
-def calc_ecr_classes(ratio: dict, c: dict):
-    return {
-        "ρ=1": [key for key, value in ratio.items() if value == 1.0],
-        "ρ ∈ (0.5,1)":
-        [key for key, value in ratio.items() if 0.5 < value < 1.0],
-        "ρ ∈ (0,0.5]":
-        [key for key, value in ratio.items() if 0.0 < value <= 0.5],
-        "ρ=0∧C≠0":
-        [key for key, value in ratio.items() if value == 0.0 and c[key] != 0],
-        "ρ=0∧C=0":
-        [key for key, value in ratio.items() if value == 0.0 and c[key] == 0]
-    }
 
 
 def get_search_results_entity_coverage_per_sample():

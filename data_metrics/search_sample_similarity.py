@@ -22,6 +22,7 @@ class SearchSampleSimilarity(torch.nn.Module):
         self.inner_batch_size = inner_batch_size
         self.tokenizer = AutoTokenizer.from_pretrained(sbert_model_name)
         self.model = AutoModel.from_pretrained(sbert_model_name)
+        self.model = self.model.to(dtype=torch.bfloat16)
         self.cosine = torch.nn.CosineSimilarity(dim=-1)
 
     #Mean Pooling - Take attention mask into account for correct averaging
@@ -30,7 +31,7 @@ class SearchSampleSimilarity(torch.nn.Module):
         token_embeddings = model_output[
             0]  #First element of model_output contains all token embeddings
         input_mask_expanded = attention_mask.unsqueeze(-1).expand(
-            token_embeddings.size()).float()
+            token_embeddings.size()).to(torch.bfloat16)
         sum_embeddings = torch.sum(token_embeddings * input_mask_expanded, 1)
         sum_mask = torch.clamp(input_mask_expanded.sum(1), min=1e-9)
         return sum_embeddings / sum_mask
@@ -60,8 +61,7 @@ class SearchSampleSimilarity(torch.nn.Module):
                     total_entity_count = entity_counts[idx]
                     search_score = torch.sum(
                         torch.tensor(entity_count_per_samples[idx]).to(
-                            self.model.device) * full_contexts_cosine
-                    )
+                            self.model.device) * full_contexts_cosine)
                     # calculate max + distribution
                     res.update({
                         "total entities":
@@ -183,6 +183,14 @@ def get_search_sample_similarity(dataset: List[dict], search_results: dict):
     model_name = "sentence-transformers/all-mpnet-base-v2" if device == "cuda" else "sentence-transformers/all-MiniLM-L6-v2"
     model = SearchSampleSimilarity(model_name).to(device)
     collator = SearchSampleSimilarityCollator(model_name)
+
+    return get_search_sample_similarity_for_model(model, collator, dataset,
+                                                  search_results)
+
+
+def get_search_sample_similarity_for_model(model: torch.nn.Module, collator,
+                                           dataset: List[dict],
+                                           search_results: dict):
     data = SearchSampleDataset(dataset, search_results)
     loader = DataLoader(data, batch_size=20, collate_fn=collator)
 
