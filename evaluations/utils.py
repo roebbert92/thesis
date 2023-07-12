@@ -101,6 +101,7 @@ LATEX_METRIC_NAMES = {
     "f1": "Micro-F1",
     "targets": "Input entity count",
     "eecr_labeled_data": "EECR labeled data",
+    "eecr_labeled_data_per_sample": "EECR labeled data per sample",
     "eecr_search_results": "EECR search results",
     "max": "Top-1 Cosine Similarity",
     "score": "Search score",

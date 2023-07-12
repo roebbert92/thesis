@@ -297,11 +297,11 @@ def get_ecr_labeled_data_df(key, labeled_data_paths: List[str], dataset_path):
     ratio, c, eecr, _ = entity_coverage_ratio(labeled_data, dataset)
     ecr_classes = calc_ecr_classes(ratio, c)
     eecr_metrics.append({
-        "seed": seed,
-        "gazetteer_size": size,
-        "error_ratio": error_ratio,
+        "seed": int(seed),
+        "gazetteer_size": int(size),
+        "error_ratio": int(error_ratio),
         "error_part": error_part,
-        "timestep": timestep,
+        "timestep": int(timestep),
         "dataset": "lowner_" + part,
         "eecr": eecr,
         **{key: len(value)
@@ -329,11 +329,11 @@ def get_ecr_per_sample_labeled_data_df(key, labeled_data_paths: List[str],
             labeled_data_counted, sample_counted)
         ecr_classes = calc_ecr_classes(ratio, c)
         eecr_metrics.append({
-            "seed": seed,
-            "gazetteer_size": size,
-            "error_ratio": error_ratio,
+            "seed": int(seed),
+            "gazetteer_size": int(size),
+            "error_ratio": int(error_ratio),
             "error_part": error_part,
-            "timestep": timestep,
+            "timestep": int(timestep),
             "dataset": "lowner_" + part,
             "doc_id": sample["doc_id"],
             "targets": len(sample["entities"]),
@@ -430,11 +430,11 @@ def get_ecr_per_search_sample_df(key, search_result_path, labeled_data_path):
         ratio, c, eecr, _ = entity_coverage_ratio(search[idx], [sample])
         ecr_classes = calc_ecr_classes(ratio, c)
         eecr_metrics.append({
-            "seed": seed,
-            "gazetteer_size": size,
-            "error_ratio": error_ratio,
+            "seed": int(seed),
+            "gazetteer_size": int(size),
+            "error_ratio": int(error_ratio),
             "error_part": error_part,
-            "timestep": timestep,
+            "timestep": int(timestep),
             "dataset": "lowner_" + part,
             "doc_id": sample["doc_id"],
             "targets": len(sample["entities"]),
@@ -540,11 +540,11 @@ def get_search_results_data_ccr_metrics():
                         ccr_metrics = []
                         for ccr in ccr_result_list:
                             ccr_metrics.append({
-                                "seed": seed,
-                                "gazetteer_size": size,
-                                "error_ratio": error_ratio,
+                                "seed": int(seed),
+                                "gazetteer_size": int(size),
+                                "error_ratio": int(error_ratio),
                                 "error_part": error_part,
-                                "timestep": timestep,
+                                "timestep": int(timestep),
                                 "dataset": "lowner_" + part,
                                 **ccr
                             })
