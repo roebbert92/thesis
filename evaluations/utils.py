@@ -79,10 +79,10 @@ PLOT_DATASET_NAMES = {
 METRIC_ORDER = {
     key: idx
     for idx, key in enumerate([
-        "eecr_labeled_data", "eecr_search_results", "max", "score",
-        "search score", "error_type1", "error_type2", "error_type3",
-        "error_type4", "error_type5", "error rate", "tp", "fn", "fp",
-        "precision", "recall", "f1", "targets"
+        "eecr_labeled_data", "eecr_labeled_data_per_sample",
+        "eecr_search_results", "max", "score", "search score", "error_type1",
+        "error_type2", "error_type3", "error_type4", "error_type5",
+        "error rate", "tp", "fn", "fp", "precision", "recall", "f1", "targets"
     ])
 }
 
@@ -106,6 +106,7 @@ LATEX_METRIC_NAMES = {
     "max": "Top-1 Cosine Similarity",
     "score": "Search score",
     "search score": "Search score",
+    "total entities": "Retrieved entities"
 }
 
 PLOT_MODEL_NAMES = {

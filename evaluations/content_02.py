@@ -22,6 +22,7 @@ import pyarrow.parquet as pq
 from data_metrics.entity_coverage_ratio import calc_ecr_classes, entity_coverage_ratio, entity_coverage_ratio_precounted, count_entities
 from data_metrics.search_sample_similarity import SearchSampleSimilarity, get_search_sample_similarity_for_model, SearchSampleSimilarityCollator
 from haystack import Document
+import shutil
 
 
 def init_process_metrics_file(d, t):
@@ -37,6 +38,7 @@ def process_metrics_file(metrics_filepath):
     import os
     import json
     import pandas as pd
+    from uuid import uuid4
 
     metrics_list = []
     fp = metrics_filepath.split(os.path.sep)
@@ -52,8 +54,10 @@ def process_metrics_file(metrics_filepath):
     gazetteer_size = int(fp[-4].split("_")[1])
     error_ratio = int(fp[-3].split("_")[2])
     error_part = fp[-2].split("_")[2]
-    with open(datasets[f"{seed}_{gazetteer_size}_{error_ratio}_{name[-1]}"],
-              "r") as file:
+    with open(
+            datasets[
+                f"{seed}_{gazetteer_size}_{error_ratio}_{error_part}_{timestep}_{name[-1]}"],
+            "r") as file:
         dataset = json.load(file)
     metrics_per_sample = metrics.metrics_per_sample(
         dataset, types).to_dict(orient="records")
@@ -83,7 +87,11 @@ def process_metrics_file(metrics_filepath):
                 })
     # save to file
     metrics_df = pd.DataFrame.from_records(metrics_list)
-    return metrics_df
+    tmp_filepath = os.path.join(thesis_path, "evaluations", "metrics", "tmp",
+                                f"{uuid4()}.parquet")
+    os.makedirs(os.path.dirname(tmp_filepath), exist_ok=True)
+    metrics_df.to_parquet(tmp_filepath)
+    return tmp_filepath
 
 
 def get_per_sample_metrics():
@@ -92,9 +100,13 @@ def get_per_sample_metrics():
     if not os.path.exists(metrics_file_path):
         pqwriter = None
         datasets: Dict[str, str] = {}
+        datapath = os.path.join(thesis_path, "experiments", "02_content",
+                                "data")
         seeds = [1, 2, 3]
         sizes = [2000, 4000, 6000, 8000]
         error_ratios = [0, 5, 10, 15]
+        error_parts = ["train", "gazetteer", "both"]
+        timesteps = [0, 1, 2]
         parts = ["train", "dev", "test"]
 
         with open(
@@ -102,27 +114,41 @@ def get_per_sample_metrics():
                              "lowner_types.json")) as file:
             types = list(json.load(file)["entities"].keys())
 
-        for seed, size, error_ratio, part in product(seeds, sizes,
-                                                     error_ratios, parts):
-            if part in ["train", "dev"]:
-                datasets[f"{seed}_{size}_{error_ratio}_{part}"] = os.path.join(
-                    thesis_path, "experiments", "02_content", "data",
-                    f"seed_{seed}", "00_datasets", f"size_{size}",
-                    f"error_ratio_{error_ratio}", f"error_lowner_{part}.json")
-            else:
-                datasets[f"{seed}_{size}_{error_ratio}_{part}"] = os.path.join(
-                    thesis_path, "data", "mlowner", "lowner_test.json")
+        for seed, size, error_ratio, error_part, timestep, part in product(
+                seeds, sizes, error_ratios, error_parts, timesteps, parts):
+            labeled_data_path = os.path.join(datapath, f"seed_{str(seed)}",
+                                             "00_datasets", f"size_{size}",
+                                             f"error_ratio_{error_ratio}")
+            if timestep == 0:
+                if error_part in ["train", "both"
+                                  ] and part in ["train", "dev"]:
+                    datasets[
+                        f"{seed}_{size}_{error_ratio}_{error_part}_{timestep}_{part}"] = os.path.join(
+                            labeled_data_path, f"error_lowner_{part}.json")
+                else:
+                    datasets[
+                        f"{seed}_{size}_{error_ratio}_{error_part}_{timestep}_{part}"] = os.path.join(
+                            thesis_path, "data", "mlowner",
+                            f"lowner_{part}.json")
 
-        metrics_files = reversed(
-            list(
-                glob(os.path.join(thesis_path, "experiments", "02_content",
-                                  "data", r"**", "04_metrics", "**", r"*.pkl"),
-                     recursive=True)))
-        with mp.Pool(mp.cpu_count() - 1,
+            if timestep > 0:
+                datasets[
+                    f"{seed}_{size}_{error_ratio}_{error_part}_{timestep}_{part}"] = os.path.join(
+                        thesis_path, "data", "mlowner", f"lowner_{part}.json")
+        # including checkpoint "best" too large for system memory
+        metrics_files = [
+            fp for fp in
+            glob(os.path.join(thesis_path, "experiments", "02_content", "data",
+                              r"**", "04_metrics", "**", r"*.pkl"),
+                 recursive=True) if os.path.splitext(
+                     fp.split(os.path.sep)[-1])[0].split("_")[0] == "last"
+        ]
+        with mp.Pool(mp.cpu_count() // 2,
                      initializer=init_process_metrics_file,
                      initargs=(datasets, types)) as pool:
             results = pool.map_async(process_metrics_file, metrics_files)
-            for metrics_df in results.get():
+            for filepath in results.get():
+                metrics_df = pd.read_parquet(filepath)
                 table = pa.Table.from_pandas(metrics_df)
                 if pqwriter is None:
                     pqwriter = pq.ParquetWriter(metrics_file_path,
@@ -130,6 +156,8 @@ def get_per_sample_metrics():
                 pqwriter.write_table(table)
         if pqwriter is not None:
             pqwriter.close()
+            shutil.rmtree(
+                os.path.join(thesis_path, "evaluations", "metrics", "tmp"))
 
     metrics_df = pd.read_parquet(metrics_file_path)
     return metrics_df
@@ -202,7 +230,7 @@ def get_labeled_data():
                                      "00_datasets", f"size_{size}",
                                      f"error_ratio_{error_ratio}")
         if timestep == 0:
-            if error_part == "train" and part in ["train", "dev"]:
+            if error_part in ["train", "both"] and part in ["train", "dev"]:
                 datasets[
                     f"{seed}_{size}_{error_ratio}_{error_part}_{timestep}_{part}"] = os.path.join(
                         datasets_path, f"error_lowner_{part}.json")
@@ -399,7 +427,7 @@ def get_search_results_data():
                                          "00_datasets", f"size_{size}",
                                          f"error_ratio_{error_ratio}")
         if timestep == 0:
-            if error_part == "train" and part in ["train", "dev"]:
+            if error_part in ["train", "both"] and part in ["train", "dev"]:
                 datasets[
                     f"{seed}_{size}_{error_ratio}_{error_part}_{timestep}_{part}"] = os.path.join(
                         labeled_data_path, f"error_lowner_{part}.json")
@@ -563,4 +591,8 @@ def get_search_results_data_ccr_metrics():
 
 
 if __name__ == "__main__":
+    eecr_labeled_data_df = get_labeled_data_entity_coverage()
+    eecr_labeled_data_per_sample_df = get_labeled_data_entity_coverage_per_sample(
+    )
+    eecr_search_results_df = get_search_results_entity_coverage_per_sample()
     ccr_df = get_search_results_data_ccr_metrics()
