@@ -48,11 +48,11 @@ def process_metrics_file(metrics_filepath):
     model = "_".join(dims[3:])
     eval_point = fp[-2].split("_")
     gazetteer_content = "None"
-    if eval_point[0] == 0:
+    if int(eval_point[0]) == 0:
         gazetteer_content = "lownergaz_sent"
-    if eval_point[0] == 1:
+    if int(eval_point[0]) == 1:
         gazetteer_content = "wnut_train"
-    if eval_point[0] == 2:
+    if int(eval_point[0]) == 2:
         gazetteer_content = "lownergaz_sent+wnut_train"
     timestep = int(eval_point[1])
     with open(datasets[name[-1]], "r") as file:
@@ -489,3 +489,18 @@ def get_search_results_data_ccr_metrics():
 
         ccr_metrics_df = pd.read_parquet(metrics_file_path)
     return ccr_metrics_df
+
+
+def aggregate_performance_metrics(metrics_df: pd.DataFrame):
+    agg_df = metrics_df.pivot_table(index=[
+        "seed", "checkpoint", "has_gazetteer", "finetuning", "pretrained",
+        "gazetteer_content", "timestep", "model", "dataset"
+    ],
+                                    values=["tp", "fp", "fn"],
+                                    aggfunc="sum")
+    agg_df["precision"] = 100 * agg_df["tp"] / (agg_df["tp"] + agg_df["fp"])
+    agg_df["recall"] = 100 * agg_df["tp"] / (agg_df["tp"] + agg_df["fn"])
+    agg_df["f1"] = 2 * agg_df["precision"] * agg_df["recall"] / (
+        agg_df["precision"] + agg_df["recall"])
+
+    return agg_df

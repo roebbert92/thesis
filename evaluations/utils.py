@@ -14,23 +14,25 @@ plt.rcParams.update({
 MODEL_ORDER = {
     key: idx
     for idx, key in enumerate([
-        "flair_roberta", "t5_asp", "dict_match_gaz", "dict_match_sent",
-        "dict_match_lownergaz", "dict_match_gaz_sent",
-        "dict_match_lownergaz_sent", "search_match_gaz", "search_match_sent",
-        "search_match_lownergaz", "search_match_gaz_sent",
+        "flair_roberta", "t5_asp", "dict_match", "dict_match_gaz",
+        "dict_match_sent", "dict_match_lownergaz", "dict_match_gaz_sent",
+        "dict_match_lownergaz_sent", "search_match", "search_match_gaz",
+        "search_match_sent", "search_match_lownergaz", "search_match_gaz_sent",
         "search_match_lownergaz_sent", "search_match_overall", "t5_asp_gaz",
         "t5_asp_sent", "t5_asp_lownergaz", "t5_asp_gaz_sent",
         "t5_asp_lownergaz_sent", "t5_asp_overall"
     ])
 }
 LATEX_MODEL_NAMES = {
-    "flair_roberta": "FLAIR\\textsubscript{RoBERTa-Large}",
+    "flair_roberta": "FLAIR\\textsubscript{XLM-RoBERTa-Large}",
     "t5_asp": "T5-ASP",
+    "dict_match": "DictMatch",
     "dict_match_gaz": "DictMatch\\textsubscript{Gaz}",
     "dict_match_sent": "DictMatch\\textsubscript{Sent}",
     "dict_match_lownergaz": "DictMatch\\textsubscript{LownerGaz}",
     "dict_match_lownergaz_sent": "DictMatch\\textsubscript{LownerGaz+Sent}",
     "dict_match_gaz_sent": "DictMatch\\textsubscript{Gaz+Sent}",
+    "search_match": "SearchMatch",
     "search_match_gaz": "SearchMatch\\textsubscript{Gaz}",
     "search_match_sent": "SearchMatch\\textsubscript{Sent}",
     "search_match_lownergaz": "SearchMatch\\textsubscript{LownerGaz}",
