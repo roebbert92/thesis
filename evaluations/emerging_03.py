@@ -347,11 +347,11 @@ def get_ecr_per_search_sample_df(search_result_path, datasets):
     fp = search_result_path.split(os.path.sep)
     eval_point = fp[-2].split("_")
     gazetteer_content = "None"
-    if eval_point[0] == 0:
+    if int(eval_point[0]) == 0:
         gazetteer_content = "lownergaz_sent"
-    if eval_point[0] == 1:
+    if int(eval_point[0]) == 1:
         gazetteer_content = "wnut_train"
-    if eval_point[0] == 2:
+    if int(eval_point[0]) == 2:
         gazetteer_content = "lownergaz_sent+wnut_train"
     timestep = int(eval_point[1])
     name = os.path.splitext(fp[-1])[0].split("_")
@@ -392,7 +392,7 @@ def get_search_results_entity_coverage_per_sample():
         os.makedirs(os.path.dirname(eecr_search_results_data_path),
                     exist_ok=True)
         search_results, datasets = get_search_results_data()
-        with mp.Pool(mp.cpu_count() - 1) as pool:
+        with mp.Pool(mp.cpu_count() // 2) as pool:
             with tqdm(total=len(search_results),
                       desc="Compute EECR search results") as pbar:
                 results = pool.starmap_async(
@@ -428,11 +428,11 @@ def get_ccr_per_sample_df(search_result_path, datasets):
     fp = search_result_path.split(os.path.sep)
     eval_point = fp[-2].split("_")
     gazetteer_content = "None"
-    if eval_point[0] == 0:
+    if int(eval_point[0]) == 0:
         gazetteer_content = "lownergaz_sent"
-    if eval_point[0] == 1:
+    if int(eval_point[0]) == 1:
         gazetteer_content = "wnut_train"
-    if eval_point[0] == 2:
+    if int(eval_point[0]) == 2:
         gazetteer_content = "lownergaz_sent+wnut_train"
     timestep = int(eval_point[1])
     name = os.path.splitext(fp[-1])[0].split("_")
@@ -504,3 +504,10 @@ def aggregate_performance_metrics(metrics_df: pd.DataFrame):
         agg_df["precision"] + agg_df["recall"])
 
     return agg_df
+
+
+if __name__ == "__main__":
+    get_labeled_data_entity_coverage()
+    get_labeled_data_entity_coverage_per_sample()
+    get_search_results_entity_coverage_per_sample()
+    get_search_results_data_ccr_metrics()

@@ -112,13 +112,15 @@ LATEX_METRIC_NAMES = {
 }
 
 PLOT_MODEL_NAMES = {
-    "flair_roberta": r"FLAIR$_{RoBERTa-Large}$",
+    "flair_roberta": r"FLAIR",
     "t5_asp": r"T5-ASP",
+    "dict_match": r"DictMatch",
     "dict_match_gaz": r"DictMatch$_{Gaz}$",
     "dict_match_sent": r"DictMatch$_{Sent}$",
     "dict_match_lownergaz": r"DictMatch$_{LownerGaz}$",
     "dict_match_lownergaz_sent": r"DictMatch$_{LownerGaz+Sent}$",
     "dict_match_gaz_sent": r"DictMatch$_{Gaz+Sent}$",
+    "search_match": r"SearchMatch",
     "search_match_gaz": r"SearchMatch$_{Gaz}$",
     "search_match_sent": r"SearchMatch$_{Sent}$",
     "search_match_lownergaz": r"SearchMatch$_{LownerGaz}$",
