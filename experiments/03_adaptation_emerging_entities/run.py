@@ -110,7 +110,7 @@ datasets = {
 
 total = [(seed, gaz, finetuning, pretrained, config)
          for seed, (gaz, finetuning, pretrained,
-                    config) in product(seeds, configs)]
+                    config) in product(seeds, configs) if gaz]
 already_computed = []
 already_computed_path = os.path.join(thesis_path, "experiments",
                                      "03_adaptation_emerging_entities",
@@ -118,6 +118,9 @@ already_computed_path = os.path.join(thesis_path, "experiments",
 if os.path.exists(already_computed_path):
     with open(already_computed_path, "r") as file:
         already_computed = json.load(file)
+already_computed = [[
+    seed, gaz, finetuning, pretrained, config
+] for seed, gaz, finetuning, pretrained, config in already_computed if not gaz]
 
 
 def get_validation_dataloader(config, dataset: Dataset):
@@ -362,87 +365,89 @@ def get_tokenized_filepath(config, file_path, search_results, data_path):
 
 if __name__ == "__main__":
     # prepare databases
-    for database_combinations in gazetteer_content:
-        for database_comb in database_combinations:
-            name = "_".join(database_comb)
-            if "lownergaz_sent" in database_comb and len(database_comb) > 1:
-                lownergaz_exists = elasticsearch_client.indices.exists(
-                    index=name + "_lownergaz")
-                sent_exists = elasticsearch_client.indices.exists(index=name +
-                                                                  "_sent")
-                if not lownergaz_exists or not sent_exists:
-                    dataset = []
-                    for dataset_name in database_comb[1:]:
-                        dataset.extend(datasets[dataset_name])
-                    if not lownergaz_exists:
-                        # copy lownergaz database
-                        elasticsearch_client.indices.put_settings(
-                            index="lownergaz",
-                            body={"index": {
-                                "blocks": {
-                                    "write": True
-                                }
-                            }})
-                        elasticsearch_client.indices.clone(index="lownergaz",
-                                                           target=name +
-                                                           "_lownergaz")
-                        elasticsearch_client.indices.put_settings(
-                            index=name + "_lownergaz",
-                            body={"index": {
-                                "blocks": {
-                                    "write": False
-                                }
-                            }})
+    unique_db_combinations = set([
+        database_comb for database_combinations in gazetteer_content
+        for database_comb in database_combinations
+    ])
+    for database_comb in unique_db_combinations:
+        name = "_".join(database_comb)
+        if "lownergaz_sent" in database_comb and len(database_comb) > 1:
+            lownergaz_exists = elasticsearch_client.indices.exists(
+                index=name + "_lownergaz")
+            sent_exists = elasticsearch_client.indices.exists(index=name +
+                                                              "_sent")
+            if not lownergaz_exists or not sent_exists:
+                dataset = []
+                for dataset_name in database_comb[1:]:
+                    dataset.extend(datasets[dataset_name])
+                if not lownergaz_exists:
+                    # copy lownergaz database
+                    elasticsearch_client.indices.put_settings(
+                        index="lownergaz",
+                        body={"index": {
+                            "blocks": {
+                                "write": True
+                            }
+                        }})
+                    elasticsearch_client.indices.clone(index="lownergaz",
+                                                       target=name +
+                                                       "_lownergaz")
+                    elasticsearch_client.indices.put_settings(
+                        index=name + "_lownergaz",
+                        body={"index": {
+                            "blocks": {
+                                "write": False
+                            }
+                        }})
 
-                    if not sent_exists:
-                        # copy sent database
-                        elasticsearch_client.indices.put_settings(
-                            index="sent",
-                            body={"index": {
-                                "blocks": {
-                                    "write": True
-                                }
-                            }})
-                        elasticsearch_client.indices.clone(index="sent",
-                                                           target=name +
-                                                           "_sent")
-                        elasticsearch_client.indices.put_settings(
-                            index=name + "_sent",
-                            body={"index": {
-                                "blocks": {
-                                    "write": False
-                                }
-                            }})
-                    # populate database
-                    search = setup_database(
-                        T5_ASP_LOWNERGAZ_SENT["sent_search_algorithm"],
-                        T5_ASP_LOWNERGAZ_SENT["sent_search_topk"],
-                        T5_ASP_LOWNERGAZ_SENT["gaz_search_algorithm"],
-                        T5_ASP_LOWNERGAZ_SENT["gaz_search_topk"],
-                        T5_ASP_LOWNERGAZ_SENT["search_join_method"],
-                        T5_ASP_LOWNERGAZ_SENT["search_topk"],
-                        name=name,
-                        gazs=dataset,
-                        sents=dataset)
-            elif "lownergaz_sent" not in database_comb:
-                if not elasticsearch_client.indices.exists(
-                        index=name + "_lownergaz"
-                ) or not elasticsearch_client.indices.exists(index=name +
-                                                             "_sent"):
-                    dataset = []
-                    for dataset_name in database_comb:
-                        dataset.extend(datasets[dataset_name])
-                    # populate database
-                    search = setup_database(
-                        T5_ASP_LOWNERGAZ_SENT["sent_search_algorithm"],
-                        T5_ASP_LOWNERGAZ_SENT["sent_search_topk"],
-                        T5_ASP_LOWNERGAZ_SENT["gaz_search_algorithm"],
-                        T5_ASP_LOWNERGAZ_SENT["gaz_search_topk"],
-                        T5_ASP_LOWNERGAZ_SENT["search_join_method"],
-                        T5_ASP_LOWNERGAZ_SENT["search_topk"],
-                        name=name,
-                        gazs=dataset,
-                        sents=dataset)
+                if not sent_exists:
+                    # copy sent database
+                    elasticsearch_client.indices.put_settings(
+                        index="sent",
+                        body={"index": {
+                            "blocks": {
+                                "write": True
+                            }
+                        }})
+                    elasticsearch_client.indices.clone(index="sent",
+                                                       target=name + "_sent")
+                    elasticsearch_client.indices.put_settings(
+                        index=name + "_sent",
+                        body={"index": {
+                            "blocks": {
+                                "write": False
+                            }
+                        }})
+                # populate database
+                search = setup_database(
+                    T5_ASP_LOWNERGAZ_SENT["sent_search_algorithm"],
+                    T5_ASP_LOWNERGAZ_SENT["sent_search_topk"],
+                    T5_ASP_LOWNERGAZ_SENT["gaz_search_algorithm"],
+                    T5_ASP_LOWNERGAZ_SENT["gaz_search_topk"],
+                    T5_ASP_LOWNERGAZ_SENT["search_join_method"],
+                    T5_ASP_LOWNERGAZ_SENT["search_topk"],
+                    name=name,
+                    gazs=dataset,
+                    sents=dataset)
+        elif "lownergaz_sent" not in database_comb:
+            if not elasticsearch_client.indices.exists(
+                    index=name +
+                    "_lownergaz") or not elasticsearch_client.indices.exists(
+                        index=name + "_sent"):
+                dataset = []
+                for dataset_name in database_comb:
+                    dataset.extend(datasets[dataset_name])
+                # populate database
+                search = setup_database(
+                    T5_ASP_LOWNERGAZ_SENT["sent_search_algorithm"],
+                    T5_ASP_LOWNERGAZ_SENT["sent_search_topk"],
+                    T5_ASP_LOWNERGAZ_SENT["gaz_search_algorithm"],
+                    T5_ASP_LOWNERGAZ_SENT["gaz_search_topk"],
+                    T5_ASP_LOWNERGAZ_SENT["search_join_method"],
+                    T5_ASP_LOWNERGAZ_SENT["search_topk"],
+                    name=name,
+                    gazs=dataset,
+                    sents=dataset)
 
     tokenized_files = defaultdict(dict)
     search_configs = set([
@@ -483,7 +488,8 @@ if __name__ == "__main__":
                     os.makedirs(search_base_path, exist_ok=True)
 
                     def get_search():
-                        if len(database_comb) > 1:
+                        if len(database_comb
+                               ) > 1 or "wnut_train" in database_comb:
                             name = "_".join(database_comb)
                             search = setup_database(sent_search_algorithm,
                                                     sent_search_topk,
@@ -505,9 +511,7 @@ if __name__ == "__main__":
                                                      "wnut_train.pkl")
                     if not os.path.exists(train_search_path):
                         search = get_search()
-                        if db_idx == 0 and (len(database_comb) > 1
-                                            or "lownergaz_sent"
-                                            not in database_comb):
+                        if db_idx == 0 and ("wnut_train" in database_comb):
                             name = "_".join(database_comb)
                             search_results_train = get_search_results_filtered(
                                 setup_database,

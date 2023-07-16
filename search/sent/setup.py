@@ -56,9 +56,9 @@ def add_multiconer_sentences(doc_store: BaseDocumentStore,
             filtered_multiconer = remove_exact_matches(
                 multiconer, lowner_train + lowner_dev + lowner_test)
             documents = get_sentences_from_documents(filtered_multiconer)
-    else:
+    elif len(items) > 0:
         documents = get_sentences_from_documents(items)
-    doc_store.write_documents(documents)
+        doc_store.write_documents(documents)
 
 
 def train_update_sent_faiss_index(

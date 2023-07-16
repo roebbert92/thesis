@@ -138,7 +138,7 @@ T5_ASP_GAZ_SENT.update({
     "num_epochs": 24,
     "plm_learning_rate": 0.00017496219281663535,
     "search_join_method": "reciprocal_rank_fusion",
-    "search_topk": 8,
+    "search_topk": 12,
     "sent_search_algorithm": "ann",
     "sent_search_topk": 6,
     "sent_use_labels": True,

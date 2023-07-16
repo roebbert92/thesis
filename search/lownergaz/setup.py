@@ -42,10 +42,10 @@ def add_lownergaz_gazetteers(doc_store: BaseDocumentStore,
             if len(documents) > 0 and len(documents) % 1e4 == 0:
                 doc_store.write_documents(documents)
                 documents.clear()
-    else:
+    elif len(items) > 0:
         documents = get_gazetteers_from_documents(items,
                                                   prepend_type=prepend_type)
-    doc_store.write_documents(documents)
+        doc_store.write_documents(documents)
 
 
 def train_update_lownergaz_faiss_index(

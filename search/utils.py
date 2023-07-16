@@ -63,13 +63,13 @@ def get_gazetteers_from_documents(docs,
 def get_sentences_from_documents(docs, name: str = ""):
     documents = []
     for doc in docs:
-        if len(doc["entities"]) > 0:
-            documents.append(
-                Document(id=str(uuid.uuid4()),
-                         content=" ".join(doc["extended"]),
-                         meta={
-                             "entities": doc["entities"],
-                             "data_type": "sentences",
-                             "doc_id": doc["doc_id"]
-                         }))
+        #if len(doc["entities"]) > 0:
+        documents.append(
+            Document(id=str(uuid.uuid4()),
+                     content=" ".join(doc["extended"]),
+                     meta={
+                         "entities": doc["entities"],
+                         "data_type": "sentences",
+                         "doc_id": doc["doc_id"]
+                     }))
     return documents

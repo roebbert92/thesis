@@ -126,7 +126,7 @@ def setup_database(sent_search_algorithm: str,
                               join_documents_input, reset)
 
     # join documents
-    join_documents = JoinDocuments(join_mode=join_method)
+    join_documents = JoinDocuments(join_mode=join_method, top_k_join=join_topk)
     search.add_node(join_documents, "DocumentJoin", join_documents_input)
 
     return search
