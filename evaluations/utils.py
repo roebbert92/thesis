@@ -100,7 +100,7 @@ LATEX_METRIC_NAMES = {
     "tp": "True positives",
     "precision": "Precision",
     "recall": "Recall",
-    "f1": "Micro-F1",
+    "f1": r"$F_{1}$-score",
     "targets": "Input entity count",
     "eecr_labeled_data": "EECR labeled data",
     "eecr_labeled_data_per_sample": "EECR labeled data per sample",
