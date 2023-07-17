@@ -118,9 +118,6 @@ already_computed_path = os.path.join(thesis_path, "experiments",
 if os.path.exists(already_computed_path):
     with open(already_computed_path, "r") as file:
         already_computed = json.load(file)
-already_computed = [[
-    seed, gaz, finetuning, pretrained, config
-] for seed, gaz, finetuning, pretrained, config in already_computed if not gaz]
 
 
 def get_validation_dataloader(config, dataset: Dataset):
