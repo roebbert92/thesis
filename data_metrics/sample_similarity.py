@@ -156,9 +156,8 @@ def compute_similarity(fn: torch.nn.Module,
         set_size = len(second)
         set_batch_size = set_size // max_set_size + 1
         first_to_second = torch.empty((len(first), ))
-        x_tensors = torch.empty((batch_size, set_size, embedding_dim), device=device)
-        compare_tensors = torch.empty((batch_size, set_size, embedding_dim),
-                                      device=device)
+        x_tensors = torch.empty((batch_size, set_size, embedding_dim))
+        compare_tensors = torch.empty((batch_size, set_size, embedding_dim))
         # take best score
         batch_idx = 0
         for idx, x in tqdm(enumerate(first),
