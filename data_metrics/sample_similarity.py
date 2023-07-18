@@ -126,19 +126,19 @@ def get_search_sample_similarity(dataset: List[dict], search_results: dict):
 
 def batched_similarity(fn: torch.nn.Module, x_tensors: Tensor,
                        compare_tensors: Tensor, scores: Tensor, idx: int,
-                       set_batch_size: int):
+                       set_batch_size: int, device: str):
     if set_batch_size > 1:
         _sims = []
         for x_tensor, compare_tensor in zip(
                 torch.tensor_split(x_tensors, set_batch_size, dim=1),
                 torch.tensor_split(compare_tensors, set_batch_size, dim=1)):
-            _sims.append(fn(x_tensor, compare_tensor))
+            _sims.append(fn(x_tensor.to(device=device), compare_tensor.to(device=device)))
         sims = torch.cat(_sims, dim=-1)
     else:
-        sims = fn(x_tensors, compare_tensors)
+        sims = fn(x_tensors.to(device=device), compare_tensors.to(device=device))
     best_scores = torch.max(sims, dim=-1).values
     len_scores = best_scores.shape[0]
-    scores[idx - len_scores:idx] = best_scores
+    scores[idx - len_scores:idx] = best_scores.cpu()
 
 
 def compute_similarity(fn: torch.nn.Module,
@@ -147,7 +147,7 @@ def compute_similarity(fn: torch.nn.Module,
                        second_name: str,
                        second_embed: Tensor,
                        device: str,
-                       batch_size: int = 20,
+                       batch_size: int = 10,
                        max_set_size: int = 1000):
     def compute(first_name: str, first: Tensor, second_name: str,
                 second: Tensor, device: str, batch_size: int,
@@ -155,9 +155,8 @@ def compute_similarity(fn: torch.nn.Module,
         embedding_dim = first.shape[1]
         set_size = len(second)
         set_batch_size = set_size // max_set_size + 1
-        first_to_second = torch.empty((len(first), ), device=device)
-        x_tensors = torch.empty((batch_size, set_size, embedding_dim),
-                                device=device)
+        first_to_second = torch.empty((len(first), ))
+        x_tensors = torch.empty((batch_size, set_size, embedding_dim), device=device)
         compare_tensors = torch.empty((batch_size, set_size, embedding_dim),
                                       device=device)
         # take best score
@@ -168,14 +167,14 @@ def compute_similarity(fn: torch.nn.Module,
             batch_idx = idx % batch_size
             if idx > 0 and batch_idx == 0:
                 batched_similarity(fn, x_tensors, compare_tensors,
-                                   first_to_second, idx, set_batch_size)
+                                   first_to_second, idx, set_batch_size, device=device)
             x_tensors[batch_idx] = x.repeat((set_size, 1))
             compare_tensors[batch_idx] = second
 
         if batch_idx > 0:
             batched_similarity(fn, x_tensors[:batch_idx + 1],
                                compare_tensors[:batch_idx + 1],
-                               first_to_second, len(first), set_batch_size)
+                               first_to_second, len(first), set_batch_size, device=device)
         return first_to_second
 
     if first_name == second_name:
@@ -196,27 +195,27 @@ def compute_similarity(fn: torch.nn.Module,
 
 def get_embeddings(cache: Dict[str, Tensor], model: SentenceTransformer,
                    first_name: str, first: List[str], second_name: str,
-                   second: List[str], device: str):
+                   second: List[str]):
     if first_name in cache:
-        first_embed = cache[first_name].to(device=device)
+        first_embed = cache[first_name]
     else:
         first_embed: Tensor = model.encode(
             first,
             convert_to_numpy=False,
             convert_to_tensor=True,
             show_progress_bar=True).to(  # type: ignore
-                torch.bfloat16)  # type: ignore
-        cache[first_name] = first_embed.cpu()
+                torch.bfloat16).cpu()  # type: ignore
+        cache[first_name] = first_embed
     if second_name in cache:
-        second_embed = cache[second_name].to(device=device)
+        second_embed = cache[second_name]
     else:
         second_embed: Tensor = model.encode(
             second,
             convert_to_numpy=False,
             convert_to_tensor=True,
             show_progress_bar=True).to(  # type: ignore
-                torch.bfloat16)  # type: ignore
-        cache[second_name] = second_embed.cpu()
+                torch.bfloat16).cpu()  # type: ignore
+        cache[second_name] = second_embed
     return first_embed, second_embed
 
 
@@ -312,7 +311,7 @@ def sample_similarity(first_name: str,
 
         first_sent_embed, second_sent_embed = get_embeddings(
             cache, model, first_name + "_sent", first_sentences,
-            second_name + "_sent", second_sentences, device)
+            second_name + "_sent", second_sentences)
         for direction, sent_sims in compute_similarity(
                 cosine, first_name + "_sent", first_sent_embed,
                 second_name + "_sent", second_sent_embed, device):
