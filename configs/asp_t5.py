@@ -109,6 +109,23 @@ T5_ASP_LOWNERGAZ.update({
     "name": "t5_asp_lownergaz"
 })
 
+T5_ASP_LOWNERGAZ_GAZ = T5_BASE.copy()
+T5_ASP_LOWNERGAZ_GAZ.update({
+    "adam_weight_decay": 0.018862500000000015,
+    "asp_dropout_rate": 0.43875,
+    "asp_hidden_dim": 799,
+    "num_epochs": 17,
+    "plm_learning_rate": 0.00020887755102040807,
+    "search_algorithm": "bm25",
+    "search_topk": 12,
+    "task_learning_rate": 0.003949473684210526,
+    "train_search_dropout": 0.028260869565217374,
+    "use_labels": True,
+    "use_mentions": True,
+    "warmup_ratio": 0.20864864864864865,
+    "name": "t5_asp_lownergaz_gaz"
+})
+
 T5_ASP_GAZ = T5_BASE.copy()
 T5_ASP_GAZ.update({
     "adam_weight_decay": 0.018862500000000015,

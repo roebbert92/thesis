@@ -132,10 +132,13 @@ def batched_similarity(fn: torch.nn.Module, x_tensors: Tensor,
         for x_tensor, compare_tensor in zip(
                 torch.tensor_split(x_tensors, set_batch_size, dim=1),
                 torch.tensor_split(compare_tensors, set_batch_size, dim=1)):
-            _sims.append(fn(x_tensor.to(device=device), compare_tensor.to(device=device)))
+            _sims.append(
+                fn(x_tensor.to(device=device),
+                   compare_tensor.to(device=device)))
         sims = torch.cat(_sims, dim=-1)
     else:
-        sims = fn(x_tensors.to(device=device), compare_tensors.to(device=device))
+        sims = fn(x_tensors.to(device=device),
+                  compare_tensors.to(device=device))
     best_scores = torch.max(sims, dim=-1).values
     len_scores = best_scores.shape[0]
     scores[idx - len_scores:idx] = best_scores.cpu()
@@ -148,7 +151,7 @@ def compute_similarity(fn: torch.nn.Module,
                        second_embed: Tensor,
                        device: str,
                        batch_size: int = 10,
-                       max_set_size: int = 1000):
+                       max_set_size: int = 20000):
     def compute(first_name: str, first: Tensor, second_name: str,
                 second: Tensor, device: str, batch_size: int,
                 max_set_size: int):
@@ -165,15 +168,24 @@ def compute_similarity(fn: torch.nn.Module,
                            desc=f"{second_name} to {first_name} "):
             batch_idx = idx % batch_size
             if idx > 0 and batch_idx == 0:
-                batched_similarity(fn, x_tensors, compare_tensors,
-                                   first_to_second, idx, set_batch_size, device=device)
+                batched_similarity(fn,
+                                   x_tensors,
+                                   compare_tensors,
+                                   first_to_second,
+                                   idx,
+                                   set_batch_size,
+                                   device=device)
             x_tensors[batch_idx] = x.repeat((set_size, 1))
             compare_tensors[batch_idx] = second
 
         if batch_idx > 0:
-            batched_similarity(fn, x_tensors[:batch_idx + 1],
+            batched_similarity(fn,
+                               x_tensors[:batch_idx + 1],
                                compare_tensors[:batch_idx + 1],
-                               first_to_second, len(first), set_batch_size, device=device)
+                               first_to_second,
+                               len(first),
+                               set_batch_size,
+                               device=device)
         return first_to_second
 
     if first_name == second_name:
@@ -198,22 +210,24 @@ def get_embeddings(cache: Dict[str, Tensor], model: SentenceTransformer,
     if first_name in cache:
         first_embed = cache[first_name]
     else:
-        first_embed: Tensor = model.encode(
-            first,
-            convert_to_numpy=False,
-            convert_to_tensor=True,
-            show_progress_bar=True).to(  # type: ignore
-                torch.bfloat16).cpu()  # type: ignore
+        first_embed: Tensor = torch.stack([
+            tensor.to(dtype=torch.bfloat16, device="cpu")
+            for tensor in model.encode(first,
+                                       convert_to_numpy=False,
+                                       convert_to_tensor=False,
+                                       show_progress_bar=True)
+        ]).cpu()
         cache[first_name] = first_embed
     if second_name in cache:
         second_embed = cache[second_name]
     else:
-        second_embed: Tensor = model.encode(
-            second,
-            convert_to_numpy=False,
-            convert_to_tensor=True,
-            show_progress_bar=True).to(  # type: ignore
-                torch.bfloat16).cpu()  # type: ignore
+        second_embed: Tensor = torch.stack([
+            tensor.to(dtype=torch.bfloat16, device="cpu")
+            for tensor in model.encode(second,
+                                       convert_to_numpy=False,
+                                       convert_to_tensor=False,
+                                       show_progress_bar=True)
+        ]).cpu()
         cache[second_name] = second_embed
     return first_embed, second_embed
 

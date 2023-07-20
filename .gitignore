@@ -21,3 +21,4 @@ data_augmentation/models
 data/mlowner/lowner_gazetteer_db.json
 *.tar.gz
 *.parquet
+data/mlowner/lownergaz_gaz.json

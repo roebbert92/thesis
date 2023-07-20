@@ -178,7 +178,8 @@ class SearchMatch(pl.LightningModule):
 def experiment_01():
     seeds = [1, 2, 3]
     for gazetteer_name in [
-            "sent", "gaz", "lownergaz", "lownergaz_sent", "gaz_sent"
+            #"sent", "gaz", "lownergaz", "lownergaz_sent", "gaz_sent",
+            "lownergaz_gaz"
     ]:
         config = {
             "name":
@@ -355,4 +356,5 @@ def experiment_03():
 
 
 if __name__ == "__main__":
-    experiment_03()
+    experiment_01()
+    # experiment_03()

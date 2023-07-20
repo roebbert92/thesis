@@ -7,17 +7,19 @@ sys.path.append(thesis_path)
 
 import pickle
 import json
-from configs.asp_t5 import T5_ASP_LOWNERGAZ_SENT, T5_ASP_LOWNERGAZ, T5_ASP_GAZ_SENT, T5_ASP_GAZ, T5_ASP_SENT
+from configs.asp_t5 import T5_ASP_LOWNERGAZ_SENT, T5_ASP_LOWNERGAZ, T5_ASP_GAZ_SENT, T5_ASP_GAZ, T5_ASP_SENT, T5_ASP_LOWNERGAZ_GAZ
 from hyperparameter_tuning.t5_asp_lownergaz_sent import setup_database as setup_database_lownergaz_sent
 from hyperparameter_tuning.t5_asp_gaz_sent import setup_database as setup_database_gaz_sent
 from hyperparameter_tuning.t5_asp_lownergaz import setup_database as setup_database_lownergaz
 from hyperparameter_tuning.t5_asp_gaz import setup_database as setup_database_gaz
 from hyperparameter_tuning.t5_asp_sent import setup_database as setup_database_sent
+from hyperparameter_tuning.t5_asp_lownergaz_gaz import setup_database as setup_database_lownergaz_gaz
 from hyperparameter_tuning.utils import get_search_results
 
 configs = [
-    T5_ASP_LOWNERGAZ_SENT, T5_ASP_LOWNERGAZ, T5_ASP_GAZ_SENT, T5_ASP_GAZ,
-    T5_ASP_SENT
+    #T5_ASP_LOWNERGAZ_SENT, T5_ASP_LOWNERGAZ, T5_ASP_GAZ_SENT, T5_ASP_GAZ,
+    # T5_ASP_SENT,
+    T5_ASP_LOWNERGAZ_GAZ
 ]
 
 files = {
@@ -73,6 +75,9 @@ for config in configs:
     if config["name"] == "t5_asp_sent":
         search = setup_database_sent(config["search_algorithm"],
                                      config["search_topk"])
+    if config["name"] == "t5_asp_lownergaz_gaz":
+        search = setup_database_lownergaz_gaz(config["search_algorithm"],
+                                              config["search_topk"])
 
     # go through all datasets
     for part in parts:

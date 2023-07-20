@@ -15,12 +15,13 @@ MODEL_ORDER = {
     key: idx
     for idx, key in enumerate([
         "flair_roberta", "t5_asp", "dict_match", "dict_match_gaz",
-        "dict_match_sent", "dict_match_lownergaz", "dict_match_gaz_sent",
-        "dict_match_lownergaz_sent", "search_match", "search_match_gaz",
-        "search_match_sent", "search_match_lownergaz", "search_match_gaz_sent",
+        "dict_match_sent", "dict_match_lownergaz", "dict_match_lownergaz_gaz",
+        "dict_match_gaz_sent", "dict_match_lownergaz_sent", "search_match",
+        "search_match_gaz", "search_match_sent", "search_match_lownergaz",
+        "search_match_lownergaz_gaz", "search_match_gaz_sent",
         "search_match_lownergaz_sent", "search_match_overall", "t5_asp_gaz",
-        "t5_asp_sent", "t5_asp_lownergaz", "t5_asp_gaz_sent",
-        "t5_asp_lownergaz_sent", "t5_asp_overall"
+        "t5_asp_sent", "t5_asp_lownergaz", "t5_asp_lownergaz_gaz",
+        "t5_asp_gaz_sent", "t5_asp_lownergaz_sent", "t5_asp_overall"
     ])
 }
 LATEX_MODEL_NAMES = {
@@ -30,18 +31,21 @@ LATEX_MODEL_NAMES = {
     "dict_match_gaz": "DictMatch\\textsubscript{Gaz}",
     "dict_match_sent": "DictMatch\\textsubscript{Sent}",
     "dict_match_lownergaz": "DictMatch\\textsubscript{LownerGaz}",
+    "dict_match_lownergaz_gaz": "DictMatch\\textsubscript{LownerGaz+Gaz}",
     "dict_match_lownergaz_sent": "DictMatch\\textsubscript{LownerGaz+Sent}",
     "dict_match_gaz_sent": "DictMatch\\textsubscript{Gaz+Sent}",
     "search_match": "SearchMatch",
     "search_match_gaz": "SearchMatch\\textsubscript{Gaz}",
     "search_match_sent": "SearchMatch\\textsubscript{Sent}",
     "search_match_lownergaz": "SearchMatch\\textsubscript{LownerGaz}",
+    "search_match_lownergaz_gaz": "SearchMatch\\textsubscript{LownerGaz+Gaz}",
     "search_match_lownergaz_sent":
     "SearchMatch\\textsubscript{LownerGaz+Sent}",
     "search_match_gaz_sent": "SearchMatch\\textsubscript{Gaz+Sent}",
     "t5_asp_gaz": "T5-ASP\\textsubscript{Gaz}",
     "t5_asp_sent": "T5-ASP\\textsubscript{Sent}",
     "t5_asp_lownergaz": "T5-ASP\\textsubscript{LownerGaz}",
+    "t5_asp_lownergaz_gaz": "T5-ASP\\textsubscript{LownerGaz+Gaz}",
     "t5_asp_gaz_sent": "T5-ASP\\textsubscript{Gaz+Sent}",
     "t5_asp_lownergaz_sent": "T5-ASP\\textsubscript{LownerGaz+Sent}",
     "search_match_overall": "SearchMatch\\textsubscript{Overall}",
@@ -118,17 +122,20 @@ PLOT_MODEL_NAMES = {
     "dict_match_gaz": r"DictMatch$_{Gaz}$",
     "dict_match_sent": r"DictMatch$_{Sent}$",
     "dict_match_lownergaz": r"DictMatch$_{LownerGaz}$",
+    "dict_match_lownergaz_gaz": r"DictMatch$_{LownerGaz+Gaz}$",
     "dict_match_lownergaz_sent": r"DictMatch$_{LownerGaz+Sent}$",
     "dict_match_gaz_sent": r"DictMatch$_{Gaz+Sent}$",
     "search_match": r"SearchMatch",
     "search_match_gaz": r"SearchMatch$_{Gaz}$",
     "search_match_sent": r"SearchMatch$_{Sent}$",
     "search_match_lownergaz": r"SearchMatch$_{LownerGaz}$",
+    "search_match_lownergaz_gaz": r"SearchMatch$_{LownerGaz+Gaz}$",
     "search_match_lownergaz_sent": r"SearchMatch$_{LownerGaz+Sent}$",
     "search_match_gaz_sent": r"SearchMatch$_{Gaz+Sent}$",
     "t5_asp_gaz": r"T5-ASP$_{Gaz}$",
     "t5_asp_sent": r"T5-ASP$_{Sent}$",
     "t5_asp_lownergaz": r"T5-ASP$_{LownerGaz}$",
+    "t5_asp_lownergaz_gaz": r"T5-ASP$_{LownerGaz+Gaz}$",
     "t5_asp_gaz_sent": r"T5-ASP$_{Gaz+Sent}$",
     "t5_asp_lownergaz_sent": r"T5-ASP$_{LownerGaz+Sent}$"
 }

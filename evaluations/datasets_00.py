@@ -42,13 +42,16 @@ def get_labeled_data():
     else:
         os.makedirs(os.path.dirname(labeled_data_path), exist_ok=True)
         labeled_data = defaultdict(list)
-        for key in ["gaz", "lownergaz", "sent"]:
+        for key in ["gaz", "lownergaz", "sent", "lownergaz_gaz"]:
             if key in ["gaz", "sent"]:
                 export_path = os.path.join(thesis_path, "data", "multiconer",
                                            f"multiconer_{key}.json")
-            else:
+            elif key == "lownergaz":
                 export_path = os.path.join(thesis_path, "data", "mlowner",
                                            "lowner_gazetteer_db.json")
+            else:
+                export_path = os.path.join(thesis_path, "data", "mlowner",
+                                           "lownergaz_gaz.json")
             with open(export_path, "r") as file:
                 for item in json.load(file):
                     labeled_data[key].append(item)
@@ -56,6 +59,7 @@ def get_labeled_data():
         models_to_labeled_data = {
             't5_asp_lownergaz': ["lownergaz"],
             't5_asp_gaz': ["gaz"],
+            't5_asp_lownergaz_gaz': ["lownergaz_gaz"],
             't5_asp_lownergaz_sent': ["lownergaz", "sent"],
             't5_asp_gaz_sent': ["gaz", "sent"],
             't5_asp_sent': ["sent"]

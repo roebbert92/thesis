@@ -322,12 +322,15 @@ if __name__ == "__main__":
     # experiment01(
     #     "lownergaz",
     #     [os.path.join(thesis_path, "data/mlowner/lowner_gazetteer_db.json")])
-    # experiment01("lownergaz_sent", [
-    #     os.path.join(thesis_path, "data/multiconer/multiconer_sent.json"),
-    #     os.path.join(thesis_path, "data/mlowner/lowner_gazetteer_db.json")
-    # ])
-    # experiment01("gaz_sent", [
-    #     os.path.join(thesis_path, "data/multiconer/multiconer_sent.json"),
-    #     os.path.join(thesis_path, "data/multiconer/multiconer_gaz.json")
-    # ])
-    experiment_03()
+    experiment01(
+        "lownergaz_gaz",
+        [os.path.join(thesis_path, "data/mlowner/lownergaz_gaz.json")])
+    #experiment01("lownergaz_sent", [
+    #    os.path.join(thesis_path, "data/multiconer/multiconer_sent.json"),
+    #    os.path.join(thesis_path, "data/mlowner/lowner_gazetteer_db.json")
+    #])
+    #experiment01("gaz_sent", [
+    #    os.path.join(thesis_path, "data/multiconer/multiconer_sent.json"),
+    #    os.path.join(thesis_path, "data/multiconer/multiconer_gaz.json")
+    #])
+    #experiment_03()

@@ -506,6 +506,189 @@ def aggregate_performance_metrics(metrics_df: pd.DataFrame):
     return agg_df
 
 
+def process_cross_gazetteer_metrics_file(metrics_filepath):
+    from models.metrics import ASPMetrics
+    import pickle
+    import os
+    import json
+    import pandas as pd
+
+    metrics_list = []
+    fp = metrics_filepath.split(os.path.sep)
+    with open(metrics_filepath, "rb") as file:
+        metrics: ASPMetrics = pickle.load(file)
+    name = os.path.splitext(fp[-1])[0].split("_")
+    seed = int(fp[-4][-1])
+    has_gazetteer = "True"
+    finetuning = "full"
+    pretrained = "True"
+    model = "t5_asp_lownergaz_sent"
+    gaz_config = fp[-2].split("_")
+    train_gazetteer_content = "None"
+    if int(gaz_config[0]) == 0:
+        train_gazetteer_content = "lownergaz_sent"
+    if int(gaz_config[0]) == 1:
+        train_gazetteer_content = "wnut_train"
+    if int(gaz_config[0]) == 2:
+        train_gazetteer_content = "lownergaz_sent+wnut_train"
+    eval_gazetteer_content = "None"
+    if int(gaz_config[1]) == 0:
+        eval_gazetteer_content = "wnut"
+    if int(gaz_config[1]) == 1:
+        eval_gazetteer_content = "lownergaz_sent+wnut"
+    if int(gaz_config[1]) == 2:
+        eval_gazetteer_content = "lownergaz_sent"
+    with open(datasets[name[-1]], "r") as file:
+        dataset = json.load(file)
+    metrics_per_sample = metrics.metrics_per_sample(
+        dataset, types).to_dict(orient="records")
+    for sample_metrics in metrics_per_sample:
+        metrics_list.append({
+            "seed": seed,
+            "checkpoint": name[0],
+            "has_gazetteer": has_gazetteer,
+            "finetuning": finetuning,
+            "pretrained": pretrained,
+            "train_gazetteer_content": train_gazetteer_content,
+            "eval_gazetteer_content": eval_gazetteer_content,
+            "model": model,
+            "dataset": "wnut_" + name[-1],
+            **sample_metrics
+        })
+    metrics_df = pd.DataFrame.from_records(metrics_list)
+    return metrics_df
+
+
+def get_per_sample_cross_gazetteer_metrics():
+    metrics_file_path = os.path.join(
+        thesis_path, "evaluations", "metrics",
+        "03_emerging_per_sample_cross_gazetteer_metrics.parquet")
+    if not os.path.exists(metrics_file_path):
+        pqwriter = None
+        datasets: Dict[str, str] = {
+            "train": os.path.join(thesis_path, "data", "wnut",
+                                  "wnut_train.json"),
+            "dev": os.path.join(thesis_path, "data", "wnut", "wnut_dev.json"),
+            "test": os.path.join(thesis_path, "data", "wnut",
+                                 "wnut_test.json"),
+        }
+
+        with open(os.path.join(thesis_path, "data", "wnut",
+                               "wnut_types.json")) as file:
+            types = list(json.load(file)["entities"].keys())
+
+        metrics_files = list(
+            glob(os.path.join(thesis_path, "experiments",
+                              "03_adaptation_emerging_entities", "data", r"**",
+                              "05_cross_gazetteer_eval", "**", r"*.pkl"),
+                 recursive=True))
+        with mp.Pool(mp.cpu_count() - 5,
+                     initializer=init_process_metrics_file,
+                     initargs=(datasets, types)) as pool:
+            results = pool.map_async(process_cross_gazetteer_metrics_file,
+                                     metrics_files)
+            for metrics_df in results.get():
+                table = pa.Table.from_pandas(metrics_df)
+                if pqwriter is None:
+                    pqwriter = pq.ParquetWriter(metrics_file_path,
+                                                table.schema)
+                pqwriter.write_table(table)
+        if pqwriter is not None:
+            pqwriter.close()
+
+    metrics_df = pd.read_parquet(metrics_file_path)
+    return metrics_df
+
+
+def process_cross_gazetteer_content_metrics_file(metrics_filepath):
+    from models.metrics import ASPMetrics
+    import pickle
+    import os
+    import json
+    import pandas as pd
+
+    metrics_list = []
+    fp = metrics_filepath.split(os.path.sep)
+    with open(metrics_filepath, "rb") as file:
+        metrics: ASPMetrics = pickle.load(file)
+    name = os.path.splitext(fp[-1])[0].split("_")
+    seed = int(fp[-4][-1])
+    has_gazetteer = "True"
+    finetuning = "full"
+    pretrained = "True"
+    model = "t5_asp_lownergaz_sent"
+    gaz_config = fp[-2].split("_")
+    train_gazetteer_content = "None"
+    if int(gaz_config[0]) == 0:
+        train_gazetteer_content = "lownergaz_sent"
+    if int(gaz_config[0]) == 1:
+        train_gazetteer_content = "wnut_train"
+    if int(gaz_config[0]) == 2:
+        train_gazetteer_content = "lownergaz_sent+wnut_train"
+    eval_content_location = gaz_config[1]
+    with open(datasets[name[-1]], "r") as file:
+        dataset = json.load(file)
+    metrics_per_sample = metrics.metrics_per_sample(
+        dataset, types).to_dict(orient="records")
+    for sample_metrics in metrics_per_sample:
+        metrics_list.append({
+            "seed": seed,
+            "checkpoint": name[0],
+            "has_gazetteer": has_gazetteer,
+            "finetuning": finetuning,
+            "pretrained": pretrained,
+            "train_gazetteer_content": train_gazetteer_content,
+            "eval_content_location": eval_content_location,
+            "model": model,
+            "dataset": "wnut_" + name[-1],
+            **sample_metrics
+        })
+    metrics_df = pd.DataFrame.from_records(metrics_list)
+    return metrics_df
+
+
+def get_per_sample_cross_gazetteer_content_metrics():
+    metrics_file_path = os.path.join(
+        thesis_path, "evaluations", "metrics",
+        "03_emerging_per_sample_cross_gazetteer_content_metrics.parquet")
+    if not os.path.exists(metrics_file_path):
+        pqwriter = None
+        datasets: Dict[str, str] = {
+            "train": os.path.join(thesis_path, "data", "wnut",
+                                  "wnut_train.json"),
+            "dev": os.path.join(thesis_path, "data", "wnut", "wnut_dev.json"),
+            "test": os.path.join(thesis_path, "data", "wnut",
+                                 "wnut_test.json"),
+        }
+
+        with open(os.path.join(thesis_path, "data", "wnut",
+                               "wnut_types.json")) as file:
+            types = list(json.load(file)["entities"].keys())
+
+        metrics_files = list(
+            glob(os.path.join(thesis_path, "experiments",
+                              "03_adaptation_emerging_entities", "data", r"**",
+                              "06_cross_gazetteer_content_eval", "**",
+                              r"*.pkl"),
+                 recursive=True))
+        with mp.Pool(mp.cpu_count() - 5,
+                     initializer=init_process_metrics_file,
+                     initargs=(datasets, types)) as pool:
+            results = pool.map_async(
+                process_cross_gazetteer_content_metrics_file, metrics_files)
+            for metrics_df in results.get():
+                table = pa.Table.from_pandas(metrics_df)
+                if pqwriter is None:
+                    pqwriter = pq.ParquetWriter(metrics_file_path,
+                                                table.schema)
+                pqwriter.write_table(table)
+        if pqwriter is not None:
+            pqwriter.close()
+
+    metrics_df = pd.read_parquet(metrics_file_path)
+    return metrics_df
+
+
 if __name__ == "__main__":
     get_labeled_data_entity_coverage()
     get_labeled_data_entity_coverage_per_sample()

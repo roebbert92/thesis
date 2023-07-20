@@ -98,14 +98,10 @@ with open(files["wnut_dev"], encoding="utf-8") as file:
 with open(files["wnut_test"], encoding="utf-8") as file:
     wnut_test = json.load(file)
 
-with open(files["types"], encoding="utf-8") as file:
-    types = json.load(file)
-
 datasets = {
     "wnut_train": wnut_train,
     "wnut_dev": wnut_dev,
-    "wnut_test": wnut_test,
-    "types": types
+    "wnut_test": wnut_test
 }
 
 total = [(seed, gaz, finetuning, pretrained, config)
