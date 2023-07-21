@@ -538,6 +538,7 @@ def process_cross_gazetteer_metrics_file(metrics_filepath):
         eval_gazetteer_content = "lownergaz_sent+wnut"
     if int(gaz_config[1]) == 2:
         eval_gazetteer_content = "lownergaz_sent"
+    timestep = int(gaz_config[2])
     with open(datasets[name[-1]], "r") as file:
         dataset = json.load(file)
     metrics_per_sample = metrics.metrics_per_sample(
@@ -551,6 +552,7 @@ def process_cross_gazetteer_metrics_file(metrics_filepath):
             "pretrained": pretrained,
             "train_gazetteer_content": train_gazetteer_content,
             "eval_gazetteer_content": eval_gazetteer_content,
+            "timestep": timestep,
             "model": model,
             "dataset": "wnut_" + name[-1],
             **sample_metrics
@@ -625,7 +627,8 @@ def process_cross_gazetteer_content_metrics_file(metrics_filepath):
         train_gazetteer_content = "wnut_train"
     if int(gaz_config[0]) == 2:
         train_gazetteer_content = "lownergaz_sent+wnut_train"
-    eval_content_location = gaz_config[1]
+    timestep = int(gaz_config[1])
+    eval_content_location = gaz_config[2]
     with open(datasets[name[-1]], "r") as file:
         dataset = json.load(file)
     metrics_per_sample = metrics.metrics_per_sample(
@@ -639,6 +642,7 @@ def process_cross_gazetteer_content_metrics_file(metrics_filepath):
             "pretrained": pretrained,
             "train_gazetteer_content": train_gazetteer_content,
             "eval_content_location": eval_content_location,
+            "timestep": timestep,
             "model": model,
             "dataset": "wnut_" + name[-1],
             **sample_metrics
