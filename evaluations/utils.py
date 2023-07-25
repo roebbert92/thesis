@@ -16,7 +16,7 @@ MODEL_ORDER = {
     for idx, key in enumerate([
         "flair_roberta", "t5_asp", "dict_match", "dict_match_gaz",
         "dict_match_sent", "dict_match_lownergaz", "dict_match_lownergaz_gaz",
-        "dict_match_gaz_sent", "dict_match_lownergaz_sent", "search_match",
+        "dict_match_gaz_sent", "dict_match_lownergaz_sent", "dict_match_overall", "search_match",
         "search_match_gaz", "search_match_sent", "search_match_lownergaz",
         "search_match_lownergaz_gaz", "search_match_gaz_sent",
         "search_match_lownergaz_sent", "search_match_overall", "t5_asp_gaz",
