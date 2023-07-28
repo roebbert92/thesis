@@ -314,4 +314,5 @@ def experiment_03():
 
 
 if __name__ == "__main__":
+    experiment_01()
     experiment_03()

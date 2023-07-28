@@ -22,6 +22,7 @@ from lightning.pytorch.loggers import TensorBoardLogger
 
 
 class SearchMatchDataset(Dataset):
+
     def __init__(self, dataset_path: str, search_result_path: str) -> None:
         super().__init__()
         with open(dataset_path, "r") as file:
@@ -49,6 +50,7 @@ def collate_search_batch(batch: List[dict]):
 
 
 class SearchMatch(pl.LightningModule):
+
     def __init__(self, seed: int) -> None:
         super().__init__()
 
@@ -357,4 +359,4 @@ def experiment_03():
 
 if __name__ == "__main__":
     experiment_01()
-    # experiment_03()
+    experiment_03()
