@@ -29,10 +29,10 @@ frameworks is just a storage directory for code of T5-ASP.
 
 ## Reproduce results
 
-Reproducing the results for T5-ASP, just run run.py in the respective experiment folder.
-To reproduce results for FLAIR, run models > flair_roberta.py.
-To reproduce results for DictMatch, run models > dict_match.py.
-To reproduce results for SearchMatch, run models > search_match.py.
+- Reproducing the results for T5-ASP, just run run.py in the respective experiment folder.
+- To reproduce results for FLAIR, run models > flair_roberta.py.
+- To reproduce results for DictMatch, run models > dict_match.py.
+- To reproduce results for SearchMatch, run models > search_match.py.
 
 ## Evaluate results
 
