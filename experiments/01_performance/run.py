@@ -21,7 +21,6 @@ from lightning.pytorch.loggers import TensorBoardLogger
 from data_preprocessing.tensorize import NERCollator, NERDataProcessor, ner_collate_fn
 from data_preprocessing.tokenize import tokenize_json, tokenize_search_results_json
 from models.asp_t5 import ASPT5Model, get_tokenizer
-from pipelines.evaluation import factors
 from configs.asp_t5 import T5_ASP_LOWNERGAZ_SENT, T5_ASP_LOWNERGAZ, T5_ASP_GAZ_SENT, T5_ASP_GAZ, T5_ASP_SENT, T5_ASP, T5_ASP_LOWNERGAZ_GAZ
 from hyperparameter_tuning.t5_asp_lownergaz_sent import setup_database as setup_database_lownergaz_sent
 from hyperparameter_tuning.t5_asp_gaz_sent import setup_database as setup_database_gaz_sent
@@ -29,7 +28,7 @@ from hyperparameter_tuning.t5_asp_lownergaz import setup_database as setup_datab
 from hyperparameter_tuning.t5_asp_gaz import setup_database as setup_database_gaz
 from hyperparameter_tuning.t5_asp_sent import setup_database as setup_database_sent
 from hyperparameter_tuning.t5_asp_lownergaz_gaz import setup_database as setup_database_lownergaz_gaz
-from hyperparameter_tuning.utils import get_search_results
+from hyperparameter_tuning.utils import get_search_results, factors
 
 files = {
     "types":
