@@ -109,7 +109,7 @@ def train_model(corpus: Corpus,
                     eval_batch_size=40,
                     max_epochs=num_epochs,  # 20
                     mini_batch_chunk_size=mini_batch_chunk_size,
-                    num_workers=3,
+                    num_workers=0,
                     optimizer=AdamW,
                     scheduler=OneCycleLR,  # type: ignore
                     embeddings_storage_mode='none',
@@ -128,7 +128,8 @@ def train_model(corpus: Corpus,
                     metrics_for_tensorboard=[("macro avg", "f1-score"),
                                              ("macro avg", "precision"),
                                              ("macro avg", "recall")])
-            except RuntimeError:
+            except RuntimeError as e:
+                print(e)
                 mini_batch_chunk_size = mini_batch_chunk_size - 1 if mini_batch_chunk_size > 1 else 1
                 try:
                     del trainer
@@ -210,7 +211,7 @@ def get_asp_metrics_from_flair(metrics_base_path: str, dataset_names: list,
 
 
 def experiment_01():
-    seeds = [1, 2, 3]
+    seeds = [42]  #[1, 2, 3]
     dataset = get_lowner_dataset()
     datapath = os.path.join(thesis_path, "experiments", "01_performance",
                             "data")
@@ -315,4 +316,3 @@ def experiment_03():
 
 if __name__ == "__main__":
     experiment_01()
-    experiment_03()

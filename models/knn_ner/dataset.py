@@ -16,6 +16,7 @@ from torch.utils.data import Dataset
 from tokenizers.implementations import BertWordPieceTokenizer
 from transformers.models.xlm_roberta import XLMRobertaTokenizer
 from transformers.models.roberta import RobertaTokenizer
+from transformers.utils import PaddingStrategy
 
 
 class NERDataset(Dataset):
@@ -79,26 +80,18 @@ class NERDataset(Dataset):
         label_sequence = label_sequence[:min(self.max_length -
                                              2, len(label_sequence))]
         # convert string to ids
-        tokenizer_output = self.tokenizer.encode(token_sequence)
-        subword_map = []
-        if not self.en_roberta:
-            bert_tokens = tokenizer_output.ids
-            if (self.language == "zh"):
-                label_sequence = self._update_labels_using_tokenize_offsets(
-                    tokenizer_output.offsets, label_sequence)
-            else:
-                label_sequence = self._update_labels_using_tokenize_offsets_english(
-                    tokenizer_output, label_sequence, token_sequence)
-        else:
-            bert_tokens = tokenizer_output
-            subword_map, _ = self._roberta_update_labels_using_tokenize_offsets_english(
-                token_sequence.strip().split(), label_sequence)
+        tokenizer_output = [self.tokenizer.encode(x if idx > 0 else " " + x, truncation=True, stride=self.max_length//2, return_overflowing_tokens=True, padding=PaddingStrategy.LONGEST, add_special_tokens=False) for idx, x in enumerate(token_sequence.split(concate_word))]
+
+        
+        bert_tokens = [token_id for token_ids in tokenizer_output for token_id in token_ids]
+        subword_map = [token_idx for token_idx, token_ids in enumerate(tokenizer_output) for _ in token_ids]
 
         assert len(bert_tokens) <= self.max_length
         #assert len(bert_tokens) == len(label_sequence)
-        input_ids = torch.LongTensor(bert_tokens)
-        label = torch.LongTensor(label_sequence)
-        token_map = torch.LongTensor(subword_map)
+        input_ids = torch.nn.functional.pad(torch.tensor(bert_tokens, dtype=torch.long), (1, 1), value=self.tokenizer.pad_token_id)
+        label = torch.tensor(label_sequence, dtype=torch.long)
+        token_map = torch.tensor(subword_map, dtype=torch.long)
+        
         return doc_idx, token_map, input_ids, label
 
     def _update_labels_using_tokenize_offsets(self, offsets,
@@ -226,8 +219,7 @@ class NERDataset(Dataset):
         if (cls.__ner_labels is None):
             cls.__ner_labels = ["O"]
             for t in types:
-                for pos in ["S", "B", "E", "M"]:
-                    # for pos in ["B", "I"]:
+                for pos in ["B", "I"]:
                     cls.__ner_labels.append("-".join([pos, t]))
 
         return cls.__ner_labels

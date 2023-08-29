@@ -20,9 +20,9 @@ import lightning.pytorch as pl
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger
 
-
+os.environ["TORCH_FORCE_WEIGHTS_ONLY_LOAD"] = "0"
 def experiment01():
-    seeds = [1, 2, 3]
+    seeds = [42]
     # use same config as flair
     for seed in seeds:
         if "PL_GLOBAL_SEED" in os.environ:
@@ -38,9 +38,9 @@ def experiment01():
             "adam_epsilon":
             1e-8,
             "weight_decay":
-            0.01,
+            0.,
             "hidden_dropout_prob":
-            0.2,
+            0.1,
             "warmup_proportion":
             0.1,
             "train_batch_size":
@@ -54,7 +54,7 @@ def experiment01():
             "bert_path":
             "xlm-roberta-large",
             "file_name":
-            "bmes",
+            "bio",
             "data_prefix":
             "lowner_",
             "data_dir":
@@ -78,7 +78,7 @@ def experiment01():
             "fused":
             True,
             "name":
-            "knn_ner"
+            "custom_flair_locked"
         }
         grad_accum_steps = factors(config["train_batch_size"])
         with open(os.path.join(thesis_path, "data", "mlowner",
@@ -113,9 +113,9 @@ def experiment01():
         while not trained:
             try:
 
-                model = NERTask(argparse.Namespace(**train_config))
-                # model = NERTask.load_from_checkpoint(
-                #     os.path.join(checkpoint_base_path, "last.ckpt"))
+                # model = NERTask(argparse.Namespace(**train_config))
+                model = NERTask.load_from_checkpoint(
+                    os.path.join(checkpoint_base_path, "last.ckpt"))
 
                 trainer = pl.Trainer(
                     accelerator="gpu",
@@ -132,9 +132,9 @@ def experiment01():
                     enable_checkpointing=True,
                     enable_progress_bar=True,
                     callbacks=[checkpoint_best])
-                trainer.fit(model)
-                trainer.save_checkpoint(
-                    os.path.join(checkpoint_base_path, "last.ckpt"))
+                # trainer.fit(model)
+                # trainer.save_checkpoint(
+                #     os.path.join(checkpoint_base_path, "last.ckpt"))
 
                 metrics_base_path = os.path.join(train_config["data_path"],
                                                  f"seed_{str(seed)}",
@@ -160,37 +160,19 @@ def experiment01():
                 # test best model
                 trainer.test(model,
                              model.val_train_dataloader(),
-                             ckpt_path=checkpoint_best.best_model_path)
+                             #ckpt_path=checkpoint_best.best_model_path)
+                             ckpt_path=os.path.join(checkpoint_base_path, "best.ckpt"))
                 save_metrics("lowner_train", "best")
                 trainer.test(model,
                              model.val_dataloader(),
-                             ckpt_path=checkpoint_best.best_model_path)
+                             #ckpt_path=checkpoint_best.best_model_path)
+                             ckpt_path=os.path.join(checkpoint_base_path, "best.ckpt"))
                 save_metrics("lowner_dev", "best")
                 trainer.test(model,
                              model.test_dataloader(),
-                             ckpt_path=checkpoint_best.best_model_path)
+                             #ckpt_path=checkpoint_best.best_model_path)
+                             ckpt_path=os.path.join(checkpoint_base_path, "best.ckpt"))
                 save_metrics("lowner_test", "best")
-
-                # create datastore last model
-                datastore_path = os.path.join(
-                    thesis_path,
-                    "experiments",
-                    "01_performance",
-                    "data",
-                    f"seed_{seed}",
-                    "02_tokenized_datasets",
-                )
-                last_datastore_path = build_datastore(
-                    seed, "last",
-                    os.path.join(checkpoint_base_path, "last.ckpt"),
-                    datastore_path)
-
-                # create datastore best model
-                best_datastore_path = build_datastore(
-                    seed, "best", checkpoint_best.best_model_path,
-                    datastore_path)
-
-                # test last model with knn gazetteer
 
                 trained = True
             except RuntimeError as e:
@@ -201,3 +183,7 @@ def experiment01():
                 train_config["train_batch_size"] = train_config[
                     "train_batch_size"] // train_config[
                         "accumulate_grad_batches"]
+
+
+if __name__ == "__main__":
+    experiment01()

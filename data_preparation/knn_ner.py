@@ -104,3 +104,5 @@ def get_multiconer_test_bio():
 if __name__ == "__main__":
     get_wnut_bio()
     get_lowner_bio()
+    get_lowner_bmes()
+    get_wnut_bmes()

@@ -10,6 +10,7 @@
 """
 import sys
 import os
+from typing import List
 
 thesis_path = "/" + os.path.join(
     *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-2])
@@ -26,12 +27,15 @@ from models.knn_ner.metrics import SpanF1ForNER
 import torch
 from torch.nn import functional as F
 from torch.nn.modules import CrossEntropyLoss
+from torch.optim.lr_scheduler import OneCycleLR
 from torch.utils.data.dataloader import DataLoader, RandomSampler, SequentialSampler
 from transformers.optimization import get_linear_schedule_with_warmup
 from transformers.modeling_outputs import TokenClassifierOutput
-from transformers.models.xlm_roberta import XLMRobertaConfig, XLMRobertaForTokenClassification
+from transformers.models.xlm_roberta.modeling_xlm_roberta import XLMRobertaConfig, XLMRobertaForTokenClassification
 
 import lightning.pytorch as pl
+
+import flair.nn as flair_nn
 
 
 @torch.jit.script_if_tracing
@@ -101,6 +105,8 @@ class NERTask(pl.LightningModule):
             hidden_dropout_prob=self.args.hidden_dropout_prob)
         self.model = XLMRobertaForTokenClassification.from_pretrained(
             self.bert_dir, config=self.bert_config)
+        
+        self.locked_dropout = flair_nn.LockedDropout()
 
         self.val_metrics = SpanF1ForNER(entity_labels=self.entity_labels)
         self.test_metrics = SpanF1ForNER(entity_labels=self.entity_labels)
@@ -139,14 +145,15 @@ class NERTask(pl.LightningModule):
 
         num_gpus = len(
             [x for x in str(self.args.gpus).split(",") if x.strip()])
-        t_total = (len(self.train_dataloader()) //
+        current_learning_rate: List = [group["lr"] for group in optimizer.param_groups]
+        scheduler = OneCycleLR(optimizer,
+            max_lr=current_learning_rate,
+            steps_per_epoch=(len(self.train_dataloader()) //
                    (self.args.accumulate_grad_batches * num_gpus) +
-                   1) * self.args.max_epochs
-        warmup_steps = int(self.args.warmup_proportion * t_total)
-        scheduler = get_linear_schedule_with_warmup(
-            optimizer,
-            num_warmup_steps=warmup_steps,
-            num_training_steps=t_total)
+                   1),
+            epochs=self.args.max_epochs,
+            pct_start=0.0,
+            cycle_momentum=False)
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
@@ -160,7 +167,7 @@ class NERTask(pl.LightningModule):
         bert_output = self.model.roberta(input_ids,
                                          attention_mask=attention_mask,
                                          output_hidden_states=True)
-
+        
         loss_mask = torch.cat([
             torch.ones_like(word_maps[:, :1]), (word_maps[:, 1:] != 0).long()
         ],
@@ -191,8 +198,13 @@ class NERTask(pl.LightningModule):
                                                     sentence_hidden_states,
                                                     first_mask, word_maps,
                                                     token_lengths)
-        sequence_output = self.model.dropout(all_token_embeddings)
-        logits = self.model.classifier(sequence_output)
+        #sequence_output = self.model.dropout(all_token_embeddings)
+
+        # applying locked_dropout twice as per flair code
+        dropped_sequence_output = self.locked_dropout(all_token_embeddings)
+        #double_dropped_sequence_output = self.locked_dropout(dropped_sequence_output)
+
+        logits = self.model.classifier(dropped_sequence_output)
 
         if labels is not None:
             loss_mask = torch.zeros(word_maps.shape[0],
@@ -232,21 +244,21 @@ class NERTask(pl.LightningModule):
         return loss
 
     def training_step(self, batch, batch_idx):
-        idxs, word_maps, input_ids, labels = batch
+        _, word_maps, input_ids, labels = batch
 
-        batch_size, seq_len = input_ids.shape
-        bert_classifiaction_outputs = self.forward(input_ids=input_ids,
+        batch_size, _ = input_ids.shape
+        bert_classification_outputs = self.forward(input_ids=input_ids,
                                                    word_maps=word_maps,
                                                    labels=labels)
 
         self.log("train_loss",
-                 bert_classifiaction_outputs.loss,
+                 bert_classification_outputs.loss,
                  on_step=True,
                  on_epoch=True,
                  prog_bar=True,
                  logger=True,
                  batch_size=batch_size)
-        return bert_classifiaction_outputs.loss
+        return bert_classification_outputs.loss
 
     def on_validation_epoch_start(self) -> None:
         self.val_metrics.reset()
@@ -254,12 +266,10 @@ class NERTask(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         idxs, word_maps, input_ids, gold_labels = batch
-        batch_size, seq_len = input_ids.shape
-        loss_mask = (input_ids != 0).long()
         bert_classification_outputs = self.forward(input_ids=input_ids,
                                                    word_maps=word_maps,
                                                    labels=gold_labels)
-        probabilities, argmax_labels = self.postprocess_logits_to_labels(
+        _, argmax_labels = self.postprocess_logits_to_labels(
             bert_classification_outputs.logits)
         self.val_metrics.update(idxs, word_maps, argmax_labels, gold_labels)
 
@@ -357,17 +367,15 @@ class NERTask(pl.LightningModule):
         return dataloader
 
     def on_test_epoch_start(self) -> None:
-        super().on_test_epoch_start()
         self.test_metrics.reset()
-
+        super().on_test_epoch_start()
+        
     def test_step(self, batch, batch_idx):
         idxs, word_maps, input_ids, gold_labels = batch
-        sequence_mask = (input_ids != 0).long()
-        batch_size, seq_len = input_ids.shape
         bert_classification_outputs = self.forward(input_ids=input_ids,
                                                    word_maps=word_maps,
                                                    labels=gold_labels)
-        probabilities, argmax_labels = self.postprocess_logits_to_labels(
+        _, argmax_labels = self.postprocess_logits_to_labels(
             bert_classification_outputs.logits)
         self.test_metrics.update(idxs, word_maps, argmax_labels, gold_labels)
 
