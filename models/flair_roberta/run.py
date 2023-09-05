@@ -47,61 +47,6 @@ from configs.asp_t5 import (
 
 os.environ["TORCH_FORCE_WEIGHTS_ONLY_LOAD"] = "0"
 
-FLAIR = {
-    "lr": 5e-6,
-    "max_epochs": 20,
-    "max_length": 512,
-    "adam_epsilon": 1e-8,
-    "weight_decay": 0.0,
-    "hidden_dropout_prob": 0.1,
-    "warmup_proportion": 0.1,
-    "train_batch_size": 40,
-    "eval_batch_size": 120,
-    "accumulate_grad_batches": 1,
-    "plm_name": "xlm-roberta-base",
-    "dataset_prefix": "lowner_",
-    "dataset_dir": os.path.join(thesis_path, "data", "mlowner"),
-    "data_path": os.path.join(thesis_path, "experiments", "01_performance", "data"),
-    "search_results_dir": None,
-    "name": "flair",
-}
-FLAIR_GAZ = FLAIR.copy()
-FLAIR_GAZ.update(
-    {
-        "search_results_dir": os.path.join(
-            thesis_path,
-            "experiments",
-            "01_performance",
-            "data",
-            "01_search_results",
-            "gaz",
-        ),
-        "gaz_use_labels": True,
-        "gaz_use_mentions": True,
-        "train_search_dropout": 0.028260869565217374,
-        "name": "flair_gaz",
-    }
-)
-FLAIR_LOWNERGAZ_SENT = FLAIR.copy()
-FLAIR_LOWNERGAZ_SENT.update(
-    {
-        "search_results_dir": os.path.join(
-            thesis_path,
-            "experiments",
-            "01_performance",
-            "data",
-            "01_search_results",
-            "lownergaz_sent",
-        ),
-        "sent_use_labels": True,
-        "sent_use_mentions": True,
-        "gaz_use_labels": True,
-        "gaz_use_mentions": True,
-        "train_search_dropout": 0.05492957746478871,
-        "name": "flair_lownergaz_sent",
-    }
-)
-
 
 def save_search_results():
     for search_name in [

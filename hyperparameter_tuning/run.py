@@ -21,22 +21,32 @@ import pickle as pkl
 # from hyperparameter_tuning.t5_asp_sent import t5_asp_sent_configs, t5_asp_sent_configs, run_t5_asp_sent_training
 # from hyperparameter_tuning.t5_asp_gaz_sent import t5_asp_gaz_sent_configs, t5_asp_gaz_sent_configs, run_t5_asp_gaz_sent_training
 # from hyperparameter_tuning.t5_asp_lownergaz_sent import t5_asp_lownergaz_sent_configs, run_t5_asp_lownergaz_sent_training
-from hyperparameter_tuning.t5_asp_lownergaz_sent_wnut import (
-    wnut_t5_asp_lownergaz_sent_configs,
-    run_wnut_t5_asp_lownergaz_sent_training,
-)
-from hyperparameter_tuning.t5_asp_lownergaz_sent_wnut_pretrained import (
-    best_pretrained_wnut_t5_asp_lownergaz_sent_configs,
-    worst_pretrained_wnut_t5_asp_lownergaz_sent_configs,
-    run_pretrained_wnut_t5_asp_lownergaz_sent_training,
-)
-from hyperparameter_tuning.t5_asp_wnut import (
-    wnut_t5_asp_configs,
-    run_wnut_t5_asp_training,
-)
-from hyperparameter_tuning.t5_asp_wnut_pretrained import (
-    run_best_wnut_t5_asp_training,
-    best_pretrained_wnut_t5_asp_configs,
+# from hyperparameter_tuning.t5_asp_lownergaz_sent_wnut import (
+#     wnut_t5_asp_lownergaz_sent_configs,
+#     run_wnut_t5_asp_lownergaz_sent_training,
+# )
+# from hyperparameter_tuning.t5_asp_lownergaz_sent_wnut_pretrained import (
+#     best_pretrained_wnut_t5_asp_lownergaz_sent_configs,
+#     worst_pretrained_wnut_t5_asp_lownergaz_sent_configs,
+#     run_pretrained_wnut_t5_asp_lownergaz_sent_training,
+# )
+# from hyperparameter_tuning.t5_asp_wnut import (
+#     wnut_t5_asp_configs,
+#     run_wnut_t5_asp_training,
+# )
+# from hyperparameter_tuning.t5_asp_wnut_pretrained import (
+#     run_best_wnut_t5_asp_training,
+#     best_pretrained_wnut_t5_asp_configs,
+# )
+from hyperparameter_tuning.flair_roberta import (
+    flair_configs,
+    flair_gaz_configs,
+    flair_gaz_sent_configs,
+    flair_lownergaz_configs,
+    flair_lownergaz_gaz_configs,
+    flair_lownergaz_sent_configs,
+    flair_sent_configs,
+    run_training,
 )
 
 
@@ -71,13 +81,13 @@ def tune_hyperparameters(
         metric_columns=["val_f1", "training_iteration"]
     )
 
-    budget = 60
+    budget = training_budget_in_h * 20
     # if name == "t5_asp":
     #     budget = 140
 
     ng_search = NevergradSearch(
         optimizer=ng.optimizers.ScrHammersleySearch,
-        optimizer_kwargs={"budget": 60},
+        optimizer_kwargs={"budget": budget},
         metric="val_f1",
         mode="max",
         points_to_evaluate=best_configs,
@@ -221,6 +231,106 @@ def tune_wnut_hyperparameters(
         pkl.dump(results, file)
 
 
+def tune_flair_hyperparameters(
+    config, best_configs, tune_training_method, training_budget_in_h
+):
+    name = config["name"]
+    param_space = {}
+    fixed_params = {}
+    for key, value in config.items():
+        if (
+            isinstance(value, str)
+            or isinstance(value, float)
+            or isinstance(value, int)
+            or isinstance(value, bool)
+            or value is None
+        ):
+            fixed_params[key] = value
+            for c in best_configs:
+                if key in c:
+                    del c[key]
+        else:
+            param_space[key] = value
+            print(key)
+
+    for c in best_configs:
+        for key in list(c.keys()):
+            if key not in config:
+                del c[key]
+
+    reporter = tune.CLIReporter(
+        # parameter_columns=["batch_size"],
+        metric_columns=["f1", "training_iteration"]
+    )
+
+    training_budget_sec = training_budget_in_h * 60 * 60
+    # time_per_epoch_sec = 35
+    # if "num_epochs" in param_space:
+    #     min_epochs = (
+    #         param_space["num_epochs"].lower
+    #         + (param_space["num_epochs"].upper - param_space["num_epochs"].lower) / 2
+    #     )
+    # else:
+    #     min_epochs = fixed_params["num_epochs"]
+    budget = training_budget_in_h * 20
+    # find good range:
+    optimizer = ng.optimizers.DifferentialEvolution(
+        crossover="twopoints", high_speed=True
+    )
+    optimizer_kwargs = None
+    points_to_evaluate = best_configs
+    # narrow search
+    # optimizer = ng.optimizers.ScrHammersleySearchPlusMiddlePoint
+    # optimizer_kwargs = {"budget": budget}
+    # points_to_evaluate = None
+    ng_search = NevergradSearch(
+        optimizer=optimizer,
+        optimizer_kwargs=optimizer_kwargs,
+        metric="f1",
+        mode="max",
+        points_to_evaluate=points_to_evaluate,
+    )
+
+    method = tune.with_resources(
+        tune.with_parameters(tune_training_method, fixed_params=fixed_params),
+        resources={"cpu": 12, "gpu": 1},
+    )
+
+    scheduler = ASHAScheduler(
+        time_attr="training_iteration",
+        metric="f1",
+        mode="max",
+        max_t=100,
+        grace_period=4,
+        reduction_factor=2,
+        brackets=1,
+    )
+
+    tuner = tune.Tuner(
+        method,
+        param_space=param_space,
+        tune_config=tune.TuneConfig(
+            scheduler=scheduler,
+            search_alg=ng_search,
+            num_samples=-1,
+            time_budget_s=training_budget_sec,
+        ),
+        run_config=air.RunConfig(
+            local_dir=config["data_path"], name=name, progress_reporter=reporter
+        ),
+    )
+    results = tuner.fit()
+    print(
+        "Best hyperparameters found were: ",
+        results.get_best_result("f1", "max", "all").config,
+    )
+
+    with open(
+        os.path.join(thesis_path, "hyperparameter_tuning", f"{name}_result.pkl"), "wb"
+    ) as file:
+        pkl.dump(results, file)
+
+
 training_budget = 4
 
 # wnut = wnut_t5_asp_lownergaz_sent_configs()
@@ -245,24 +355,53 @@ training_budget = 4
 #                           wnut_worst[1],
 #                           run_pretrained_wnut_t5_asp_lownergaz_sent_training,
 #                           training_budget)
-wnut_best = best_pretrained_wnut_t5_asp_lownergaz_sent_configs(
-    "/home/loebbert/projects/thesis/experiments/01_performance/data/seed_1/03_checkpoints/t5_asp_lownergaz_sent/last.ckpt"
-)
-tune_wnut_hyperparameters(
-    "best_pretrained_wnut_t5_asp",
-    wnut_best[0],
-    wnut_best[1],
-    run_pretrained_wnut_t5_asp_lownergaz_sent_training,
-    training_budget,
+# wnut_best = best_pretrained_wnut_t5_asp_lownergaz_sent_configs(
+#     "/home/loebbert/projects/thesis/experiments/01_performance/data/seed_1/03_checkpoints/t5_asp_lownergaz_sent/last.ckpt"
+# )
+# tune_wnut_hyperparameters(
+#     "best_pretrained_wnut_t5_asp",
+#     wnut_best[0],
+#     wnut_best[1],
+#     run_pretrained_wnut_t5_asp_lownergaz_sent_training,
+#     training_budget,
+# )
+#
+# wnut = wnut_t5_asp_lownergaz_sent_configs()
+# tune_wnut_hyperparameters(
+#     "wnut_t5_asp_lownergaz_sent",
+#     wnut[0],
+#     wnut[1],
+#     run_wnut_t5_asp_lownergaz_sent_training,
+#     training_budget,
+# )#
+
+flair = flair_configs()
+tune_flair_hyperparameters(flair[0], flair[1], run_training, training_budget)
+
+flair_gaz = flair_gaz_configs()
+tune_flair_hyperparameters(flair_gaz[0], flair_gaz[1], run_training, training_budget)
+
+flair_sent = flair_sent_configs()
+tune_flair_hyperparameters(flair_sent[0], flair_sent[1], run_training, training_budget)
+
+flair_lownergaz = flair_lownergaz_configs()
+tune_flair_hyperparameters(
+    flair_lownergaz[0], flair_lownergaz[1], run_training, training_budget
 )
 
-wnut = wnut_t5_asp_lownergaz_sent_configs()
-tune_wnut_hyperparameters(
-    "wnut_t5_asp_lownergaz_sent",
-    wnut[0],
-    wnut[1],
-    run_wnut_t5_asp_lownergaz_sent_training,
-    training_budget,
+flair_gaz_sent = flair_gaz_sent_configs()
+tune_flair_hyperparameters(
+    flair_gaz_sent[0], flair_gaz_sent[1], run_training, training_budget
+)
+
+flair_lownergaz_gaz = flair_lownergaz_gaz_configs()
+tune_flair_hyperparameters(
+    flair_lownergaz_gaz[0], flair_lownergaz_gaz[1], run_training, training_budget
+)
+
+flair_lownergaz_sent = flair_lownergaz_sent_configs()
+tune_flair_hyperparameters(
+    flair_lownergaz_sent[0], flair_lownergaz_sent[1], run_training, training_budget
 )
 
 # t5_asp_gaz_sent_config = t5_asp_gaz_sent_configs()

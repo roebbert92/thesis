@@ -1,6 +1,7 @@
 import sys
 import os
 from typing import List
+import flair.nn as flair_nn
 
 thesis_path = "/" + os.path.join(
     *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-2]
@@ -28,8 +29,6 @@ from transformers.models.xlm_roberta.modeling_xlm_roberta import (
 from transformers.models.xlm_roberta import XLMRobertaTokenizer
 
 import lightning.pytorch as pl
-
-import flair.nn as flair_nn
 
 
 @torch.jit.script_if_tracing
@@ -96,7 +95,12 @@ class FlairModel(pl.LightningModule):
         tokenizer = XLMRobertaTokenizer.from_pretrained(self.args.plm_name)
         self.model.roberta.resize_token_embeddings(tokenizer.vocab_size + 2)
 
-        self.locked_dropout = flair_nn.LockedDropout()
+        self.locked_dropout = flair_nn.LockedDropout(
+            dropout_rate=self.args.locked_dropout_prob
+        )
+
+        self.use_dropout = self.args.hidden_dropout_prob > 0.0
+        self.use_locked_dropout = self.args.locked_dropout_prob > 0.0
 
         self.val_metrics = SpanF1ForNER(entity_labels=self.entity_labels)
         self.test_metrics = SpanF1ForNER(entity_labels=self.entity_labels)
@@ -189,13 +193,14 @@ class FlairModel(pl.LightningModule):
             word_maps,
             token_lengths,
         )
-        # sequence_output = self.model.dropout(all_token_embeddings)
 
-        # applying locked_dropout twice as per flair code
-        dropped_sequence_output = self.locked_dropout(all_token_embeddings)
-        # double_dropped_sequence_output = self.locked_dropout(dropped_sequence_output)
+        if self.use_dropout:
+            all_token_embeddings = self.model.dropout(all_token_embeddings)
 
-        logits = self.model.classifier(dropped_sequence_output)
+        if self.use_locked_dropout:
+            all_token_embeddings = self.locked_dropout(all_token_embeddings)
+
+        logits = self.model.classifier(all_token_embeddings)
 
         if labels is not None:
             loss_mask = torch.zeros(
