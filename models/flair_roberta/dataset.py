@@ -53,14 +53,14 @@ class BIONERDataset(Dataset):
         self.idx_to_label = {}
         for key, value in self.label_to_idx.items():
             self.idx_to_label[int(value)] = key
-        # context extension with search results
-        if MENTION_START not in self.tokenizer.get_vocab():
-            self.tokenizer.add_tokens(MENTION_START)
-        if MENTION_END not in self.tokenizer.get_vocab():
-            self.tokenizer.add_tokens(MENTION_END)
 
         search_results = {}
         if search_results_dir is not None:
+            # context extension with search results
+            if MENTION_START not in self.tokenizer.get_vocab():
+                self.tokenizer.add_tokens(MENTION_START)
+            if MENTION_END not in self.tokenizer.get_vocab():
+                self.tokenizer.add_tokens(MENTION_END)
             with open(
                 os.path.join(search_results_dir, file_name + ".pkl"), "rb"
             ) as file:

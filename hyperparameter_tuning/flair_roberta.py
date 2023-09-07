@@ -42,10 +42,10 @@ def flair_configs():
             "hidden_dropout_prob": 0.0,
         }
     ]
-    config["lr"] = tune.uniform(5e-7, 5e-4)
+    config["lr"] = tune.uniform(5e-8, 5e-5)
     config["weight_decay"] = tune.uniform(0.0, 3e-2)
-    config["locked_dropout_prob"] = tune.uniform(0.0, 0.75)
-    config["hidden_dropout_prob"] = 0.0
+    config["locked_dropout_prob"] = tune.choice([0.0, 0.3, 0.5])
+    config["hidden_dropout_prob"] = tune.choice([0.0, 0.1, 0.2, 0.3])
     config["seed"] = 42
     return config, best_configs
 
@@ -62,10 +62,10 @@ def flair_gaz_configs():
             "train_search_dropout": 0.028260869565217374,
         }
     ]
-    config["lr"] = tune.uniform(5e-7, 5e-4)
+    config["lr"] = tune.uniform(5e-8, 5e-5)
     config["weight_decay"] = tune.uniform(0.0, 3e-2)
-    config["locked_dropout_prob"] = tune.uniform(0.0, 0.75)
-    config["hidden_dropout_prob"] = 0.0
+    config["locked_dropout_prob"] = tune.choice([0.0, 0.3, 0.5])
+    config["hidden_dropout_prob"] = tune.choice([0.0, 0.1, 0.2, 0.3])
     config["train_search_dropout"] = tune.uniform(0.0, 0.65)
     config["seed"] = 42
     return config, best_configs
@@ -83,10 +83,10 @@ def flair_sent_configs():
             "train_search_dropout": 0.21126587935893093,
         }
     ]
-    config["lr"] = tune.uniform(5e-7, 5e-4)
+    config["lr"] = tune.uniform(5e-8, 5e-5)
     config["weight_decay"] = tune.uniform(0.0, 3e-2)
-    config["locked_dropout_prob"] = tune.uniform(0.0, 0.75)
-    config["hidden_dropout_prob"] = 0.0
+    config["locked_dropout_prob"] = tune.choice([0.0, 0.3, 0.5])
+    config["hidden_dropout_prob"] = tune.choice([0.0, 0.1, 0.2, 0.3])
     config["train_search_dropout"] = tune.uniform(0.0, 0.65)
     config["seed"] = 42
     return config, best_configs
@@ -104,10 +104,10 @@ def flair_lownergaz_configs():
             "train_search_dropout": 0.028260869565217374,
         }
     ]
-    config["lr"] = tune.uniform(5e-7, 5e-4)
+    config["lr"] = tune.uniform(5e-8, 5e-5)
     config["weight_decay"] = tune.uniform(0.0, 3e-2)
-    config["locked_dropout_prob"] = tune.uniform(0.0, 0.75)
-    config["hidden_dropout_prob"] = 0.0
+    config["locked_dropout_prob"] = tune.choice([0.0, 0.3, 0.5])
+    config["hidden_dropout_prob"] = tune.choice([0.0, 0.1, 0.2, 0.3])
     config["train_search_dropout"] = tune.uniform(0.0, 0.65)
     config["seed"] = 42
     return config, best_configs
@@ -125,10 +125,10 @@ def flair_gaz_sent_configs():
             "train_search_dropout": 0.05492957746478871,
         }
     ]
-    config["lr"] = tune.uniform(5e-7, 5e-4)
+    config["lr"] = tune.uniform(5e-8, 5e-5)
     config["weight_decay"] = tune.uniform(0.0, 3e-2)
-    config["locked_dropout_prob"] = tune.uniform(0.0, 0.75)
-    config["hidden_dropout_prob"] = 0.0
+    config["locked_dropout_prob"] = tune.choice([0.0, 0.3, 0.5])
+    config["hidden_dropout_prob"] = tune.choice([0.0, 0.1, 0.2, 0.3])
     config["train_search_dropout"] = tune.uniform(0.0, 0.65)
     config["seed"] = 42
     return config, best_configs
@@ -146,10 +146,10 @@ def flair_lownergaz_gaz_configs():
             "train_search_dropout": 0.028260869565217374,
         }
     ]
-    config["lr"] = tune.uniform(5e-7, 5e-4)
+    config["lr"] = tune.uniform(5e-8, 5e-5)
     config["weight_decay"] = tune.uniform(0.0, 3e-2)
-    config["locked_dropout_prob"] = tune.uniform(0.0, 0.75)
-    config["hidden_dropout_prob"] = 0.0
+    config["locked_dropout_prob"] = tune.choice([0.0, 0.3, 0.5])
+    config["hidden_dropout_prob"] = tune.choice([0.0, 0.1, 0.2, 0.3])
     config["train_search_dropout"] = tune.uniform(0.0, 0.65)
     config["seed"] = 42
     return config, best_configs
@@ -167,10 +167,10 @@ def flair_lownergaz_sent_configs():
             "train_search_dropout": 0.05492957746478871,
         }
     ]
-    config["lr"] = tune.uniform(5e-7, 5e-4)
+    config["lr"] = tune.uniform(5e-8, 5e-5)
     config["weight_decay"] = tune.uniform(0.0, 3e-2)
-    config["locked_dropout_prob"] = tune.uniform(0.0, 0.75)
-    config["hidden_dropout_prob"] = 0.0
+    config["locked_dropout_prob"] = tune.choice([0.0, 0.3, 0.5])
+    config["hidden_dropout_prob"] = tune.choice([0.0, 0.1, 0.2, 0.3])
     config["train_search_dropout"] = tune.uniform(0.0, 0.65)
     config["seed"] = 42
     return config, best_configs

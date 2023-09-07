@@ -86,7 +86,7 @@ FLAIR_LOWNERGAZ_GAZ.update(
             "01_performance",
             "data",
             "01_search_results",
-            "gaz",
+            "lownergaz_gaz",
         ),
         "gaz_use_labels": True,
         "gaz_use_mentions": True,
@@ -104,14 +104,14 @@ FLAIR_GAZ_SENT.update(
             "01_performance",
             "data",
             "01_search_results",
-            "gaz",
+            "gaz_sent",
         ),
         "sent_use_labels": True,
         "sent_use_mentions": True,
         "gaz_use_labels": True,
         "gaz_use_mentions": True,
         "train_search_dropout": 0.05492957746478871,
-        "name": "flair_gaz",
+        "name": "flair_gaz_sent",
     }
 )
 

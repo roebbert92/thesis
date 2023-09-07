@@ -92,8 +92,9 @@ class FlairModel(pl.LightningModule):
         self.model = XLMRobertaForTokenClassification.from_pretrained(
             self.args.plm_name, config=self.bert_config
         )
-        tokenizer = XLMRobertaTokenizer.from_pretrained(self.args.plm_name)
-        self.model.roberta.resize_token_embeddings(tokenizer.vocab_size + 2)
+        if "search_results_dir" in self.args:
+            tokenizer = XLMRobertaTokenizer.from_pretrained(self.args.plm_name)
+            self.model.roberta.resize_token_embeddings(tokenizer.vocab_size + 2)
 
         self.locked_dropout = flair_nn.LockedDropout(
             dropout_rate=self.args.locked_dropout_prob

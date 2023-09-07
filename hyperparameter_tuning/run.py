@@ -274,15 +274,15 @@ def tune_flair_hyperparameters(
     #     min_epochs = fixed_params["num_epochs"]
     budget = training_budget_in_h * 20
     # find good range:
-    optimizer = ng.optimizers.DifferentialEvolution(
-        crossover="twopoints", high_speed=True
-    )
-    optimizer_kwargs = None
-    points_to_evaluate = best_configs
+    # optimizer = ng.optimizers.DifferentialEvolution(
+    #     crossover="twopoints", high_speed=True
+    # )
+    # optimizer_kwargs = None
+    # points_to_evaluate = best_configs
     # narrow search
-    # optimizer = ng.optimizers.ScrHammersleySearchPlusMiddlePoint
-    # optimizer_kwargs = {"budget": budget}
-    # points_to_evaluate = None
+    optimizer = ng.optimizers.ScrHammersleySearchPlusMiddlePoint
+    optimizer_kwargs = {"budget": budget}
+    points_to_evaluate = None
     ng_search = NevergradSearch(
         optimizer=optimizer,
         optimizer_kwargs=optimizer_kwargs,
@@ -377,7 +377,6 @@ training_budget = 4
 
 flair = flair_configs()
 tune_flair_hyperparameters(flair[0], flair[1], run_training, training_budget)
-
 flair_gaz = flair_gaz_configs()
 tune_flair_hyperparameters(flair_gaz[0], flair_gaz[1], run_training, training_budget)
 
@@ -388,7 +387,6 @@ flair_lownergaz = flair_lownergaz_configs()
 tune_flair_hyperparameters(
     flair_lownergaz[0], flair_lownergaz[1], run_training, training_budget
 )
-
 flair_gaz_sent = flair_gaz_sent_configs()
 tune_flair_hyperparameters(
     flair_gaz_sent[0], flair_gaz_sent[1], run_training, training_budget
