@@ -45,6 +45,17 @@ from configs.asp_t5 import (
     T5_ASP_SENT,
 )
 
+from configs.flair import (
+    FLAIR,
+    FLAIR_GAZ,
+    FLAIR_GAZ_SENT,
+    FLAIR_LOWNERGAZ,
+    FLAIR_LOWNERGAZ_GAZ,
+    FLAIR_LOWNERGAZ_SENT,
+    FLAIR_SENT,
+)
+
+
 os.environ["TORCH_FORCE_WEIGHTS_ONLY_LOAD"] = "0"
 
 
@@ -131,7 +142,7 @@ def save_search_results():
 
 
 def experiment01(config: dict):
-    seeds = [42]
+    seeds = [1, 2, 3]
     for seed in seeds:
         if "PL_GLOBAL_SEED" in os.environ:
             del os.environ["PL_GLOBAL_SEED"]
@@ -176,8 +187,6 @@ def experiment01(config: dict):
         while not trained:
             try:
                 model = FlairModel(argparse.Namespace(**train_config))
-                # model = FlairModel.load_from_checkpoint(
-                #     os.path.join(checkpoint_base_path, "last.ckpt"))
 
                 trainer = pl.Trainer(
                     accelerator="gpu",
@@ -253,4 +262,13 @@ def experiment01(config: dict):
 
 
 if __name__ == "__main__":
-    save_search_results()
+    for config in [
+        FLAIR,
+        FLAIR_GAZ,
+        FLAIR_GAZ_SENT,
+        FLAIR_LOWNERGAZ,
+        FLAIR_LOWNERGAZ_GAZ,
+        FLAIR_LOWNERGAZ_SENT,
+        FLAIR_SENT,
+    ]:
+        experiment01(config)

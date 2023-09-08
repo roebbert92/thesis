@@ -7,7 +7,7 @@ thesis_path = "/" + os.path.join(
     *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-1])
 sys.path.append(thesis_path)
 
-from configs.asp_t5 import T5_BASE, WORST_WNUT_T5_ASP_LOWNERGAZ_SENT, BEST_WNUT_T5_ASP_LOWNERGAZ_SENT
+from configs.asp_t5 import T5_BASE, WORST_WNUT_T5_ASP_LOWNERGAZ_SENT
 from models.asp_t5 import ASPT5Model, get_tokenizer
 
 from ray import tune
@@ -15,17 +15,13 @@ import torch
 from torch.utils.data import DataLoader
 from data_preprocessing.tensorize import NERCollator, NERDataProcessor, ner_collate_fn
 from data_preprocessing.tokenize import tokenize_search_results_json
-from hyperparameter_tuning.utils import factors, get_search_results, get_search_results_for_file, get_search_results_for_file_filtered
+from hyperparameter_tuning.utils import factors, get_search_results_for_file, get_search_results_for_file_filtered
 from hyperparameter_tuning.t5_asp_lownergaz import setup_database as gaz_setup_database
 from hyperparameter_tuning.t5_asp_sent import setup_database as sent_setup_database
 from hyperparameter_tuning.ray_logging import TuneReportCallback
 from lightning.fabric.utilities.seed import seed_everything
 from lightning.pytorch.loggers import TensorBoardLogger
 import lightning.pytorch as pl
-from lightning.pytorch.plugins.precision import MixedPrecisionPlugin
-from search.lownergaz.setup import add_lownergaz_search_components
-from search.sent.setup import add_sent_search_components
-from haystack import Pipeline
 from haystack.nodes import JoinDocuments
 
 

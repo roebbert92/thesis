@@ -1,14 +1,11 @@
 import copy
-import json
 import pickle
 import sys
 import os
 from typing import Optional
 
-from tqdm import tqdm
-from search.sent.setup import add_multiconer_sentences, add_sent_search_components, create_sent_faiss_document_store, train_update_sent_faiss_index
+from search.sent.setup import add_sent_search_components
 
-from search.utils import EMBEDDING_DIM, EMBEDDING_MODEL
 
 thesis_path = "/" + os.path.join(
     *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-1])
@@ -21,18 +18,14 @@ from ray import tune
 import torch
 from torch.utils.data import DataLoader
 from data_preprocessing.tensorize import NERCollator, NERDataProcessor, ner_collate_fn
-from data_preprocessing.tokenize import tokenize_database_json, tokenize_json, tokenize_search_results_json
-from hyperparameter_tuning.utils import factors, get_gazetteers_from_documents, get_search_results, get_sentences_from_documents
+from data_preprocessing.tokenize import tokenize_search_results_json
+from hyperparameter_tuning.utils import factors, get_search_results
 from hyperparameter_tuning.ray_logging import TuneReportCallback
 from lightning.fabric.utilities.seed import seed_everything
 from lightning.pytorch.loggers import TensorBoardLogger
 import lightning.pytorch as pl
-from data_preparation.utils import remove_exact_matches
 
-from haystack import Pipeline, Document
-from haystack.document_stores import ElasticsearchDocumentStore, FAISSDocumentStore, BaseDocumentStore
-from haystack.nodes import EmbeddingRetriever, BM25Retriever
-import faiss
+from haystack import Pipeline
 
 
 def t5_asp_sent_configs():
