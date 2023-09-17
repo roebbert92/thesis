@@ -7,30 +7,22 @@ thesis_path = "/" + os.path.join(
 sys.path.append(thesis_path)
 
 import shutil
-from elasticsearch import Elasticsearch
-from typing import List, Optional
 import torch
 from torch.utils.data import DataLoader, Dataset
 import json
-from lightning.fabric.utilities.seed import seed_everything
 from haystack import Pipeline
 from haystack.nodes import JoinDocuments
 import pickle
 import lightning.pytorch as pl
-from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger
 
-from data_preprocessing.tensorize import NERCollator, NERDataProcessor, ner_collate_fn
-from data_preprocessing.tokenize import tokenize_json, tokenize_search_results_json, query_database
+from data_preprocessing.tensorize import NERDataProcessor, ner_collate_fn
+from data_preprocessing.tokenize import tokenize_search_results_json
 from models.asp_t5 import ASPT5Model, get_tokenizer
-from pipelines.evaluation import factors
-from configs.asp_t5 import BEST_WNUT_T5_ASP, WNUT_T5_ASP_LOWNERGAZ_SENT, BEST_WNUT_T5_ASP_LOWNERGAZ_SENT, WORST_WNUT_T5_ASP_LOWNERGAZ_SENT, T5_ASP_LOWNERGAZ_SENT, WNUT_T5_ASP
-from hyperparameter_tuning.utils import get_search_results, get_search_results_filtered
-from data_augmentation.sampling import per_type_uniform_sampling
+from configs.asp_t5 import BEST_WNUT_T5_ASP_LOWNERGAZ_SENT
+from hyperparameter_tuning.utils import get_search_results
 from search.lownergaz.setup import add_lownergaz_search_components
 from search.sent.setup import add_sent_search_components
-from search.utils import get_gazetteers_from_documents
-from data_augmentation.augments import make_erroneous_dataset
 
 eval_gazetteer_contents = {
     2: ("lownergaz_sent", "wnut_train", "wnut_dev"),

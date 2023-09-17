@@ -14,14 +14,12 @@ EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"  # "sentence-transfo
 EMBEDDING_DIM = 768  #  384
 
 
-def get_gazetteers_from_documents(docs,
-                                  name: str = "",
-                                  prepend_type: bool = False):
+def get_gazetteers_from_documents(docs, name: str = "", prepend_type: bool = False):
     items = defaultdict(dict)
     if "entities" in docs[0]:
         for doc in docs:
             for entity in doc["entities"]:
-                ne = " ".join(doc["tokens"][entity["start"]:entity["end"]])
+                ne = " ".join(doc["tokens"][entity["start"] : entity["end"]])
                 key = entity["type"] + "_" + ne
                 if "doc_id" not in items[key]:
                     items[key]["doc_id"] = []
@@ -29,18 +27,20 @@ def get_gazetteers_from_documents(docs,
                     items[key]["doc_id"].append(doc["doc_id"])
                 items[key]["type"] = entity["type"]
                 items[key]["content"] = ne
-
         return [
             Document(
                 id=str(uuid.uuid4()),
                 content=doc["content"]
-                if not prepend_type else f"{doc['type']}: {doc['content']}",
+                if not prepend_type
+                else f"{doc['type']}: {doc['content']}",
                 meta={
-                    #"doc_id": doc["doc_id"],
-                    #"dataset": doc["dataset"],
+                    "doc_id": doc["doc_id"] if "doc_id" in doc else "",
+                    # "dataset": doc["dataset"],
                     "type": doc["type"],
-                    "data_type": "gazetteers"
-                }) for doc in items.values()
+                    "data_type": "gazetteers",
+                },
+            )
+            for doc in items.values()
         ]
     elif "entity" in docs[0]:
         documents = []
@@ -50,26 +50,32 @@ def get_gazetteers_from_documents(docs,
                 if prepend_type:
                     entity = f"{gaz['type']}: {gaz['entity']}"
                 documents.append(
-                    Document(id=str(uuid.uuid4()),
-                             content=entity,
-                             meta={
-                                 "data_type": "gazetteers",
-                                 "type": gaz["type"],
-                                 "entity_id": gaz["entity_id"]
-                             }))
+                    Document(
+                        id=str(uuid.uuid4()),
+                        content=entity,
+                        meta={
+                            "data_type": "gazetteers",
+                            "type": gaz["type"],
+                            "entity_id": gaz["entity_id"],
+                        },
+                    )
+                )
         return documents
 
 
 def get_sentences_from_documents(docs, name: str = ""):
     documents = []
     for doc in docs:
-        #if len(doc["entities"]) > 0:
+        # if len(doc["entities"]) > 0:
         documents.append(
-            Document(id=str(uuid.uuid4()),
-                     content=" ".join(doc["extended"]),
-                     meta={
-                         "entities": doc["entities"],
-                         "data_type": "sentences",
-                         "doc_id": doc["doc_id"]
-                     }))
+            Document(
+                id=str(uuid.uuid4()),
+                content=" ".join(doc["extended"]),
+                meta={
+                    "entities": doc["entities"],
+                    "data_type": "sentences",
+                    "doc_id": doc["doc_id"],
+                },
+            )
+        )
     return documents

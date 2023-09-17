@@ -90,9 +90,11 @@ class FlairModel(pl.LightningModule):
             hidden_dropout_prob=self.args.hidden_dropout_prob,
         )
         self.model = XLMRobertaForTokenClassification.from_pretrained(
-            self.args.plm_name, config=self.bert_config
+            self.args.plm_name, config=self.bert_config, ignore_mismatched_sizes=True
         )
-        if "search_results_dir" in self.args:
+        # increase model size
+        search_results_dir = getattr(self.args, "search_results_dir", None)
+        if search_results_dir is not None:
             tokenizer = XLMRobertaTokenizer.from_pretrained(self.args.plm_name)
             self.model.roberta.resize_token_embeddings(tokenizer.vocab_size + 2)
 
@@ -242,7 +244,7 @@ class FlairModel(pl.LightningModule):
         return loss
 
     def training_step(self, batch, batch_idx):
-        _, word_maps, input_ids, labels = batch
+        _, word_maps, input_ids, labels, _ = batch
 
         batch_size, _ = input_ids.shape
         bert_classification_outputs = self.forward(
@@ -265,14 +267,14 @@ class FlairModel(pl.LightningModule):
         super().on_validation_epoch_start()
 
     def validation_step(self, batch, batch_idx):
-        idxs, word_maps, input_ids, gold_labels = batch
+        idxs, word_maps, input_ids, gold_labels, label_seq_map = batch
         bert_classification_outputs = self.forward(
             input_ids=input_ids, word_maps=word_maps, labels=gold_labels
         )
         _, argmax_labels = self.postprocess_logits_to_labels(
             bert_classification_outputs.logits
         )
-        self.val_metrics.update(idxs, word_maps, argmax_labels, gold_labels)
+        self.val_metrics.update(idxs, argmax_labels, gold_labels, label_seq_map)
 
     def on_validation_epoch_end(self) -> None:
         errors = self.val_metrics.metrics.errors()
@@ -397,14 +399,14 @@ class FlairModel(pl.LightningModule):
         super().on_test_epoch_start()
 
     def test_step(self, batch, batch_idx):
-        idxs, word_maps, input_ids, gold_labels = batch
+        idxs, word_maps, input_ids, gold_labels, label_seq_map = batch
         bert_classification_outputs = self.forward(
             input_ids=input_ids, word_maps=word_maps, labels=gold_labels
         )
         _, argmax_labels = self.postprocess_logits_to_labels(
             bert_classification_outputs.logits
         )
-        self.test_metrics.update(idxs, word_maps, argmax_labels, gold_labels)
+        self.test_metrics.update(idxs, argmax_labels, gold_labels, label_seq_map)
 
     def on_test_epoch_end(self) -> None:
         errors = self.test_metrics.metrics.errors()

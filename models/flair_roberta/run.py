@@ -263,10 +263,10 @@ def experiment01(config: dict):
 
 if __name__ == "__main__":
     for config in [
-        FLAIR,
-        FLAIR_GAZ,
-        FLAIR_GAZ_SENT,
-        FLAIR_LOWNERGAZ,
+        # FLAIR,
+        # FLAIR_GAZ,
+        # FLAIR_GAZ_SENT,
+        # FLAIR_LOWNERGAZ,
         FLAIR_LOWNERGAZ_GAZ,
         FLAIR_LOWNERGAZ_SENT,
         FLAIR_SENT,

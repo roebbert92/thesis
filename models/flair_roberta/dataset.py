@@ -18,9 +18,23 @@ from data_preprocessing.tokenize import (
     handle_results,
     MENTION_START,
     MENTION_END,
-    get_subtokens,
+    normalize_word,
+    is_punctuation,
 )
 from data_preprocessing.tensorize import indices
+
+
+def get_subtokens(tokenizer: XLMRobertaTokenizer, word):
+    word = normalize_word(word, "english")
+    if word == "(" or word == "[":
+        subtokens = tokenizer.tokenize(word)
+    elif word in [")", "]", "'"]:
+        subtokens = [token[1:] for token in tokenizer.tokenize(word)]  # skipping '_'
+    elif is_punctuation(word):
+        subtokens = [token[1:] for token in tokenizer.tokenize(word)]  # skipping '_'
+    else:
+        subtokens = tokenizer.tokenize(word)
+    return subtokens
 
 
 # TODO: Read normal json dataset; transform to dataset format
@@ -88,22 +102,35 @@ class BIONERDataset(Dataset):
         # convert string to ids
         input_tokens = []
         subword_map = []
+        label_map = []
         label_ids = []
         b_removed = False
+        b_label = ""
         for label_idx, label in enumerate(label_sequence):
             subtokens = get_subtokens(self.tokenizer, token_sequence[label_idx])
             if len(subtokens) == 0:
                 # tokens removed
                 if label[0] == "B":
                     b_removed = True
+                    b_label = label[1:]
+                label_map[-1] = label_idx
             else:
                 # append subtokens
                 idx = len(input_tokens)
                 input_tokens.append(subtokens)
+                label_map.append(label_idx)
                 subword_map.extend([idx for _ in range(len(subtokens))])
-                if b_removed:
-                    label_ids.append(self.label_to_idx["B" + label[1:]])
+                if b_removed and label[1:] == b_label:
+                    label_ids.append(self.label_to_idx["B" + b_label])
                     b_removed = False
+                    b_label = ""
+                elif b_removed and label[1:] != b_label:
+                    if label[0] == "B":
+                        label_ids.append(self.label_to_idx[label])
+                        b_removed = False
+                        b_label = ""
+                    else:
+                        raise ValueError(label[1:], b_label)
                 else:
                     label_ids.append(self.label_to_idx[label])
 
@@ -132,7 +159,14 @@ class BIONERDataset(Dataset):
         # input eos -> after pass through BERT model, remove search results tokens
         input_eos = indices(processed_input, self.tokenizer.eos_token)
 
-        return doc_id, word_map, input_ids, labels, input_eos
+        return (
+            doc_id,
+            word_map,
+            input_ids,
+            labels,
+            input_eos,
+            label_map,
+        )
 
     @classmethod
     def get_labels(cls, types):

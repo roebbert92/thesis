@@ -17,7 +17,9 @@ def set_random_seed(seed: int):
 
 
 def collate_to_max_length(
-    batch: List[Tuple[str, torch.Tensor, torch.Tensor, torch.Tensor, List[int]]],
+    batch: List[
+        Tuple[str, torch.Tensor, torch.Tensor, torch.Tensor, List[int], List[int]]
+    ],
     max_len: int = None,
     fill_values: List[float] = None,
     train_search_dropout: float = 0.0,
@@ -33,6 +35,7 @@ def collate_to_max_length(
     """
     # [batch, num_fields]
     doc_keys = [item[0] for item in batch]
+    label_seq_maps = [item[5] for item in batch]
     if train_search_dropout > 0.0:
         tensors = []
         for sample in batch:
@@ -82,4 +85,5 @@ def collate_to_max_length(
             # seq_length
             data = tensors[sample_idx][field_idx]
             output[field_idx + 1][sample_idx][: data.shape[0]] = data
+    output.append(label_seq_maps)
     return output

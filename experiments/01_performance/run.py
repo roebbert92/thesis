@@ -4,7 +4,8 @@ import os
 from itertools import product
 
 thesis_path = "/" + os.path.join(
-    *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-2])
+    *os.path.dirname(os.path.realpath(__file__)).split(os.path.sep)[:-2]
+)
 sys.path.append(thesis_path)
 
 from typing import Dict, List
@@ -21,26 +22,42 @@ from lightning.pytorch.loggers import TensorBoardLogger
 from data_preprocessing.tensorize import NERCollator, NERDataProcessor, ner_collate_fn
 from data_preprocessing.tokenize import tokenize_json, tokenize_search_results_json
 from models.asp_t5 import ASPT5Model, get_tokenizer
-from configs.asp_t5 import T5_ASP_LOWNERGAZ_SENT, T5_ASP_LOWNERGAZ, T5_ASP_GAZ_SENT, T5_ASP_GAZ, T5_ASP_SENT, T5_ASP, T5_ASP_LOWNERGAZ_GAZ
-from hyperparameter_tuning.t5_asp_lownergaz_sent import setup_database as setup_database_lownergaz_sent
-from hyperparameter_tuning.t5_asp_gaz_sent import setup_database as setup_database_gaz_sent
-from hyperparameter_tuning.t5_asp_lownergaz import setup_database as setup_database_lownergaz
+from configs.asp_t5 import (
+    T5_ASP_LOWNERGAZ_SENT,
+    T5_ASP_LOWNERGAZ,
+    T5_ASP_GAZ_SENT,
+    T5_ASP_GAZ,
+    T5_ASP_SENT,
+    T5_ASP,
+    T5_ASP_LOWNERGAZ_GAZ,
+)
+from hyperparameter_tuning.t5_asp_lownergaz_sent import (
+    setup_database as setup_database_lownergaz_sent,
+)
+from hyperparameter_tuning.t5_asp_gaz_sent import (
+    setup_database as setup_database_gaz_sent,
+)
+from hyperparameter_tuning.t5_asp_lownergaz import (
+    setup_database as setup_database_lownergaz,
+)
 from hyperparameter_tuning.t5_asp_gaz import setup_database as setup_database_gaz
 from hyperparameter_tuning.t5_asp_sent import setup_database as setup_database_sent
-from hyperparameter_tuning.t5_asp_lownergaz_gaz import setup_database as setup_database_lownergaz_gaz
+from hyperparameter_tuning.t5_asp_lownergaz_gaz import (
+    setup_database as setup_database_lownergaz_gaz,
+)
 from hyperparameter_tuning.utils import get_search_results, factors
 
 files = {
-    "types":
-    os.path.join(thesis_path, "data", "mlowner", "lowner_types.json"),
-    "train":
-    os.path.join(thesis_path, "data", "mlowner", "lowner_train.json"),
-    "dev":
-    os.path.join(thesis_path, "data", "mlowner", "lowner_dev.json"),
-    "test":
-    os.path.join(thesis_path, "data", "mlowner", "lowner_test.json"
-                 #"lowner_dev.json"
-                 ),
+    "types": os.path.join(thesis_path, "data", "mlowner", "lowner_types.json"),
+    "train": os.path.join(thesis_path, "data", "mlowner", "lowner_train.json"),
+    "dev": os.path.join(thesis_path, "data", "mlowner", "lowner_dev.json"),
+    "test": os.path.join(
+        thesis_path,
+        "data",
+        "mlowner",
+        "lowner_test.json"
+        # "lowner_dev.json"
+    ),
 }
 
 with open(files["train"], encoding="utf-8") as file:
@@ -55,45 +72,50 @@ with open(files["test"], encoding="utf-8") as file:
 seeds = [1, 2, 3]
 datasets = {"train": lowner_train, "dev": lowner_dev, "test": lowner_test}
 configs = [
-    T5_ASP_LOWNERGAZ_SENT, T5_ASP_LOWNERGAZ, T5_ASP_GAZ_SENT, T5_ASP_GAZ,
-    T5_ASP_SENT, T5_ASP, T5_ASP_LOWNERGAZ_GAZ
+    # T5_ASP_LOWNERGAZ_SENT, T5_ASP_LOWNERGAZ, T5_ASP_GAZ_SENT, T5_ASP_GAZ,
+    # T5_ASP_SENT, T5_ASP,
+    T5_ASP_LOWNERGAZ_GAZ
 ]
 for config in configs:
-    config.update({
-        "data_path":
-        os.path.join(thesis_path, "experiments", "01_performance", "data")
-    })
+    config.update(
+        {
+            "data_path": os.path.join(
+                thesis_path, "experiments", "01_performance", "data"
+            )
+        }
+    )
 parts = ["train", "dev", "test"]
 
-total = sorted(list(product(configs, seeds)),
-               key=lambda x: x[0]["name"] + str(x[1]))
+total = sorted(list(product(configs, seeds)), key=lambda x: x[0]["name"] + str(x[1]))
 
 print(len(total))
 
 
-def measure_model_performance(seed: int, config,
-                              search_results: Dict[str, Dict[int,
-                                                             List[Document]]]):
-
+def measure_model_performance(
+    seed: int, config, search_results: Dict[str, Dict[int, List[Document]]]
+):
     grad_accum_steps = factors(config["batch_size"])
     tokenizer = get_tokenizer(config)
 
-    tokenized_data_path = os.path.join(config["data_path"],
-                                       f"seed_{str(seed)}",
-                                       "02_tokenized_datasets", config["name"])
+    tokenized_data_path = os.path.join(
+        config["data_path"],
+        f"seed_{str(seed)}",
+        "02_tokenized_datasets",
+        config["name"],
+    )
     if not os.path.exists(tokenized_data_path):
         os.makedirs(tokenized_data_path)
 
     use_labels = config["use_labels"] if "use_labels" in config else None
     use_mentions = config["use_mentions"] if "use_mentions" in config else None
-    sent_use_labels = config[
-        "sent_use_labels"] if "sent_use_labels" in config else None
-    sent_use_mentions = config[
-        "sent_use_mentions"] if "sent_use_mentions" in config else None
-    gaz_use_labels = config[
-        "gaz_use_labels"] if "gaz_use_labels" in config else None
-    gaz_use_mentions = config[
-        "gaz_use_mentions"] if "gaz_use_mentions" in config else None
+    sent_use_labels = config["sent_use_labels"] if "sent_use_labels" in config else None
+    sent_use_mentions = (
+        config["sent_use_mentions"] if "sent_use_mentions" in config else None
+    )
+    gaz_use_labels = config["gaz_use_labels"] if "gaz_use_labels" in config else None
+    gaz_use_mentions = (
+        config["gaz_use_mentions"] if "gaz_use_mentions" in config else None
+    )
 
     has_search = len(search_results) > 0
 
@@ -112,11 +134,12 @@ def measure_model_performance(seed: int, config,
                 sent_use_mentions=sent_use_mentions,
                 gaz_use_labels=gaz_use_labels,
                 gaz_use_mentions=gaz_use_mentions,
-                prepend_search_results=False)
+                prepend_search_results=False,
+            )
         else:
-            tokenized_files[part] = tokenize_json(tokenizer, files[part],
-                                                  files["types"],
-                                                  tokenized_data_path)
+            tokenized_files[part] = tokenize_json(
+                tokenizer, files[part], files["types"], tokenized_data_path
+            )
 
     processor = NERDataProcessor(
         config,
@@ -125,7 +148,8 @@ def measure_model_performance(seed: int, config,
         tokenized_files["dev"],
         tokenized_files["test"] if "test" in tokenized_files else None,
         files["types"],
-        use_cache=False)
+        use_cache=False,
+    )
     config["num_labels"] = len(processor.labels)
 
     train, val, test = processor.get_tensor_samples()
@@ -145,14 +169,16 @@ def measure_model_performance(seed: int, config,
     trained = False
 
     # Checkpoints
-    checkpoint_base_path = os.path.join(config["data_path"],
-                                        f"seed_{str(seed)}", "03_checkpoints",
-                                        config["name"])
-    checkpoint_best = ModelCheckpoint(dirpath=checkpoint_base_path,
-                                      filename="best",
-                                      monitor="val_f1",
-                                      mode="max",
-                                      save_top_k=1)
+    checkpoint_base_path = os.path.join(
+        config["data_path"], f"seed_{str(seed)}", "03_checkpoints", config["name"]
+    )
+    checkpoint_best = ModelCheckpoint(
+        dirpath=checkpoint_base_path,
+        filename="best",
+        monitor="val_f1",
+        mode="max",
+        save_top_k=1,
+    )
 
     tb_logger = TensorBoardLogger(
         save_dir=os.path.join(os.getcwd(), "lightning_logs"),
@@ -160,79 +186,84 @@ def measure_model_performance(seed: int, config,
     )
 
     # Metrics
-    metrics_base_path = os.path.join(config["data_path"], f"seed_{str(seed)}",
-                                     "04_metrics", config["name"])
+    metrics_base_path = os.path.join(
+        config["data_path"], f"seed_{str(seed)}", "04_metrics", config["name"]
+    )
     os.makedirs(metrics_base_path, exist_ok=True)
 
     while not trained:
         try:
             # Train loader
-            train_loader = DataLoader(train,
-                                      batch_size=train_config["batch_size"],
-                                      collate_fn=collator,
-                                      num_workers=3,
-                                      persistent_workers=False,
-                                      pin_memory=True,
-                                      shuffle=True,
-                                      prefetch_factor=20)
+            train_loader = DataLoader(
+                train,
+                batch_size=train_config["batch_size"],
+                collate_fn=collator,
+                num_workers=3,
+                persistent_workers=False,
+                pin_memory=True,
+                shuffle=True,
+                prefetch_factor=20,
+            )
             # Validation loaders
-            train_val_loader = DataLoader(train,
-                                          batch_size=int(config["batch_size"] *
-                                                         4),
-                                          collate_fn=ner_collate_fn,
-                                          num_workers=3,
-                                          persistent_workers=False,
-                                          pin_memory=True,
-                                          shuffle=False,
-                                          prefetch_factor=20)
-            dev_val_loader = DataLoader(val,
-                                        batch_size=int(config["batch_size"] *
-                                                       4),
-                                        collate_fn=ner_collate_fn,
-                                        num_workers=3,
-                                        persistent_workers=False,
-                                        pin_memory=True,
-                                        shuffle=False,
-                                        prefetch_factor=20)
+            train_val_loader = DataLoader(
+                train,
+                batch_size=int(config["batch_size"] * 4),
+                collate_fn=ner_collate_fn,
+                num_workers=3,
+                persistent_workers=False,
+                pin_memory=True,
+                shuffle=False,
+                prefetch_factor=20,
+            )
+            dev_val_loader = DataLoader(
+                val,
+                batch_size=int(config["batch_size"] * 4),
+                collate_fn=ner_collate_fn,
+                num_workers=3,
+                persistent_workers=False,
+                pin_memory=True,
+                shuffle=False,
+                prefetch_factor=20,
+            )
             test_val_loader = None
             if test is not None:
-                test_val_loader = DataLoader(test,
-                                             batch_size=int(
-                                                 config["batch_size"] * 4),
-                                             collate_fn=ner_collate_fn,
-                                             num_workers=3,
-                                             persistent_workers=False,
-                                             pin_memory=True,
-                                             shuffle=False,
-                                             prefetch_factor=20)
+                test_val_loader = DataLoader(
+                    test,
+                    batch_size=int(config["batch_size"] * 4),
+                    collate_fn=ner_collate_fn,
+                    num_workers=3,
+                    persistent_workers=False,
+                    pin_memory=True,
+                    shuffle=False,
+                    prefetch_factor=20,
+                )
 
-            trainer = pl.Trainer(accelerator="gpu",
-                                 logger=tb_logger,
-                                 devices=1,
-                                 log_every_n_steps=train_config["batch_size"] *
-                                 train_config["gradient_accumulation_steps"],
-                                 accumulate_grad_batches=train_config[
-                                     "gradient_accumulation_steps"],
-                                 precision=train_config["precision"],
-                                 max_epochs=train_config["num_epochs"],
-                                 check_val_every_n_epoch=1,
-                                 num_sanity_val_steps=0,
-                                 enable_checkpointing=True,
-                                 enable_progress_bar=True,
-                                 callbacks=[checkpoint_best])
+            trainer = pl.Trainer(
+                accelerator="gpu",
+                logger=tb_logger,
+                devices=1,
+                log_every_n_steps=train_config["batch_size"]
+                * train_config["gradient_accumulation_steps"],
+                accumulate_grad_batches=train_config["gradient_accumulation_steps"],
+                precision=train_config["precision"],
+                max_epochs=train_config["num_epochs"],
+                check_val_every_n_epoch=1,
+                num_sanity_val_steps=0,
+                enable_checkpointing=True,
+                enable_progress_bar=True,
+                callbacks=[checkpoint_best],
+            )
 
             model = ASPT5Model(train_config, tokenizer)
 
             trainer.fit(model, train_loader, val_dataloaders=dev_val_loader)
             # save last model
-            trainer.save_checkpoint(
-                os.path.join(checkpoint_base_path, "last.ckpt"))
+            trainer.save_checkpoint(os.path.join(checkpoint_base_path, "last.ckpt"))
 
             def save_metrics(dataset, checkpoint):
                 with open(
-                        os.path.join(metrics_base_path,
-                                     f"{checkpoint}_{dataset}.pkl"),
-                        "wb") as file:
+                    os.path.join(metrics_base_path, f"{checkpoint}_{dataset}.pkl"), "wb"
+                ) as file:
                     pickle.dump(model.test_metrics, file)
 
             # test last model
@@ -244,27 +275,29 @@ def measure_model_performance(seed: int, config,
                 trainer.test(model, test_val_loader)
                 save_metrics("lowner_test", "last")
             # test best model
-            trainer.test(model,
-                         train_val_loader,
-                         ckpt_path=checkpoint_best.best_model_path)
+            trainer.test(
+                model, train_val_loader, ckpt_path=checkpoint_best.best_model_path
+            )
             save_metrics("lowner_train", "best")
-            trainer.test(model,
-                         dev_val_loader,
-                         ckpt_path=checkpoint_best.best_model_path)
+            trainer.test(
+                model, dev_val_loader, ckpt_path=checkpoint_best.best_model_path
+            )
             save_metrics("lowner_dev", "best")
             if test_val_loader is not None:
-                trainer.test(model,
-                             test_val_loader,
-                             ckpt_path=checkpoint_best.best_model_path)
+                trainer.test(
+                    model, test_val_loader, ckpt_path=checkpoint_best.best_model_path
+                )
                 save_metrics("lowner_test", "best")
             trained = True
         except Exception as e:
             print(e)
             train_config["gradient_accumulation_steps"] = grad_accum_steps[
-                grad_accum_steps.index(
-                    train_config["gradient_accumulation_steps"]) + 1]
-            train_config["batch_size"] = train_config[
-                "batch_size"] // train_config["gradient_accumulation_steps"]
+                grad_accum_steps.index(train_config["gradient_accumulation_steps"]) + 1
+            ]
+            train_config["batch_size"] = (
+                train_config["batch_size"]
+                // train_config["gradient_accumulation_steps"]
+            )
 
 
 for config, seed in total:
@@ -294,18 +327,18 @@ for config, seed in total:
             config["search_topk"],
         )
     if config["name"] == "t5_asp_lownergaz":
-        search = setup_database_lownergaz(config["search_algorithm"],
-                                          config["search_topk"])
+        search = setup_database_lownergaz(
+            config["search_algorithm"], config["search_topk"]
+        )
     if config["name"] == "t5_asp_gaz":
-        search = setup_database_gaz(config["search_algorithm"],
-                                    config["search_topk"])
+        search = setup_database_gaz(config["search_algorithm"], config["search_topk"])
     if config["name"] == "t5_asp_sent":
-        search = setup_database_sent(config["search_algorithm"],
-                                     config["search_topk"])
+        search = setup_database_sent(config["search_algorithm"], config["search_topk"])
 
     if config["name"] == "t5_asp_lownergaz_gaz":
-        search = setup_database_lownergaz_gaz(config["search_algorithm"],
-                                              config["search_topk"])
+        search = setup_database_lownergaz_gaz(
+            config["search_algorithm"], config["search_topk"]
+        )
 
     # go through all datasets
     search_results = {}
@@ -313,8 +346,12 @@ for config, seed in total:
         dataset = datasets[part]
         dataset_name = "lowner_" + part
         # save search results for augmentation
-        file_name = os.path.join(config["data_path"], "01_search_results",
-                                 config['name'], f"{dataset_name}.pkl")
+        file_name = os.path.join(
+            config["data_path"],
+            "01_search_results",
+            config["name"].replace("t5_asp_", ""),
+            f"{dataset_name}.pkl",
+        )
         if not os.path.exists(os.path.dirname(file_name)):
             os.makedirs(os.path.dirname(file_name))
 
