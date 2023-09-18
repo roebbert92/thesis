@@ -1,3 +1,4 @@
+from itertools import product
 from flair.models import SequenceTagger
 from flair.data import Sentence
 import flair
@@ -9,6 +10,7 @@ import random
 import numpy as np
 import copy
 from nlpaug.augmenter.char import KeyboardAug
+from tqdm import tqdm
 
 
 def freeze(o):
@@ -95,6 +97,9 @@ def error_type1_augmentation(sample: dict, types: List[str]):
                 "error": 1,
             }
         )
+        augmented_sample["entities"] = sorted(
+            augmented_sample["entities"], key=lambda ent: ent["start"]
+        )
         return augmented_sample, True
 
     return augmented_sample, False
@@ -107,9 +112,9 @@ def has_valid_entity_idx(sample: dict, entity_idx: int):
         len(sample["entities"]) <= entity_idx
         or "error" in sample["entities"][entity_idx]
     ):
-        if entity_idx == 0:
+        entity_idx -= 1
+        if entity_idx == -1:
             return entity_idx, False
-        entity_idx = -1
     return entity_idx, True
 
 
@@ -156,13 +161,15 @@ def error_type4_augmentation(
             else:
                 left_space = ent["start"]
             left_space = min(left_space, avg_entity_length)
-            ent["start"] -= random.randint(1, left_space) if left_space > 0 else 0
-            ent["error"] = 4
+            if left_space > 0:
+                ent["start"] -= random.randint(1, left_space)
+                ent["error"] = 4
         elif action == "decrease":
             # get entity end as right border
             right_space = ent["end"] - ent["start"] - 1
-            ent["start"] += random.randint(1, right_space) if right_space > 0 else 0
-            ent["error"] = 4
+            if right_space > 0:
+                ent["start"] += random.randint(1, right_space)
+                ent["error"] = 4
 
     def apply_right_action(ents: List[dict], ent_idx: int, ent: dict, action: str):
         if action == "increase":
@@ -173,13 +180,15 @@ def error_type4_augmentation(
             else:
                 right_space = max_end - ent["end"]
             right_space = min(right_space, avg_entity_length)
-            ent["end"] += random.randint(1, right_space) if right_space > 0 else 0
-            ent["error"] = 4
+            if right_space > 0:
+                ent["end"] += random.randint(1, right_space) if right_space > 0 else 0
+                ent["error"] = 4
         elif action == "decrease":
             # get entity start as right border
             left_space = ent["end"] - ent["start"] - 1
-            ent["end"] -= random.randint(1, left_space) if left_space > 0 else 0
-            ent["error"] = 4
+            if left_space > 0:
+                ent["end"] -= random.randint(1, left_space)
+                ent["error"] = 4
 
     entity_idx, valid = has_valid_entity_idx(sample, entity_idx)
     if not valid:
@@ -191,58 +200,61 @@ def error_type4_augmentation(
     if entity_length == 1:
         # increase only
         valid_actions.remove("decrease")
+    valid_action_directions = set(product(list(valid_directions), list(valid_actions)))
     if (
         entity_idx > 0
         and augmented_sample["entities"][entity_idx - 1]["end"] == entity["start"] - 1
     ) or entity["start"] == min_start:
         # right only
-        valid_directions.remove("left")
-        valid_directions.remove("both")
+        valid_action_directions.remove(("left", "increase"))
+        valid_action_directions.remove(("both", "increase"))
     if (
         entity_idx < len(augmented_sample["entities"]) - 1
         and augmented_sample["entities"][entity_idx + 1]["start"] == entity["end"] + 1
     ) or entity["end"] == max_end:
         # left only
-        valid_directions.remove("right")
-        if "both" in valid_directions:
-            valid_directions.remove("both")
+        valid_action_directions.remove(("right", "increase"))
+        if ("both", "increase") in valid_action_directions:
+            valid_action_directions.remove(("both", "increase"))
 
-    if len(valid_actions) > 0 and len(valid_directions) > 0:
-        direction_chosen = random.choice(list(valid_directions))
+    if len(valid_action_directions) > 0:
+        direction_chosen, action_chosen = random.choice(list(valid_action_directions))
         if direction_chosen == "both":
             apply_left_action(
                 augmented_sample["entities"],
                 entity_idx,
                 entity,
-                random.choice(list(valid_actions)),
+                action_chosen,
             )
             apply_right_action(
                 augmented_sample["entities"],
                 entity_idx,
                 entity,
-                random.choice(list(valid_actions)),
+                action_chosen,
             )
         elif direction_chosen == "left":
             apply_left_action(
                 augmented_sample["entities"],
                 entity_idx,
                 entity,
-                random.choice(list(valid_actions)),
+                action_chosen,
             )
         elif direction_chosen == "right":
             apply_right_action(
                 augmented_sample["entities"],
                 entity_idx,
                 entity,
-                random.choice(list(valid_actions)),
+                action_chosen,
             )
 
     # randomize label
-    valid_types = list(type_set.difference([entity["type"]]))
-    entity["type"] = random.choice(valid_types)
-    entity["error"] = 4
+    if not samples_are_equal(sample, augmented_sample):
+        valid_types = list(type_set.difference([entity["type"]]))
+        entity["type"] = random.choice(valid_types)
+        entity["error"] = 4
+        return augmented_sample, True
 
-    return augmented_sample, samples_are_equal(sample, augmented_sample)
+    return augmented_sample, False
 
 
 def error_type5_augmentation(
@@ -264,13 +276,15 @@ def error_type5_augmentation(
             else:
                 left_space = ent["start"]
             left_space = min(left_space, avg_entity_length)
-            ent["start"] -= random.randint(1, left_space) if left_space > 0 else 0
-            ent["error"] = 5
+            if left_space > 0:
+                ent["start"] -= random.randint(1, left_space)
+                ent["error"] = 5
         elif action == "decrease":
             # get entity end as right border
             right_space = ent["end"] - ent["start"] - 1
-            ent["start"] += random.randint(1, right_space) if right_space > 0 else 0
-            ent["error"] = 5
+            if right_space > 0:
+                ent["start"] += random.randint(1, right_space)
+                ent["error"] = 5
 
     def apply_right_action(ents: List[dict], ent_idx: int, ent: dict, action: str):
         if action == "increase":
@@ -281,71 +295,73 @@ def error_type5_augmentation(
             else:
                 right_space = max_end - ent["end"]
             right_space = min(right_space, avg_entity_length)
-            ent["end"] += random.randint(1, right_space) if right_space > 0 else 0
-            ent["error"] = 5
+            if right_space > 0:
+                ent["end"] += random.randint(1, right_space) if right_space > 0 else 0
+                ent["error"] = 5
         elif action == "decrease":
             # get entity start as right border
             left_space = ent["end"] - ent["start"] - 1
-            ent["end"] -= random.randint(1, left_space) if left_space > 0 else 0
-            ent["error"] = 5
+            if left_space > 0:
+                ent["end"] -= random.randint(1, left_space)
+                ent["error"] = 5
 
     entity_idx, valid = has_valid_entity_idx(sample, entity_idx)
     if not valid:
         return augmented_sample, False
     entity = augmented_sample["entities"][entity_idx]
     entity_length = entity["end"] - entity["start"]
-    entity["augmented"] = True
     valid_actions = copy.deepcopy(action)
     valid_directions = copy.deepcopy(direction)
     if entity_length == 1:
         # increase only
         valid_actions.remove("decrease")
+    valid_action_directions = set(product(list(valid_directions), list(valid_actions)))
     if (
         entity_idx > 0
         and augmented_sample["entities"][entity_idx - 1]["end"] == entity["start"] - 1
     ) or entity["start"] == min_start:
         # right only
-        valid_directions.remove("left")
-        valid_directions.remove("both")
+        valid_action_directions.remove(("left", "increase"))
+        valid_action_directions.remove(("both", "increase"))
     if (
         entity_idx < len(augmented_sample["entities"]) - 1
         and augmented_sample["entities"][entity_idx + 1]["start"] == entity["end"] + 1
     ) or entity["end"] == max_end:
         # left only
-        valid_directions.remove("right")
-        if "both" in valid_directions:
-            valid_directions.remove("both")
+        valid_action_directions.remove(("right", "increase"))
+        if ("both", "increase") in valid_action_directions:
+            valid_action_directions.remove(("both", "increase"))
 
-    if len(valid_actions) > 0 and len(valid_directions) > 0:
-        direction_chosen = random.choice(list(valid_directions))
+    if len(valid_action_directions) > 0:
+        direction_chosen, action_chosen = random.choice(list(valid_action_directions))
         if direction_chosen == "both":
             apply_left_action(
                 augmented_sample["entities"],
                 entity_idx,
                 entity,
-                random.choice(list(valid_actions)),
+                action_chosen,
             )
             apply_right_action(
                 augmented_sample["entities"],
                 entity_idx,
                 entity,
-                random.choice(list(valid_actions)),
+                action_chosen,
             )
         elif direction_chosen == "left":
             apply_left_action(
                 augmented_sample["entities"],
                 entity_idx,
                 entity,
-                random.choice(list(valid_actions)),
+                action_chosen,
             )
         elif direction_chosen == "right":
             apply_right_action(
                 augmented_sample["entities"],
                 entity_idx,
                 entity,
-                random.choice(list(valid_actions)),
+                action_chosen,
             )
-    return augmented_sample, samples_are_equal(sample, augmented_sample)
+    return augmented_sample, not samples_are_equal(sample, augmented_sample)
 
 
 def spelling_error_augmentation(sample: dict, types: List[str]):
@@ -353,8 +369,11 @@ def spelling_error_augmentation(sample: dict, types: List[str]):
     augmented_sample["tokens"] = keyboard_aug.augment(
         " ".join(augmented_sample["tokens"])
     )[0].split(" ")
-    augmented_sample["error"] = 0
-    return augmented_sample, True
+    if not samples_are_equal(sample, augmented_sample):
+        augmented_sample["extended"] = augmented_sample["tokens"]
+        augmented_sample["error"] = 0
+        return augmented_sample, True
+    return augmented_sample, False
 
 
 def spelling_no_augmentation(sample: dict, types: List[str]):
@@ -370,80 +389,99 @@ def make_erroneous_dataset(
 ):
     result_dataset = copy.deepcopy(dataset)
     samples = [sample_idx for sample_idx, _ in enumerate(dataset)]
-    error_size_samples = round(len(samples) * ratio)
+    error_size_samples = round(
+        len([1 for sample in dataset for _ in sample["entities"]]) * ratio
+    )
     type_list = list(types)
 
-    print("adding error_type1")
     error_type1_size = round(error_size_samples * error_dist[0])
     error_type1_samples = 0
-    while error_type1_samples < error_type1_size:
-        sample_idx = random.choice(samples)
-        aug_sample, augmented = error_type1_augmentation(
-            result_dataset[sample_idx], type_list
-        )
-        if augmented:
-            result_dataset[sample_idx] = aug_sample
-            error_type1_samples += 1
-
-    print("adding error_type2")
-    error_type2_size = round(error_size_samples * error_dist[1])
-    error_type2_samples = 0
-    while error_type2_samples < error_type2_size:
-        sample_idx = random.choice(samples)
-        while len(result_dataset[sample_idx]["entities"]) == 0:
+    with tqdm(total=error_type1_size, desc="adding error_type1") as pbar:
+        while error_type1_samples < error_type1_size:
             sample_idx = random.choice(samples)
-        entity_idx = random.choice(range(len(result_dataset[sample_idx]["entities"])))
-        aug_sample, augmented = error_type2_augmentation(
-            result_dataset[sample_idx], type_list, entity_idx=entity_idx
-        )
-        if augmented:
-            result_dataset[sample_idx] = aug_sample
-            error_type2_samples += 1
+            aug_sample, augmented = error_type1_augmentation(
+                result_dataset[sample_idx], type_list
+            )
+            if augmented:
+                result_dataset[sample_idx] = aug_sample
+                error_type1_samples += 1
+                pbar.update()
 
-    print("adding error_type3")
-    error_type3_size = round(error_size_samples * error_dist[2])
-    error_type3_samples = 0
-    while error_type3_samples < error_type3_size:
-        sample_idx = random.choice(samples)
-        while len(result_dataset[sample_idx]["entities"]) == 0:
-            sample_idx = random.choice(samples)
-        entity_idx = random.choice(range(len(result_dataset[sample_idx]["entities"])))
-        aug_sample, augmented = error_type3_augmentation(
-            result_dataset[sample_idx], type_list, entity_idx=entity_idx
-        )
-        if augmented:
-            result_dataset[sample_idx] = aug_sample
-            error_type3_samples += 1
-
-    print("adding error_type4")
     error_type4_size = round(error_size_samples * error_dist[3])
     error_type4_samples = 0
-    while error_type4_samples < error_type4_size:
-        sample_idx = random.choice(samples)
-        while len(result_dataset[sample_idx]["entities"]) == 0:
+    with tqdm(total=error_type4_size, desc="adding error_type4") as pbar:
+        while error_type4_samples < error_type4_size:
             sample_idx = random.choice(samples)
-        entity_idx = random.choice(range(len(result_dataset[sample_idx]["entities"])))
-        aug_sample, augmented = error_type4_augmentation(
-            result_dataset[sample_idx], type_list, entity_idx=entity_idx
-        )
-        if augmented:
-            result_dataset[sample_idx] = aug_sample
-            error_type4_samples += 1
+            while len(result_dataset[sample_idx]["entities"]) == 0:
+                sample_idx = random.choice(samples)
+            possible_entities = [
+                ent_idx
+                for ent_idx, ent in enumerate(result_dataset[sample_idx]["entities"])
+                if "error" not in ent
+            ]
+            if len(possible_entities) > 0:
+                entity_idx = random.choice(possible_entities)
+                aug_sample, augmented = error_type4_augmentation(
+                    result_dataset[sample_idx], type_list, entity_idx=entity_idx
+                )
+                if augmented:
+                    result_dataset[sample_idx] = aug_sample
+                    error_type4_samples += 1
+                    pbar.update()
 
-    print("adding error_type5")
     error_type5_size = round(error_size_samples * error_dist[4])
     error_type5_samples = 0
-    while error_type5_samples < error_type5_size:
-        sample_idx = random.choice(samples)
-        while len(result_dataset[sample_idx]["entities"]) == 0:
+    with tqdm(total=error_type5_size, desc="adding error_type5") as pbar:
+        while error_type5_samples < error_type5_size:
             sample_idx = random.choice(samples)
-        entity_idx = random.choice(range(len(result_dataset[sample_idx]["entities"])))
-        aug_sample, augmented = error_type5_augmentation(
-            result_dataset[sample_idx], type_list, entity_idx=entity_idx
-        )
-        if augmented:
-            result_dataset[sample_idx] = aug_sample
-            error_type5_samples += 1
+            while len(result_dataset[sample_idx]["entities"]) == 0:
+                sample_idx = random.choice(samples)
+            entity_idx = random.choice(
+                range(len(result_dataset[sample_idx]["entities"]))
+            )
+            aug_sample, augmented = error_type5_augmentation(
+                result_dataset[sample_idx], type_list, entity_idx=entity_idx
+            )
+            if augmented:
+                result_dataset[sample_idx] = aug_sample
+                error_type5_samples += 1
+                pbar.update()
+
+    error_type3_size = round(error_size_samples * error_dist[2])
+    error_type3_samples = 0
+    with tqdm(total=error_type3_size, desc="adding error_type3") as pbar:
+        while error_type3_samples < error_type3_size:
+            sample_idx = random.choice(samples)
+            while len(result_dataset[sample_idx]["entities"]) == 0:
+                sample_idx = random.choice(samples)
+            entity_idx = random.choice(
+                range(len(result_dataset[sample_idx]["entities"]))
+            )
+            aug_sample, augmented = error_type3_augmentation(
+                result_dataset[sample_idx], type_list, entity_idx=entity_idx
+            )
+            if augmented:
+                result_dataset[sample_idx] = aug_sample
+                error_type3_samples += 1
+                pbar.update()
+
+    error_type2_size = round(error_size_samples * error_dist[1])
+    error_type2_samples = 0
+    with tqdm(total=error_type2_size, desc="adding error_type2") as pbar:
+        while error_type2_samples < error_type2_size:
+            sample_idx = random.choice(samples)
+            while len(result_dataset[sample_idx]["entities"]) == 0:
+                sample_idx = random.choice(samples)
+            entity_idx = random.choice(
+                range(len(result_dataset[sample_idx]["entities"]))
+            )
+            aug_sample, augmented = error_type2_augmentation(
+                result_dataset[sample_idx], type_list, entity_idx=entity_idx
+            )
+            if augmented:
+                result_dataset[sample_idx] = aug_sample
+                error_type2_samples += 1
+                pbar.update()
 
     print("adding spelling error")
     spelling_error_samples = np.random.choice(
@@ -461,73 +499,87 @@ def make_erroneous_gazetteer(
     dataset: List[dict],
     types: List[str],
     ratio: float,
-    error_dist: List[float] = [0.78, 0.06, 0.02, 0.14],
+    error_dist: List[float] = [0.5, 0.16, 0.13, 0.21],
     spelling_dist: List[float] = [0.3],
 ):
     result_dataset = copy.deepcopy(dataset)
     samples = [sample_idx for sample_idx, _ in enumerate(dataset)]
-    error_size_samples = round(len(samples) * ratio)
+    error_size_samples = round(
+        len([1 for sample in dataset for _ in sample["entities"]]) * ratio
+    )
     type_list = list(types)
 
-    print("adding error_type2")
-    error_type2_size = round(error_size_samples * error_dist[1])
-    error_type2_samples = 0
-    while error_type2_samples < error_type2_size:
-        sample_idx = random.choice(samples)
-        while len(result_dataset[sample_idx]["entities"]) == 0:
-            sample_idx = random.choice(samples)
-        entity_idx = random.choice(range(len(result_dataset[sample_idx]["entities"])))
-        aug_sample, augmented = error_type2_augmentation(
-            result_dataset[sample_idx], type_list, entity_idx=entity_idx
-        )
-        if augmented:
-            result_dataset[sample_idx] = aug_sample
-            error_type2_samples += 1
-
-    print("adding error_type3")
-    error_type3_size = round(error_size_samples * error_dist[2])
-    error_type3_samples = 0
-    while error_type3_samples < error_type3_size:
-        sample_idx = random.choice(samples)
-        while len(result_dataset[sample_idx]["entities"]) == 0:
-            sample_idx = random.choice(samples)
-        entity_idx = random.choice(range(len(result_dataset[sample_idx]["entities"])))
-        aug_sample, augmented = error_type3_augmentation(
-            result_dataset[sample_idx], type_list, entity_idx=entity_idx
-        )
-        if augmented:
-            result_dataset[sample_idx] = aug_sample
-            error_type3_samples += 1
-
-    print("adding error_type4")
-    error_type4_size = round(error_size_samples * error_dist[3])
+    error_type4_size = round(error_size_samples * error_dist[2])
     error_type4_samples = 0
-    while error_type4_samples < error_type4_size:
-        sample_idx = random.choice(samples)
-        while len(result_dataset[sample_idx]["entities"]) == 0:
+    with tqdm(total=error_type4_size, desc="adding error_type4") as pbar:
+        while error_type4_samples < error_type4_size:
             sample_idx = random.choice(samples)
-        entity_idx = random.choice(range(len(result_dataset[sample_idx]["entities"])))
-        aug_sample, augmented = error_type4_augmentation(
-            result_dataset[sample_idx], type_list, entity_idx=entity_idx
-        )
-        if augmented:
-            result_dataset[sample_idx] = aug_sample
-            error_type4_samples += 1
+            while len(result_dataset[sample_idx]["entities"]) == 0:
+                sample_idx = random.choice(samples)
+            entity_idx = random.choice(
+                range(len(result_dataset[sample_idx]["entities"]))
+            )
+            aug_sample, augmented = error_type4_augmentation(
+                result_dataset[sample_idx], type_list, entity_idx=entity_idx
+            )
+            if augmented:
+                result_dataset[sample_idx] = aug_sample
+                error_type4_samples += 1
+                pbar.update()
 
-    print("adding error_type5")
-    error_type5_size = round(error_size_samples * error_dist[4])
+    error_type5_size = round(error_size_samples * error_dist[3])
     error_type5_samples = 0
-    while error_type5_samples < error_type5_size:
-        sample_idx = random.choice(samples)
-        while len(result_dataset[sample_idx]["entities"]) == 0:
+    with tqdm(total=error_type5_size, desc="adding error_type5") as pbar:
+        while error_type5_samples < error_type5_size:
             sample_idx = random.choice(samples)
-        entity_idx = random.choice(range(len(result_dataset[sample_idx]["entities"])))
-        aug_sample, augmented = error_type5_augmentation(
-            result_dataset[sample_idx], type_list, entity_idx=entity_idx
-        )
-        if augmented:
-            result_dataset[sample_idx] = aug_sample
-            error_type5_samples += 1
+            while len(result_dataset[sample_idx]["entities"]) == 0:
+                sample_idx = random.choice(samples)
+            entity_idx = random.choice(
+                range(len(result_dataset[sample_idx]["entities"]))
+            )
+            aug_sample, augmented = error_type5_augmentation(
+                result_dataset[sample_idx], type_list, entity_idx=entity_idx
+            )
+            if augmented:
+                result_dataset[sample_idx] = aug_sample
+                error_type5_samples += 1
+                pbar.update()
+
+    error_type3_size = round(error_size_samples * error_dist[1])
+    error_type3_samples = 0
+    with tqdm(total=error_type3_size, desc="adding error_type3") as pbar:
+        while error_type3_samples < error_type3_size:
+            sample_idx = random.choice(samples)
+            while len(result_dataset[sample_idx]["entities"]) == 0:
+                sample_idx = random.choice(samples)
+            entity_idx = random.choice(
+                range(len(result_dataset[sample_idx]["entities"]))
+            )
+            aug_sample, augmented = error_type3_augmentation(
+                result_dataset[sample_idx], type_list, entity_idx=entity_idx
+            )
+            if augmented:
+                result_dataset[sample_idx] = aug_sample
+                error_type3_samples += 1
+                pbar.update()
+
+    error_type2_size = round(error_size_samples * error_dist[0])
+    error_type2_samples = 0
+    with tqdm(total=error_type2_size, desc="adding error_type2") as pbar:
+        while error_type2_samples < error_type2_size:
+            sample_idx = random.choice(samples)
+            while len(result_dataset[sample_idx]["entities"]) == 0:
+                sample_idx = random.choice(samples)
+            entity_idx = random.choice(
+                range(len(result_dataset[sample_idx]["entities"]))
+            )
+            aug_sample, augmented = error_type2_augmentation(
+                result_dataset[sample_idx], type_list, entity_idx=entity_idx
+            )
+            if augmented:
+                result_dataset[sample_idx] = aug_sample
+                error_type2_samples += 1
+                pbar.update()
 
     print("adding spelling error")
     spelling_error_samples = np.random.choice(

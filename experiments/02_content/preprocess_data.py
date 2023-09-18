@@ -126,7 +126,7 @@ def generate_experiment_data(
         ),
     }
 
-    cpu_count = 2  # int(mp.cpu_count() // 2)
+    cpu_count = int(mp.cpu_count() // 2)
 
     files["filtered_multiconer"] = os.path.join(
         os.path.dirname(files["multiconer"]), "filtered_multiconer.json"
@@ -159,14 +159,36 @@ def generate_experiment_data(
     # 00_datasets
     experiment_data_paths["00_datasets"] = {}
     dataset_configs = [
-        (config, files, seed, gazetteer_size, error_percent_ratio)
+        (config, files, seed, gazetteer_size)
+        for gazetteer_size in gazetteer_sizes
+        for seed in seeds
+    ]
+    with mp.get_context("spawn").Pool(cpu_count // 2) as pool:
+        for seed, gazetteer_size, dataset_paths in pool.starmap(
+            create_sampled_dataset, dataset_configs
+        ):
+            for error_percent_ratio in error_percent_ratios:
+                experiment_data_paths["00_datasets"][
+                    f"{seed}_{gazetteer_size}_{error_percent_ratio}"
+                ] = dataset_paths.copy()
+    erroneous_dataset_configs = [
+        (
+            config,
+            files,
+            seed,
+            gazetteer_size,
+            error_percent_ratio,
+            experiment_data_paths["00_datasets"][
+                f"{seed}_{gazetteer_size}_{error_percent_ratio}"
+            ],
+        )
         for gazetteer_size in gazetteer_sizes
         for error_percent_ratio in error_percent_ratios
         for seed in seeds
     ]
     with mp.get_context("spawn").Pool(cpu_count // 2) as pool:
         for seed, gazetteer_size, error_percent_ratio, dataset_paths in pool.starmap(
-            create_dataset, dataset_configs
+            create_erroneous_dataset, erroneous_dataset_configs
         ):
             experiment_data_paths["00_datasets"][
                 f"{seed}_{gazetteer_size}_{error_percent_ratio}"
@@ -481,34 +503,20 @@ def get_search_results(
     return seed, gazetteer_size, error_percent_ratio, search_results_paths
 
 
-def create_dataset(
-    config, files, seed: int, gazetteer_size: int, error_percent_ratio: int
-):
+def create_sampled_dataset(config, files, seed: int, gazetteer_size: int):
     dataset_base_path = os.path.join(
         config["data_path"],
         f"seed_{seed}",
         "00_datasets",
         f"size_{gazetteer_size}",
     )
-    error_base_path = os.path.join(
-        config["data_path"],
-        f"seed_{seed}",
-        "00_datasets",
-        f"size_{gazetteer_size}",
-        f"error_ratio_{error_percent_ratio}",
-    )
     os.makedirs(dataset_base_path, exist_ok=True)
-    os.makedirs(error_base_path, exist_ok=True)
-
-    seed_everything(seed)
-    dataset_paths = {}
-    error_ratio = error_percent_ratio / 100
-
     with open(files["filtered_multiconer"], encoding="utf-8") as file:
         multiconer = json.load(file)
     with open(files["types"]) as file:
         types = json.load(file)["entities"]
 
+    dataset_paths = {}
     # sample from multiconer
     dataset_paths["clean_sampled_multiconer"] = os.path.join(
         dataset_base_path, "clean_sampled_multiconer.json"
@@ -536,24 +544,15 @@ def create_dataset(
         add_lownergaz_search_components(
             lowner_gaz_search, config["gaz_search_algorithm"], 5
         )
-        sampled_multiconer_gaz = [
-            {"extended": str(doc.content).split(" ")}
-            for doc in get_gazetteers_from_documents(sampled_multiconer)
-        ]
         sampled_lownergaz = []
         sampled_lownergaz_ids = set()
-        for _, results in query_database(sampled_multiconer_gaz, lowner_gaz_search):
+        for _, results in query_database(sampled_multiconer, lowner_gaz_search):
             for result in results:
                 if result.id not in sampled_lownergaz_ids:
                     sampled_lownergaz_ids.add(result.id)
                     tokens = [
                         token for token in str(result.content).split(" ") if token
                     ]
-                    doc_id = result.id
-                    if "entity_id" in result.meta and len(result.meta["entity_id"]) > 0:
-                        doc_id = result.meta["entity_id"]
-                    if "doc_id" in result.meta and len(result.meta["doc_id"]) > 0:
-                        doc_id = result.meta["doc_id"]
                     sampled_lownergaz.append(
                         {
                             "tokens": tokens,
@@ -564,7 +563,7 @@ def create_dataset(
                                     "type": result.meta["type"],
                                 }
                             ],
-                            "doc_id": doc_id,
+                            "doc_id": result.id,
                         }
                     )
 
@@ -576,12 +575,36 @@ def create_dataset(
     else:
         with open(dataset_paths["clean_sampled_lownergaz"], encoding="utf-8") as file:
             sampled_lownergaz = json.load(file)
+    return seed, gazetteer_size, dataset_paths
+
+
+def create_erroneous_dataset(
+    config,
+    files,
+    seed: int,
+    gazetteer_size: int,
+    error_percent_ratio: int,
+    dataset_paths: dict,
+):
+    error_base_path = os.path.join(
+        config["data_path"],
+        f"seed_{seed}",
+        "00_datasets",
+        f"size_{gazetteer_size}",
+        f"error_ratio_{error_percent_ratio}",
+    )
+    os.makedirs(error_base_path, exist_ok=True)
+    seed_everything(seed)
+
+    error_ratio = error_percent_ratio / 100
+    with open(files["types"]) as file:
+        types = json.load(file)["entities"]
 
     # create erroneous lowner train, dev + gazetteer split
     print("creating erroneous lowner train, dev + gazetteer split")
     for part in ["train", "dev"]:
         dataset_paths[f"error_lowner_{part}"] = os.path.join(
-            dataset_base_path, f"error_lowner_{part}.json"
+            error_base_path, f"error_lowner_{part}.json"
         )
         if not os.path.exists(dataset_paths[f"error_lowner_{part}"]):
             with open(files[part]) as file:
@@ -594,10 +617,15 @@ def create_dataset(
             ) as file:
                 json.dump(error_lowner_part, file)
 
+    print("create erroneous multiconer")
     dataset_paths["error_sampled_multiconer"] = os.path.join(
-        dataset_base_path, "error_sampled_multiconer.json"
+        error_base_path, "error_sampled_multiconer.json"
     )
     if not os.path.exists(dataset_paths["error_sampled_multiconer"]):
+        with open(
+            dataset_paths["clean_sampled_multiconer"], "r", encoding="utf-8"
+        ) as file:
+            sampled_multiconer = json.load(file)
         error_multiconer = make_erroneous_dataset(
             sampled_multiconer, list(types), error_ratio
         )
@@ -606,10 +634,15 @@ def create_dataset(
         ) as file:
             json.dump(error_multiconer, file)
 
+    print("create erroneous lownergaz")
     dataset_paths["error_sampled_lownergaz"] = os.path.join(
-        dataset_base_path, "error_sampled_lownergaz.json"
+        error_base_path, "error_sampled_lownergaz.json"
     )
     if not os.path.exists(dataset_paths["error_sampled_lownergaz"]):
+        with open(
+            dataset_paths["clean_sampled_lownergaz"], "r", encoding="utf-8"
+        ) as file:
+            sampled_lownergaz = json.load(file)
         error_lownergaz = make_erroneous_gazetteer(
             sampled_lownergaz, list(types), error_ratio
         )
@@ -625,7 +658,7 @@ def create_dataset(
 
 if __name__ == "__main__":
     seeds = [1, 2, 3]
-    gazetteer_sizes = [2000, 4000, 6000, 8000]
+    gazetteer_sizes = [2000, 4000, 8000, 16000]
     error_percent_ratios = [0, 10, 20, 30]
     experiment_data = generate_experiment_data(
         seeds,

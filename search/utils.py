@@ -1,3 +1,4 @@
+import copy
 import sys
 import os
 
@@ -15,33 +16,8 @@ EMBEDDING_DIM = 768  #  384
 
 
 def get_gazetteers_from_documents(docs, name: str = "", prepend_type: bool = False):
-    items = defaultdict(dict)
     if "entities" in docs[0]:
-        for doc in docs:
-            for entity in doc["entities"]:
-                ne = " ".join(doc["tokens"][entity["start"] : entity["end"]])
-                key = entity["type"] + "_" + ne
-                if "doc_id" not in items[key]:
-                    items[key]["doc_id"] = []
-                if doc["doc_id"] not in items[key]["doc_id"]:
-                    items[key]["doc_id"].append(doc["doc_id"])
-                items[key]["type"] = entity["type"]
-                items[key]["content"] = ne
-        return [
-            Document(
-                id=str(uuid.uuid4()),
-                content=doc["content"]
-                if not prepend_type
-                else f"{doc['type']}: {doc['content']}",
-                meta={
-                    "doc_id": doc["doc_id"] if "doc_id" in doc else "",
-                    # "dataset": doc["dataset"],
-                    "type": doc["type"],
-                    "data_type": "gazetteers",
-                },
-            )
-            for doc in items.values()
-        ]
+        return get_sentences_from_documents(docs, name)
     elif "entity" in docs[0]:
         documents = []
         for gaz in docs:
@@ -67,12 +43,17 @@ def get_sentences_from_documents(docs, name: str = ""):
     documents = []
     for doc in docs:
         # if len(doc["entities"]) > 0:
+        entities = []
+        for entity in doc["entities"]:
+            if "error" not in entity or entity["error"] != 2:
+                entities.append(entity)
+
         documents.append(
             Document(
                 id=str(uuid.uuid4()),
                 content=" ".join(doc["extended"]),
                 meta={
-                    "entities": doc["entities"],
+                    "entities": entities,
                     "data_type": "sentences",
                     "doc_id": doc["doc_id"],
                 },
