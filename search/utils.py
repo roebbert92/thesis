@@ -51,7 +51,7 @@ def get_sentences_from_documents(docs, name: str = ""):
         documents.append(
             Document(
                 id=str(uuid.uuid4()),
-                content=" ".join(doc["extended"]),
+                content=" ".join(doc["tokens"]),
                 meta={
                     "entities": entities,
                     "data_type": "sentences",

@@ -152,7 +152,16 @@ def train_model(
     return os.path.join(checkpoint_base_path, "last.ckpt")
 
 
-def test_model(config, last_ckpt_path, dataset: Dataset, name):
+def test_model(
+    config,
+    last_ckpt_path,
+    dataset: Dataset,
+    name,
+    seed,
+    gazetteer_size,
+    error_percent_ratio,
+    erroneous_data,
+):
     metrics_base_path = os.path.join(
         config["data_path"],
         f"seed_{str(seed)}",
@@ -203,7 +212,6 @@ def test_model(config, last_ckpt_path, dataset: Dataset, name):
 def run_experiment(
     experiment_data: dict,
     config: dict,
-    already_computed: list,
     gazetteer_size: int,
     error_percent_ratio: int,
     erroneous_data: str,
@@ -274,18 +282,30 @@ def run_experiment(
         last_ckpt,
         error_search_error_train,
         "error_search_error_train",
+        seed,
+        gazetteer_size,
+        error_percent_ratio,
+        erroneous_data,
     )
     test_model(
         config,
         last_ckpt,
         error_search_error_dev,
         "error_search_error_dev",
+        seed,
+        gazetteer_size,
+        error_percent_ratio,
+        erroneous_data,
     )
     test_model(
         config,
         last_ckpt,
         error_search_test,
         "error_search_test",
+        seed,
+        gazetteer_size,
+        error_percent_ratio,
+        erroneous_data,
     )
 
     # test model on clean lowner train, dev, test with clean sampled search
@@ -313,18 +333,30 @@ def run_experiment(
         last_ckpt,
         sampled_search_train,
         "sampled_search_train",
+        seed,
+        gazetteer_size,
+        error_percent_ratio,
+        erroneous_data,
     )
     test_model(
         config,
         last_ckpt,
         sampled_search_dev,
         "sampled_search_dev",
+        seed,
+        gazetteer_size,
+        error_percent_ratio,
+        erroneous_data,
     )
     test_model(
         config,
         last_ckpt,
         sampled_search_test,
         "sampled_search_test",
+        seed,
+        gazetteer_size,
+        error_percent_ratio,
+        erroneous_data,
     )
 
     # prep clean lowner train, dev, test
@@ -352,18 +384,30 @@ def run_experiment(
         last_ckpt,
         full_search_train,
         "full_search_train",
+        seed,
+        gazetteer_size,
+        error_percent_ratio,
+        erroneous_data,
     )
     test_model(
         config,
         last_ckpt,
         full_search_dev,
         "full_search_dev",
+        seed,
+        gazetteer_size,
+        error_percent_ratio,
+        erroneous_data,
     )
     test_model(
         config,
         last_ckpt,
         full_search_test,
         "full_search_test",
+        seed,
+        gazetteer_size,
+        error_percent_ratio,
+        erroneous_data,
     )
 
 
@@ -413,35 +457,33 @@ if __name__ == "__main__":
         for gazetteer_size in gazetteer_sizes:
             for error_percent_ratio in error_percent_ratios:
                 for seed in seeds:
+                    if [
+                        gazetteer_size,
+                        error_percent_ratio,
+                        erroneous_data_parts[0],
+                        seed,
+                    ] in already_computed:
+                        continue
                     if error_percent_ratio == 0:
-                        if [
+                        run_experiment(
+                            experiment_data,
+                            config,
                             gazetteer_size,
                             error_percent_ratio,
                             erroneous_data_parts[0],
                             seed,
-                        ] not in already_computed:
-                            run_experiment(
-                                experiment_data,
-                                config,
-                                already_computed,
+                        )
+                        # done
+                        already_computed.append(
+                            [
                                 gazetteer_size,
                                 error_percent_ratio,
                                 erroneous_data_parts[0],
                                 seed,
-                            )
-                            # done
-                            already_computed.append(
-                                [
-                                    gazetteer_size,
-                                    error_percent_ratio,
-                                    erroneous_data_parts[0],
-                                    seed,
-                                ]
-                            )
-                            with open(
-                                already_computed_path, "w", encoding="utf-8"
-                            ) as file:
-                                json.dump(already_computed, file)
+                            ]
+                        )
+                        with open(already_computed_path, "w", encoding="utf-8") as file:
+                            json.dump(already_computed, file)
                         for erroneous_data in erroneous_data_parts[1:]:
                             # copy error percent 0 over
                             if [
@@ -449,39 +491,40 @@ if __name__ == "__main__":
                                 error_percent_ratio,
                                 erroneous_data,
                                 seed,
-                            ] not in already_computed:
-                                shutil.copytree(
-                                    os.path.join(
-                                        config["data_path"],
-                                        f"seed_{str(seed)}",
-                                        "04_metrics",
-                                        f"size_{gazetteer_size}",
-                                        f"error_ratio_{error_percent_ratio}",
-                                        f"error_data_{erroneous_data_parts[0]}",
-                                    ),
-                                    os.path.join(
-                                        config["data_path"],
-                                        f"seed_{str(seed)}",
-                                        "04_metrics",
-                                        f"size_{gazetteer_size}",
-                                        f"error_ratio_{error_percent_ratio}",
-                                        f"error_data_{erroneous_data}",
-                                    ),
-                                    dirs_exist_ok=True,
-                                )
-                                # done
-                                already_computed.append(
-                                    [
-                                        gazetteer_size,
-                                        error_percent_ratio,
-                                        erroneous_data,
-                                        seed,
-                                    ]
-                                )
-                                with open(
-                                    already_computed_path, "w", encoding="utf-8"
-                                ) as file:
-                                    json.dump(already_computed, file)
+                            ] in already_computed:
+                                continue
+                            shutil.copytree(
+                                os.path.join(
+                                    config["data_path"],
+                                    f"seed_{str(seed)}",
+                                    "04_metrics",
+                                    f"size_{gazetteer_size}",
+                                    f"error_ratio_{error_percent_ratio}",
+                                    f"error_data_{erroneous_data_parts[0]}",
+                                ),
+                                os.path.join(
+                                    config["data_path"],
+                                    f"seed_{str(seed)}",
+                                    "04_metrics",
+                                    f"size_{gazetteer_size}",
+                                    f"error_ratio_{error_percent_ratio}",
+                                    f"error_data_{erroneous_data}",
+                                ),
+                                dirs_exist_ok=True,
+                            )
+                            # done
+                            already_computed.append(
+                                [
+                                    gazetteer_size,
+                                    error_percent_ratio,
+                                    erroneous_data,
+                                    seed,
+                                ]
+                            )
+                            with open(
+                                already_computed_path, "w", encoding="utf-8"
+                            ) as file:
+                                json.dump(already_computed, file)
 
                     else:
                         for erroneous_data in erroneous_data_parts:
@@ -495,7 +538,6 @@ if __name__ == "__main__":
                             run_experiment(
                                 experiment_data,
                                 config,
-                                already_computed,
                                 gazetteer_size,
                                 error_percent_ratio,
                                 erroneous_data,

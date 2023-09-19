@@ -189,6 +189,7 @@ class BIONERDataset(Dataset):
                 (ent["start"] + span): ent_idx
                 for ent_idx, ent in enumerate(item["entities"])
                 for span in range(ent["end"] - ent["start"])
+                if ent.get("error", -1) != 2
             }
             for word_idx in range(len(item["tokens"])):
                 if word_idx in entity_range:
