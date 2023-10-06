@@ -44,11 +44,10 @@ class BIONERDataset(Dataset):
     def __init__(
         self,
         entity_labels,
-        directory,
-        file_name,
+        dataset_filepath: str,
         plm_name,
         max_length=512,
-        search_results_dir: Optional[str] = None,
+        search_results_filepath: Optional[str] = None,
         sent_use_labels: bool = False,
         sent_use_mentions: bool = False,
         gaz_use_labels: bool = False,
@@ -56,7 +55,7 @@ class BIONERDataset(Dataset):
     ):
         super().__init__()
         self.max_length = max_length
-        data_file_path = os.path.join(directory, file_name + ".json")
+        data_file_path = dataset_filepath
         self.data_items = BIONERDataset._read_json(data_file_path)
         self.tokenizer: XLMRobertaTokenizer = XLMRobertaTokenizer.from_pretrained(
             plm_name
@@ -69,15 +68,13 @@ class BIONERDataset(Dataset):
             self.idx_to_label[int(value)] = key
 
         search_results = {}
-        if search_results_dir is not None:
+        if search_results_filepath is not None:
             # context extension with search results
             if MENTION_START not in self.tokenizer.get_vocab():
                 self.tokenizer.add_tokens(MENTION_START)
             if MENTION_END not in self.tokenizer.get_vocab():
                 self.tokenizer.add_tokens(MENTION_END)
-            with open(
-                os.path.join(search_results_dir, file_name + ".pkl"), "rb"
-            ) as file:
+            with open(search_results_filepath, "rb") as file:
                 search_results: Dict[int, List[Document]] = pickle.load(file)
         self.search_results: Dict[int, List[Document]] = search_results
         self.sent_use_labels = sent_use_labels

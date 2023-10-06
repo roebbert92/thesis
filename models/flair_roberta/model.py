@@ -300,14 +300,18 @@ class FlairModel(pl.LightningModule):
     def train_dataloader(
         self,
     ) -> DataLoader:
-        return self.get_dataloader(self.args.dataset_prefix + "train")
+        return self.get_dataloader(
+            self.args.dataset_prefix + "train", self.args.dataset_prefix + "train"
+        )
 
     def val_dataloader(
         self,
     ) -> DataLoader:
-        return self.get_dataloader(self.args.dataset_prefix + "dev")
+        return self.get_dataloader(
+            self.args.dataset_prefix + "dev", self.args.dataset_prefix + "train"
+        )
 
-    def _load_dataset(self, prefix="test"):
+    def _load_dataset(self, prefix="test", search_prefix=None):
         kwargs = {}
         for kw in [
             "sent_use_labels",
@@ -326,11 +330,13 @@ class FlairModel(pl.LightningModule):
                 if kw == "gaz_use_mentions":
                     kwargs[kw] = self.args.gaz_use_mentions
                 if kw == "search_results_dir":
-                    kwargs[kw] = self.args.search_results_dir
+                    if search_prefix is not None:
+                        kwargs["search_results_filepath"] = os.path.join(
+                            self.args.search_results_dir, search_prefix + ".pkl"
+                        )
         dataset = BIONERDataset(
-            directory=self.args.dataset_dir,
+            dataset_filepath=os.path.join(self.args.dataset_dir, prefix + ".json"),
             entity_labels=self.entity_labels,
-            file_name=prefix,
             plm_name=self.args.plm_name,
             max_length=self.args.max_length,
             **kwargs
@@ -338,9 +344,11 @@ class FlairModel(pl.LightningModule):
 
         return dataset
 
-    def get_dataloader(self, prefix="train", limit=None) -> DataLoader:
+    def get_dataloader(
+        self, prefix="train", search_prefix=None, limit=None
+    ) -> DataLoader:
         """return {train/dev/test} dataloader"""
-        dataset = self._load_dataset(prefix=prefix)
+        dataset = self._load_dataset(prefix=prefix, search_prefix=search_prefix)
         kwargs = {}
         if prefix.endswith("train"):
             batch_size = self.args.train_batch_size
@@ -370,12 +378,17 @@ class FlairModel(pl.LightningModule):
     def test_dataloader(
         self,
     ) -> DataLoader:
-        return self.get_dataloader(self.args.dataset_prefix + "test")
+        return self.get_dataloader(
+            self.args.dataset_prefix + "test", self.args.dataset_prefix + "test"
+        )
 
     def val_train_dataloader(
         self,
     ) -> DataLoader:
-        dataset = self._load_dataset(prefix=self.args.dataset_prefix + "train")
+        dataset = self._load_dataset(
+            prefix=self.args.dataset_prefix + "train",
+            search_prefix=self.args.dataset_prefix + "train",
+        )
 
         batch_size = self.args.eval_batch_size
         data_sampler = SequentialSampler(dataset)

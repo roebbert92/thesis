@@ -1,6 +1,9 @@
 import copy
+from functools import partial
 import sys
 import os
+
+
 from preprocess_data import generate_experiment_data
 
 thesis_path = "/" + os.path.join(
@@ -15,12 +18,17 @@ import json
 from lightning.fabric.utilities.seed import seed_everything
 import pickle
 import lightning.pytorch as pl
-from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger
+from models.flair_roberta.utils import collate_to_max_length
 
 from data_preprocessing.tensorize import NERCollator, NERDataProcessor, ner_collate_fn
+from torch.utils.data.dataloader import DataLoader, RandomSampler, SequentialSampler
+from models.flair_roberta.dataset import BIONERDataset
 from models.asp_t5 import ASPT5Model, get_tokenizer
 from configs.asp_t5 import T5_ASP_LOWNERGAZ_SENT
+from configs.flair import FLAIR_LOWNERGAZ_SENT
+import argparse
+from models.flair_roberta.model import FlairModel
 from hyperparameter_tuning.utils import factors
 import shutil
 from glob import glob
@@ -69,6 +77,7 @@ def train_t5_asp_model(
         f"size_{gazetteer_size}",
         f"error_ratio_{error_percent_ratio}",
         f"error_data_{erroneous_data}",
+        "t5_asp",
     )
     os.makedirs(checkpoint_base_path, exist_ok=True)
     ckpt_files = list(glob(os.path.join(checkpoint_base_path, "*.ckpt")))
@@ -89,6 +98,7 @@ def train_t5_asp_model(
                 f"size_{gazetteer_size}",
                 f"error_ratio_{error_percent_ratio}",
                 f"error_data_{erroneous_data}",
+                "t5_asp",
             ]
         ),
     )
@@ -169,6 +179,7 @@ def test_t5_asp_model(
         f"size_{gazetteer_size}",
         f"error_ratio_{error_percent_ratio}",
         f"error_data_{erroneous_data}",
+        "t5_asp",
     )
     os.makedirs(metrics_base_path, exist_ok=True)
     if os.path.exists(os.path.join(metrics_base_path, f"last_{name}.pkl")):
@@ -181,10 +192,18 @@ def test_t5_asp_model(
                 f"size_{gazetteer_size}",
                 f"error_ratio_{error_percent_ratio}",
                 f"error_data_{erroneous_data}",
+                "t5_asp",
             ]
         ),
         version=0,
     )
+
+    torch.set_float32_matmul_precision("medium")
+    torch.backends.cuda.matmul.allow_tf32 = True  # type: ignore
+    torch.backends.cudnn.allow_tf32 = True  # type: ignore
+    config["precision"] = "bf16-mixed"
+    config["fused"] = True
+
     tokenizer = get_tokenizer(config)
     model = ASPT5Model(config, tokenizer)
     trainer = pl.Trainer(
@@ -414,6 +433,221 @@ def run_t5_asp_experiment(
     )
 
 
+def train_flair_model(
+    seed: int,
+    gazetteer_size: int,
+    error_percent_ratio: int,
+    erroneous_data: str,
+    config: dict,
+    train_dataloader: DataLoader,
+    val_dataloader: DataLoader,
+):
+    if "PL_GLOBAL_SEED" in os.environ:
+        del os.environ["PL_GLOBAL_SEED"]
+    pl.seed_everything(seed)
+    config["seed"] = seed
+    config["precision"] = "bf16-mixed"
+    config["fused"] = True
+    grad_accum_steps = factors(config["train_batch_size"])
+    with open(
+        os.path.join(thesis_path, "data", "mlowner", "lowner_types.json"),
+        "r",
+        encoding="utf-8",
+    ) as file:
+        config["types"] = list(json.load(file)["entities"].keys())
+
+    torch.set_float32_matmul_precision("medium")
+    torch.backends.cuda.matmul.allow_tf32 = True  # type: ignore
+    torch.backends.cudnn.allow_tf32 = True  # type: ignore
+
+    train_config = copy.deepcopy(config)
+
+    # Checkpoints
+    checkpoint_base_path = os.path.join(
+        config["data_path"],
+        f"seed_{str(seed)}",
+        "03_checkpoints",
+        f"size_{gazetteer_size}",
+        f"error_ratio_{error_percent_ratio}",
+        f"error_data_{erroneous_data}",
+        "flair",
+    )
+    os.makedirs(checkpoint_base_path, exist_ok=True)
+    ckpt_files = list(glob(os.path.join(checkpoint_base_path, "*.ckpt")))
+    if (
+        os.path.exists(os.path.join(checkpoint_base_path, "last.ckpt"))
+        and len(ckpt_files) == 1
+    ):
+        return os.path.join(checkpoint_base_path, "last.ckpt")
+
+    for ckpt_path in ckpt_files:
+        os.remove(ckpt_path)
+
+    tb_logger = TensorBoardLogger(
+        save_dir=os.path.join(os.getcwd(), "lightning_logs"),
+        name="_".join(
+            [
+                str(seed),
+                f"size_{gazetteer_size}",
+                f"error_ratio_{error_percent_ratio}",
+                f"error_data_{erroneous_data}",
+                "flair",
+            ]
+        ),
+    )
+
+    trained = False
+
+    while not trained:
+        try:
+            model = FlairModel(argparse.Namespace(**train_config))
+
+            trainer = pl.Trainer(
+                accelerator="gpu",
+                logger=tb_logger,
+                devices=1,
+                log_every_n_steps=train_config["train_batch_size"]
+                * train_config["accumulate_grad_batches"],
+                accumulate_grad_batches=train_config["accumulate_grad_batches"],
+                precision=train_config["precision"],
+                max_epochs=train_config["max_epochs"],
+                check_val_every_n_epoch=5,
+                num_sanity_val_steps=0,
+                enable_checkpointing=False,
+                enable_progress_bar=True,
+            )
+            trainer.fit(
+                model,
+                train_dataloaders=train_dataloader,
+                val_dataloaders=val_dataloader,
+            )
+            trainer.save_checkpoint(os.path.join(checkpoint_base_path, "last.ckpt"))
+            trained = True
+        except RuntimeError as e:
+            print(e)
+            train_config["accumulate_grad_batches"] = grad_accum_steps[
+                grad_accum_steps.index(train_config["accumulate_grad_batches"]) + 1
+            ]
+            train_config["train_batch_size"] = (
+                train_config["train_batch_size"]
+                // train_config["accumulate_grad_batches"]
+            )
+            ckpt_files = list(glob(os.path.join(checkpoint_base_path, "*.ckpt")))
+            for ckpt_path in ckpt_files:
+                os.remove(ckpt_path)
+    return os.path.join(checkpoint_base_path, "last.ckpt")
+
+
+def test_flair_model(
+    config,
+    last_ckpt_path,
+    name,
+    seed,
+    gazetteer_size,
+    error_percent_ratio,
+    erroneous_data,
+    test_dataloader: DataLoader,
+):
+    metrics_base_path = os.path.join(
+        config["data_path"],
+        f"seed_{str(seed)}",
+        "04_metrics",
+        f"size_{gazetteer_size}",
+        f"error_ratio_{error_percent_ratio}",
+        f"error_data_{erroneous_data}",
+        "flair",
+    )
+    os.makedirs(metrics_base_path, exist_ok=True)
+    if os.path.exists(os.path.join(metrics_base_path, f"last_{name}.pkl")):
+        return
+    tb_logger = TensorBoardLogger(
+        save_dir=os.path.join(os.getcwd(), "lightning_logs"),
+        name="_".join(
+            [
+                str(seed),
+                f"size_{gazetteer_size}",
+                f"error_ratio_{error_percent_ratio}",
+                f"error_data_{erroneous_data}",
+                "flair",
+            ]
+        ),
+        version=0,
+    )
+
+    test_config = copy.deepcopy(config)
+    test_config["precision"] = "bf16-mixed"
+    test_config["fused"] = True
+
+    model = FlairModel(argparse.Namespace(**test_config))
+
+    trainer = pl.Trainer(
+        accelerator="gpu",
+        logger=tb_logger,
+        devices=1,
+        precision=test_config["precision"],
+        num_sanity_val_steps=0,
+        enable_checkpointing=False,
+        enable_progress_bar=True,
+    )
+
+    def save_metrics(dataset, checkpoint):
+        with open(
+            os.path.join(metrics_base_path, f"{checkpoint}_{dataset}.pkl"), "wb"
+        ) as file:
+            pickle.dump(model.test_metrics.metrics, file)
+
+    # test model
+    trainer.test(model, test_dataloader, ckpt_path=last_ckpt_path)
+    save_metrics(name, "last")
+
+
+def get_flair_dataloader(
+    config, entity_labels, dataset_filepath, search_results_filepath, is_training=False
+) -> DataLoader:
+    kwargs = {}
+    for kw in [
+        "sent_use_labels",
+        "sent_use_mentions",
+        "gaz_use_labels",
+        "gaz_use_mentions",
+    ]:
+        if kw in config:
+            kwargs[kw] = config[kw]
+    dataset = BIONERDataset(
+        dataset_filepath=dataset_filepath,
+        entity_labels=entity_labels,
+        plm_name=config["plm_name"],
+        max_length=config["max_length"],
+        search_results_filepath=search_results_filepath,
+        **kwargs,
+    )
+    kwargs = {}
+    if is_training:
+        batch_size = config["train_batch_size"]
+        data_generator = torch.Generator()
+        data_generator.manual_seed(config["seed"])
+        data_sampler = RandomSampler(dataset, generator=data_generator)
+        if "train_search_dropout" in config:
+            kwargs["train_search_dropout"] = config["train_search_dropout"]
+    else:
+        batch_size = config["eval_batch_size"]
+        data_sampler = SequentialSampler(dataset)
+
+    # sampler option is mutually exclusive with shuffle
+    dataloader = DataLoader(
+        dataset=dataset,
+        sampler=data_sampler,
+        batch_size=batch_size,
+        num_workers=3,
+        collate_fn=partial(collate_to_max_length, fill_values=[0, 0, 0], **kwargs),
+        drop_last=False,
+        persistent_workers=False,
+        pin_memory=True,
+    )
+
+    return dataloader
+
+
 def run_flair_experiment(
     experiment_data: dict,
     config: dict,
@@ -422,7 +656,225 @@ def run_flair_experiment(
     erroneous_data: str,
     seed: int,
 ):
-    pass
+    # seed
+    if "PL_GLOBAL_SEED" in os.environ:
+        del os.environ["PL_GLOBAL_SEED"]
+    seed_everything(seed)
+    datasets = experiment_data["00_datasets"][
+        f"{seed}_{gazetteer_size}_{error_percent_ratio}"
+    ]
+    search_results = experiment_data["01_search_results"][
+        f"{seed}_{gazetteer_size}_{error_percent_ratio}"
+    ]
+    with open(
+        os.path.join(thesis_path, "data", "mlowner", "lowner_types.json"),
+        "r",
+        encoding="utf-8",
+    ) as file:
+        config["types"] = list(json.load(file)["entities"].keys())
+    entity_labels = BIONERDataset.get_labels(config["types"])
+    config["seed"] = seed
+
+    dataset_paths = {}
+    search_result_paths = {}
+
+    if erroneous_data == "both":
+        dataset_paths["train"] = datasets["error_lowner_train"]
+        dataset_paths["dev"] = datasets["error_lowner_dev"]
+        dataset_paths["test"] = os.path.join(
+            thesis_path, "data", "mlowner", "lowner_test.json"
+        )
+        search_result_paths["train"] = search_results[
+            "error_search_results_error_train"
+        ]
+        search_result_paths["dev"] = search_results["error_search_results_error_dev"]
+        search_result_paths["test"] = search_results["error_search_results_test"]
+
+    elif erroneous_data == "gazetteer":
+        dataset_paths["train"] = os.path.join(
+            thesis_path, "data", "mlowner", "lowner_train.json"
+        )
+        dataset_paths["dev"] = os.path.join(
+            thesis_path, "data", "mlowner", "lowner_dev.json"
+        )
+        dataset_paths["test"] = os.path.join(
+            thesis_path, "data", "mlowner", "lowner_test.json"
+        )
+        search_result_paths["train"] = search_results["error_search_results_train"]
+        search_result_paths["dev"] = search_results["error_search_results_dev"]
+        search_result_paths["test"] = search_results["error_search_results_test"]
+    else:
+        dataset_paths["train"] = datasets["error_lowner_train"]
+        dataset_paths["dev"] = datasets["error_lowner_dev"]
+        dataset_paths["test"] = os.path.join(
+            thesis_path, "data", "mlowner", "lowner_test.json"
+        )
+        search_result_paths["train"] = search_results[
+            "sampled_search_results_error_train"
+        ]
+        search_result_paths["dev"] = search_results["sampled_search_results_error_dev"]
+        search_result_paths["test"] = search_results["sampled_search_results_test"]
+
+    ## Train model
+    last_ckpt = train_flair_model(
+        seed,
+        gazetteer_size,
+        error_percent_ratio,
+        erroneous_data,
+        config,
+        get_flair_dataloader(
+            config,
+            entity_labels,
+            dataset_paths["train"],
+            search_result_paths["train"],
+            True,
+        ),
+        get_flair_dataloader(
+            config, entity_labels, dataset_paths["dev"], search_result_paths["dev"]
+        ),
+    )
+
+    ## Timestep 0: Small, Erroneous gazetteer
+    test_flair_model(
+        config,
+        last_ckpt,
+        "error_search_error_train",
+        seed,
+        gazetteer_size,
+        error_percent_ratio,
+        erroneous_data,
+        get_flair_dataloader(
+            config,
+            entity_labels,
+            dataset_paths["train"],
+            search_result_paths["train"],
+        ),
+    )
+    test_flair_model(
+        config,
+        last_ckpt,
+        "error_search_error_dev",
+        seed,
+        gazetteer_size,
+        error_percent_ratio,
+        erroneous_data,
+        get_flair_dataloader(
+            config,
+            entity_labels,
+            dataset_paths["dev"],
+            search_result_paths["dev"],
+        ),
+    )
+    test_flair_model(
+        config,
+        last_ckpt,
+        "error_search_test",
+        seed,
+        gazetteer_size,
+        error_percent_ratio,
+        erroneous_data,
+        get_flair_dataloader(
+            config,
+            entity_labels,
+            dataset_paths["test"],
+            search_result_paths["test"],
+        ),
+    )
+
+    ## Timestep 1: Small, Corrected gazetteer
+    test_flair_model(
+        config,
+        last_ckpt,
+        "sampled_search_train",
+        seed,
+        gazetteer_size,
+        error_percent_ratio,
+        erroneous_data,
+        get_flair_dataloader(
+            config,
+            entity_labels,
+            os.path.join(thesis_path, "data", "mlowner", "lowner_train.json"),
+            search_results["sampled_search_results_train"],
+        ),
+    )
+    test_flair_model(
+        config,
+        last_ckpt,
+        "sampled_search_dev",
+        seed,
+        gazetteer_size,
+        error_percent_ratio,
+        erroneous_data,
+        get_flair_dataloader(
+            config,
+            entity_labels,
+            os.path.join(thesis_path, "data", "mlowner", "lowner_dev.json"),
+            search_results["sampled_search_results_dev"],
+        ),
+    )
+    test_flair_model(
+        config,
+        last_ckpt,
+        "sampled_search_test",
+        seed,
+        gazetteer_size,
+        error_percent_ratio,
+        erroneous_data,
+        get_flair_dataloader(
+            config,
+            entity_labels,
+            os.path.join(thesis_path, "data", "mlowner", "lowner_test.json"),
+            search_results["sampled_search_results_test"],
+        ),
+    )
+
+    ## Timestep 2: Full gazetteer
+    test_flair_model(
+        config,
+        last_ckpt,
+        "full_search_train",
+        seed,
+        gazetteer_size,
+        error_percent_ratio,
+        erroneous_data,
+        get_flair_dataloader(
+            config,
+            entity_labels,
+            os.path.join(thesis_path, "data", "mlowner", "lowner_train.json"),
+            search_results["full_search_result_train"],
+        ),
+    )
+    test_flair_model(
+        config,
+        last_ckpt,
+        "full_search_dev",
+        seed,
+        gazetteer_size,
+        error_percent_ratio,
+        erroneous_data,
+        get_flair_dataloader(
+            config,
+            entity_labels,
+            os.path.join(thesis_path, "data", "mlowner", "lowner_dev.json"),
+            search_results["full_search_result_dev"],
+        ),
+    )
+    test_flair_model(
+        config,
+        last_ckpt,
+        "full_search_test",
+        seed,
+        gazetteer_size,
+        error_percent_ratio,
+        erroneous_data,
+        get_flair_dataloader(
+            config,
+            entity_labels,
+            os.path.join(thesis_path, "data", "mlowner", "lowner_test.json"),
+            search_results["full_search_result_test"],
+        ),
+    )
+    os.remove(last_ckpt)
 
 
 if __name__ == "__main__":
@@ -450,11 +902,6 @@ if __name__ == "__main__":
     erroneous_data_parts = ["train", "gazetteer", "both"]
     models = ["flair", "t5_asp"]
 
-    config = T5_ASP_LOWNERGAZ_SENT
-    config.update(
-        {"data_path": os.path.join(thesis_path, "experiments", "02_content", "data")}
-    )
-
     data_path = os.path.join(
         thesis_path, "experiments", "02_content", "experiment_data_paths.json"
     )
@@ -475,8 +922,17 @@ if __name__ == "__main__":
                     for model in models:
                         if model == "t5_asp":
                             run_experiment = run_t5_asp_experiment
+                            config = T5_ASP_LOWNERGAZ_SENT
                         else:
                             run_experiment = run_flair_experiment
+                            config = FLAIR_LOWNERGAZ_SENT
+                        config.update(
+                            {
+                                "data_path": os.path.join(
+                                    thesis_path, "experiments", "02_content", "data"
+                                )
+                            }
+                        )
                         if [
                             gazetteer_size,
                             error_percent_ratio,
