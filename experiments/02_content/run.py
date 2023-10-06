@@ -26,7 +26,7 @@ import shutil
 from glob import glob
 
 
-def get_validation_dataloader(config, dataset: Dataset):
+def get_t5_asp_validation_dataloader(config, dataset: Dataset):
     return DataLoader(
         dataset,
         batch_size=int(config["batch_size"] * 4),
@@ -39,7 +39,7 @@ def get_validation_dataloader(config, dataset: Dataset):
     )
 
 
-def train_model(
+def train_t5_asp_model(
     seed: int,
     gazetteer_size: int,
     error_percent_ratio: int,
@@ -106,7 +106,7 @@ def train_model(
             prefetch_factor=20,
         )
         # Validation loaders
-        dev_val_loader = get_validation_dataloader(config, val)
+        dev_val_loader = get_t5_asp_validation_dataloader(config, val)
         return train_loader, dev_val_loader
 
     def get_model_trainer():
@@ -152,7 +152,7 @@ def train_model(
     return os.path.join(checkpoint_base_path, "last.ckpt")
 
 
-def test_model(
+def test_t5_asp_model(
     config,
     last_ckpt_path,
     dataset: Dataset,
@@ -196,7 +196,7 @@ def test_model(
         enable_checkpointing=False,
         enable_progress_bar=True,
     )
-    val_loader = get_validation_dataloader(config, dataset)
+    val_loader = get_t5_asp_validation_dataloader(config, dataset)
 
     def save_metrics(dataset, checkpoint):
         with open(
@@ -209,7 +209,7 @@ def test_model(
     save_metrics(name, "last")
 
 
-def run_experiment(
+def run_t5_asp_experiment(
     experiment_data: dict,
     config: dict,
     gazetteer_size: int,
@@ -266,7 +266,7 @@ def run_experiment(
     config["train_len"] = len(error_search_error_train)
 
     # train model on erroneous lowner train + validate on erroneous lowner dev
-    last_ckpt = train_model(
+    last_ckpt = train_t5_asp_model(
         seed,
         gazetteer_size,
         error_percent_ratio,
@@ -276,8 +276,9 @@ def run_experiment(
         error_search_error_dev,
     )
 
+    ## Timestep 0: Small, Erroneous gazetteer
     # test model on erroneous lowner train, dev + clean lowner test
-    test_model(
+    test_t5_asp_model(
         config,
         last_ckpt,
         error_search_error_train,
@@ -287,7 +288,7 @@ def run_experiment(
         error_percent_ratio,
         erroneous_data,
     )
-    test_model(
+    test_t5_asp_model(
         config,
         last_ckpt,
         error_search_error_dev,
@@ -297,7 +298,7 @@ def run_experiment(
         error_percent_ratio,
         erroneous_data,
     )
-    test_model(
+    test_t5_asp_model(
         config,
         last_ckpt,
         error_search_test,
@@ -308,6 +309,7 @@ def run_experiment(
         erroneous_data,
     )
 
+    ## Timestep 1: Small, Corrected gazetteer
     # test model on clean lowner train, dev, test with clean sampled search
     processor = NERDataProcessor(
         config,
@@ -328,7 +330,7 @@ def run_experiment(
     config["train_len"] = len(sampled_search_train)
 
     # test model on clean train, dev, test
-    test_model(
+    test_t5_asp_model(
         config,
         last_ckpt,
         sampled_search_train,
@@ -338,7 +340,7 @@ def run_experiment(
         error_percent_ratio,
         erroneous_data,
     )
-    test_model(
+    test_t5_asp_model(
         config,
         last_ckpt,
         sampled_search_dev,
@@ -348,7 +350,7 @@ def run_experiment(
         error_percent_ratio,
         erroneous_data,
     )
-    test_model(
+    test_t5_asp_model(
         config,
         last_ckpt,
         sampled_search_test,
@@ -359,6 +361,7 @@ def run_experiment(
         erroneous_data,
     )
 
+    ## Timestep 2: Full gazetteer
     # prep clean lowner train, dev, test
     processor = NERDataProcessor(
         config,
@@ -379,7 +382,7 @@ def run_experiment(
     config["train_len"] = len(full_search_train)
 
     # test model on clean train, dev, test
-    test_model(
+    test_t5_asp_model(
         config,
         last_ckpt,
         full_search_train,
@@ -389,7 +392,7 @@ def run_experiment(
         error_percent_ratio,
         erroneous_data,
     )
-    test_model(
+    test_t5_asp_model(
         config,
         last_ckpt,
         full_search_dev,
@@ -399,7 +402,7 @@ def run_experiment(
         error_percent_ratio,
         erroneous_data,
     )
-    test_model(
+    test_t5_asp_model(
         config,
         last_ckpt,
         full_search_test,
@@ -409,6 +412,17 @@ def run_experiment(
         error_percent_ratio,
         erroneous_data,
     )
+
+
+def run_flair_experiment(
+    experiment_data: dict,
+    config: dict,
+    gazetteer_size: int,
+    error_percent_ratio: int,
+    erroneous_data: str,
+    seed: int,
+):
+    pass
 
 
 if __name__ == "__main__":
@@ -434,6 +448,7 @@ if __name__ == "__main__":
     gazetteer_sizes = [2000, 4000, 8000, 16000]
     error_percent_ratios = [0, 10, 20, 30]
     erroneous_data_parts = ["train", "gazetteer", "both"]
+    models = ["flair", "t5_asp"]
 
     config = T5_ASP_LOWNERGAZ_SENT
     config.update(
@@ -457,90 +472,26 @@ if __name__ == "__main__":
         for gazetteer_size in gazetteer_sizes:
             for error_percent_ratio in error_percent_ratios:
                 for seed in seeds:
-                    if [
-                        gazetteer_size,
-                        error_percent_ratio,
-                        erroneous_data_parts[0],
-                        seed,
-                    ] in already_computed:
-                        continue
-                    if error_percent_ratio == 0:
-                        run_experiment(
-                            experiment_data,
-                            config,
+                    for model in models:
+                        if model == "t5_asp":
+                            run_experiment = run_t5_asp_experiment
+                        else:
+                            run_experiment = run_flair_experiment
+                        if [
                             gazetteer_size,
                             error_percent_ratio,
                             erroneous_data_parts[0],
                             seed,
-                        )
-                        # done
-                        already_computed.append(
-                            [
-                                gazetteer_size,
-                                error_percent_ratio,
-                                erroneous_data_parts[0],
-                                seed,
-                            ]
-                        )
-                        with open(already_computed_path, "w", encoding="utf-8") as file:
-                            json.dump(already_computed, file)
-                        for erroneous_data in erroneous_data_parts[1:]:
-                            # copy error percent 0 over
-                            if [
-                                gazetteer_size,
-                                error_percent_ratio,
-                                erroneous_data,
-                                seed,
-                            ] in already_computed:
-                                continue
-                            shutil.copytree(
-                                os.path.join(
-                                    config["data_path"],
-                                    f"seed_{str(seed)}",
-                                    "04_metrics",
-                                    f"size_{gazetteer_size}",
-                                    f"error_ratio_{error_percent_ratio}",
-                                    f"error_data_{erroneous_data_parts[0]}",
-                                ),
-                                os.path.join(
-                                    config["data_path"],
-                                    f"seed_{str(seed)}",
-                                    "04_metrics",
-                                    f"size_{gazetteer_size}",
-                                    f"error_ratio_{error_percent_ratio}",
-                                    f"error_data_{erroneous_data}",
-                                ),
-                                dirs_exist_ok=True,
-                            )
-                            # done
-                            already_computed.append(
-                                [
-                                    gazetteer_size,
-                                    error_percent_ratio,
-                                    erroneous_data,
-                                    seed,
-                                ]
-                            )
-                            with open(
-                                already_computed_path, "w", encoding="utf-8"
-                            ) as file:
-                                json.dump(already_computed, file)
-
-                    else:
-                        for erroneous_data in erroneous_data_parts:
-                            if [
-                                gazetteer_size,
-                                error_percent_ratio,
-                                erroneous_data,
-                                seed,
-                            ] in already_computed:
-                                continue
+                            model,
+                        ] in already_computed:
+                            continue
+                        if error_percent_ratio == 0:
                             run_experiment(
                                 experiment_data,
                                 config,
                                 gazetteer_size,
                                 error_percent_ratio,
-                                erroneous_data,
+                                erroneous_data_parts[0],
                                 seed,
                             )
                             # done
@@ -548,14 +499,93 @@ if __name__ == "__main__":
                                 [
                                     gazetteer_size,
                                     error_percent_ratio,
-                                    erroneous_data,
+                                    erroneous_data_parts[0],
                                     seed,
+                                    model,
                                 ]
                             )
                             with open(
                                 already_computed_path, "w", encoding="utf-8"
                             ) as file:
                                 json.dump(already_computed, file)
+                            for erroneous_data in erroneous_data_parts[1:]:
+                                # copy error percent 0 over
+                                if [
+                                    gazetteer_size,
+                                    error_percent_ratio,
+                                    erroneous_data,
+                                    seed,
+                                    model,
+                                ] in already_computed:
+                                    continue
+                                shutil.copytree(
+                                    os.path.join(
+                                        config["data_path"],
+                                        f"seed_{str(seed)}",
+                                        "04_metrics",
+                                        f"size_{gazetteer_size}",
+                                        f"error_ratio_{error_percent_ratio}",
+                                        f"error_data_{erroneous_data_parts[0]}",
+                                        model,
+                                    ),
+                                    os.path.join(
+                                        config["data_path"],
+                                        f"seed_{str(seed)}",
+                                        "04_metrics",
+                                        f"size_{gazetteer_size}",
+                                        f"error_ratio_{error_percent_ratio}",
+                                        f"error_data_{erroneous_data}",
+                                        model,
+                                    ),
+                                    dirs_exist_ok=True,
+                                )
+                                # done
+                                already_computed.append(
+                                    [
+                                        gazetteer_size,
+                                        error_percent_ratio,
+                                        erroneous_data,
+                                        seed,
+                                        model,
+                                    ]
+                                )
+                                with open(
+                                    already_computed_path, "w", encoding="utf-8"
+                                ) as file:
+                                    json.dump(already_computed, file)
+
+                        else:
+                            for erroneous_data in erroneous_data_parts:
+                                if [
+                                    gazetteer_size,
+                                    error_percent_ratio,
+                                    erroneous_data,
+                                    seed,
+                                    model,
+                                ] in already_computed:
+                                    continue
+                                run_experiment(
+                                    experiment_data,
+                                    config,
+                                    gazetteer_size,
+                                    error_percent_ratio,
+                                    erroneous_data,
+                                    seed,
+                                )
+                                # done
+                                already_computed.append(
+                                    [
+                                        gazetteer_size,
+                                        error_percent_ratio,
+                                        erroneous_data,
+                                        seed,
+                                        model,
+                                    ]
+                                )
+                                with open(
+                                    already_computed_path, "w", encoding="utf-8"
+                                ) as file:
+                                    json.dump(already_computed, file)
 
     finally:
         with open(already_computed_path, "w", encoding="utf-8") as file:
